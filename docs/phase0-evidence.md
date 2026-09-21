@@ -116,7 +116,9 @@ objects. The exact item/property limit is accepted; one over fails with `COLLECT
 
 Duplicate JSON object property names are rejected at the root and at every nested object level with
 `DUPLICATE_JSON_KEY`; there is no last-wins policy. YAML duplicate keys remain rejected with
-`DUPLICATE_YAML_KEY`.
+`DUPLICATE_YAML_KEY`, including duplicates surfaced by the YAML parser at the root, in nested command
+objects, and inside objects in arrays. JSON input at the exact configured nesting limit is accepted;
+one level over the limit is rejected with `DEPTH_LIMIT`.
 
 ## Regression counterexamples
 
@@ -150,19 +152,34 @@ The corresponding regression tests cover exact-limit acceptance and one-over rej
 command/property maps, flags, arguments, choices, aliases, alternative sources, and .NET parameter maps. They also
 cover duplicate keys at the root, in nested command objects, and inside parameter objects in arrays.
 
-The regression test set was overlaid on the old normalizer at commit `914e442a222a7ef7e83f11d25ca2a9b7a7e7e162`;
-the old source failed these new cases:
+The F13/F14 regression tests were first run against the pre-fix normalizer (before the two implementation changes):
 
 ~~~
 dotnet test tests/KeelMatrix.CliContract.Tests/KeelMatrix.CliContract.Tests.csproj -c Release --nologo --no-restore
-Failed:     5, Passed:    23, Skipped:     0, Total:    28, EXIT=1
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.33]     KeelMatrix.CliContract.Tests.NormalizationTests.JsonDepthLimitAcceptsExactDepthAndRejectsOneOverWithStableCode [FAIL]
+  Error Message: Expected: "DEPTH_LIMIT"; Actual: "MALFORMED_JSON"
+[xUnit.net 00:00:00.37]     KeelMatrix.CliContract.Tests.NormalizationTests.DuplicateYamlMappingKeysAreRejectedAtEveryLevelWithStableCode [FAIL]
+  Error Message: Expected: "DUPLICATE_YAML_KEY"; Actual: "MALFORMED_YAML"
+Failed!  - Failed:     2, Passed:    28, Skipped:     0, Total:    30, EXIT=1
 ~~~
+
+The prior old-tree/current-test overlay was separately reproduced with this raw result:
+
+~~~
+dotnet test <old-overlay>\tests\KeelMatrix.CliContract.Tests\KeelMatrix.CliContract.Tests.csproj -c Release --nologo --no-restore
+Failed:     6, Passed:    22, Skipped:     0, Total:    28, EXIT=1
+~~~
+
+Earlier evidence recorded `Failed: 5, Passed: 23, Total: 28`. The sixth failure was the existing assertion at
+`NormalizationTests.cs:388`, which had changed from `INVALID_STRING` to `OPENCLI_FLAG_TYPE`; the reproduced
+6/22/28 output is the corrected record.
 
 The fixed normalizer passes the same regression set and the complete existing suite:
 
 ~~~
 dotnet test KeelMatrix.CliContract.sln -c Release --no-build --nologo
-Passed!  - Failed:     0, Passed:    28, Skipped:     0, Total:    28, EXIT=0
+Passed!  - Failed:     0, Passed:    30, Skipped:     0, Total:    30, EXIT=0
 ~~~
 
 ## Verdict

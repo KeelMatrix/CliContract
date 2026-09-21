@@ -94,6 +94,10 @@ public static class Normalizer
         {
             throw;
         }
+        catch (YamlException exception) when (exception.Message.StartsWith("Encountered duplicate key ", StringComparison.Ordinal))
+        {
+            throw new NormalizationException("DUPLICATE_YAML_KEY", "The YAML document contains a duplicate key.");
+        }
         catch (Exception)
         {
             throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
@@ -165,7 +169,7 @@ public static class Normalizer
         {
             using var document = JsonDocument.Parse(input, new JsonDocumentOptions
             {
-                MaxDepth = limits.MaxDepth,
+                MaxDepth = limits.MaxDepth == int.MaxValue ? int.MaxValue : limits.MaxDepth + 1,
                 AllowTrailingCommas = false,
                 CommentHandling = JsonCommentHandling.Disallow
             });
@@ -176,6 +180,10 @@ public static class Normalizer
         catch (NormalizationException)
         {
             throw;
+        }
+        catch (JsonException exception) when (exception.Message.Contains("maximum depth", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new NormalizationException("DEPTH_LIMIT", "The schema exceeds the configured nesting limit.");
         }
         catch (JsonException)
         {

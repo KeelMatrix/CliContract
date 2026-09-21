@@ -148,6 +148,58 @@ public sealed class NormalizationTests
     }
 
     [Fact]
+    public void DuplicateYamlMappingKeysAreRejectedAtEveryLevelWithStableCode()
+    {
+        var cases = new[]
+        {
+            """
+            opencliVersion: 1.0.0-alpha.14
+            opencliVersion: 1.0.0-alpha.14
+            info: {title: Tool, binary: tool, version: '1'}
+            """,
+            """
+            opencliVersion: 1.0.0-alpha.14
+            info: {title: Tool, binary: tool, version: '1'}
+            commands:
+              tool:
+                description: first
+                description: second
+            """,
+            """
+            opencliVersion: 1.0.0-alpha.14
+            info: {title: Tool, binary: tool, version: '1'}
+            commands:
+              tool:
+                flags:
+                  - name: first
+                    name: second
+                    type: string
+            """
+        };
+
+        foreach (var input in cases)
+        {
+            var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", input));
+            Assert.Equal("DUPLICATE_YAML_KEY", error.Code);
+        }
+    }
+
+    [Fact]
+    public void JsonDepthLimitAcceptsExactDepthAndRejectsOneOverWithStableCode()
+    {
+        const int maxDepth = 4;
+
+        Normalizer.Normalize("opencli", OpenCliDocumentWithNestedObjectDepth(maxDepth - 1), new NormalizationLimits(MaxDepth: maxDepth));
+
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize(
+            "opencli",
+            OpenCliDocumentWithNestedObjectDepth(maxDepth),
+            new NormalizationLimits(MaxDepth: maxDepth)));
+
+        Assert.Equal("DEPTH_LIMIT", error.Code);
+    }
+
+    [Fact]
     public void OpenCliRejectsFlagOnlyFieldsOnArgumentsAndRequiresFlagType()
     {
         var argumentDefault = OpenCliDocument("{\"commands\":{\"tool\":{\"args\":[{\"name\":\"value\",\"default\":\"x\"}]}}}");
@@ -398,6 +450,21 @@ public sealed class NormalizationTests
             ["binary"] = "tool",
             ["version"] = "1"
         };
+        return document.ToJsonString();
+    }
+
+    private static string OpenCliDocumentWithNestedObjectDepth(int nestedObjectDepth)
+    {
+        var document = JsonNode.Parse(OpenCliDocument("{}"))!.AsObject();
+        var current = document;
+        for (var index = 0; index < nestedObjectDepth; index++)
+        {
+            var nested = new JsonObject();
+            current["ignored"] = nested;
+            current = nested;
+        }
+
+        current["value"] = "ok";
         return document.ToJsonString();
     }
 
