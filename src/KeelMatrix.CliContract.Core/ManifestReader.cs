@@ -57,7 +57,7 @@ public static class CanonicalManifestReader
 
     private static CanonicalManifest ParseManifest(JsonObject value, NormalizationLimits limits)
     {
-        EnsureProperties(value, ["SchemaVersion", "Adapter", "SourceVersion", "Root"], "manifest");
+        EnsureProperties(value, ["SchemaVersion", "Adapter", "SourceVersion", "Info", "Root"], "manifest");
         var schemaVersion = RequiredInt(value, "SchemaVersion");
         if (schemaVersion != SupportedSchemaVersion)
         {
@@ -76,7 +76,69 @@ public static class CanonicalManifestReader
             SchemaVersion = schemaVersion,
             Adapter = adapter,
             SourceVersion = sourceVersion,
+            Info = value.ContainsKey("Info") ? ParseInfo(value["Info"], limits) : new(),
             Root = ParseCommand(RequireObject(value["Root"], "INVALID_BASELINE"), limits)
+        };
+    }
+
+    private static CanonicalInfo ParseInfo(JsonNode? node, NormalizationLimits limits)
+    {
+        var value = RequireObject(node, "INVALID_BASELINE");
+        EnsureProperties(value, ["Title", "Summary", "Description", "Binary", "Version", "License", "Contact", "Install"], "info");
+        return new CanonicalInfo
+        {
+            Title = ReadNullableString(value, "Title", limits),
+            Summary = ReadNullableString(value, "Summary", limits),
+            Description = ReadNullableString(value, "Description", limits),
+            Binary = ReadNullableString(value, "Binary", limits),
+            Version = ReadNullableString(value, "Version", limits),
+            License = value.ContainsKey("License") && value["License"] is not null ? ParseLicense(value["License"], limits) : null,
+            Contact = value.ContainsKey("Contact") && value["Contact"] is not null ? ParseContact(value["Contact"], limits) : null,
+            Install = value.ContainsKey("Install") ? ReadInstalls(value["Install"], limits) : []
+        };
+    }
+
+    private static CanonicalLicense ParseLicense(JsonNode? node, NormalizationLimits limits)
+    {
+        var value = RequireObject(node, "INVALID_BASELINE");
+        EnsureProperties(value, ["Name", "SpdxId", "Url"], "license");
+        return new CanonicalLicense
+        {
+            Name = RequiredString(value, "Name", limits),
+            SpdxId = ReadNullableString(value, "SpdxId", limits),
+            Url = ReadNullableString(value, "Url", limits)
+        };
+    }
+
+    private static CanonicalContact ParseContact(JsonNode? node, NormalizationLimits limits)
+    {
+        var value = RequireObject(node, "INVALID_BASELINE");
+        EnsureProperties(value, ["Name", "Email", "Url"], "contact");
+        return new CanonicalContact
+        {
+            Name = ReadNullableString(value, "Name", limits),
+            Email = ReadNullableString(value, "Email", limits),
+            Url = ReadNullableString(value, "Url", limits)
+        };
+    }
+
+    private static CanonicalInstall[] ReadInstalls(JsonNode? node, NormalizationLimits limits)
+    {
+        var array = node as JsonArray ?? throw new NormalizationException("INVALID_BASELINE", "Canonical install metadata must be an array.");
+        CheckCollection(array.Count, limits);
+        return array.Select(item => ParseInstall(item, limits)).ToArray();
+    }
+
+    private static CanonicalInstall ParseInstall(JsonNode? node, NormalizationLimits limits)
+    {
+        var value = RequireObject(node, "INVALID_BASELINE");
+        EnsureProperties(value, ["Name", "Command", "Url", "Description"], "install");
+        return new CanonicalInstall
+        {
+            Name = RequiredString(value, "Name", limits),
+            Command = ReadNullableString(value, "Command", limits),
+            Url = ReadNullableString(value, "Url", limits),
+            Description = ReadNullableString(value, "Description", limits)
         };
     }
 

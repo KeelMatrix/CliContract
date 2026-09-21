@@ -8,6 +8,10 @@ KeelMatrix.CliContract is a .NET tool that detects incompatible changes in OpenC
 dotnet tool install --global KeelMatrix.CliContract
 ```
 
+## Requirements
+
+CliContract targets `net8.0` and requires the .NET 8 runtime. It is intended to run on Windows, Linux, and macOS where .NET 8 is available.
+
 Supported input: OpenCLI `1.0.0-alpha.14`, in JSON or YAML. Schema parsing and comparison require no network after restore; a successful comparison may make one bounded best-effort telemetry request unless telemetry is disabled. `CI=true` and `KEELMATRIX_DEVELOPMENT=true` suppress telemetry automatically. The tool does not execute the described CLI.
 
 ## Quick Start

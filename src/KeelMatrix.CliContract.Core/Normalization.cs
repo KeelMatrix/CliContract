@@ -903,6 +903,7 @@ public static class Normalizer
         _ = RequiredString(info, "version", "OPENCLI_INFO");
         var commandsNode = OptionalProperty(root, "commands", "OPENCLI_COMMANDS");
         var commands = commandsNode is null ? [] : RequireObject(commandsNode, "OPENCLI_COMMANDS");
+        var installNode = OptionalProperty(root, "install", "OPENCLI_INSTALL");
         var normalized = new List<CanonicalCommand>();
         foreach (var property in commands.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
@@ -920,6 +921,7 @@ public static class Normalizer
         {
             Adapter = "opencli",
             SourceVersion = version,
+            Info = NormalizeInfo(info, installNode, limits),
             Root = new CanonicalCommand
             {
                 Path = "root",
@@ -930,6 +932,60 @@ public static class Normalizer
                 Summary = rootCommand?.Summary,
                 Description = rootCommand?.Description
             }
+        };
+    }
+
+    private static CanonicalInfo NormalizeInfo(JsonObject info, JsonNode? installNode, NormalizationLimits limits)
+    {
+        return new CanonicalInfo
+        {
+            Title = OptionalString(info, "title", limits),
+            Summary = OptionalString(info, "summary", limits),
+            Description = OptionalString(info, "description", limits),
+            Binary = OptionalString(info, "binary", limits),
+            Version = OptionalString(info, "version", limits),
+            License = info.ContainsKey("license")
+                ? NormalizeLicense(RequireObject(info["license"], "OPENCLI_INFO"), limits)
+                : null,
+            Contact = info.ContainsKey("contact")
+                ? NormalizeContact(RequireObject(info["contact"], "OPENCLI_INFO"), limits)
+                : null,
+            Install = installNode is null
+                ? []
+                : RequireArray(installNode, "OPENCLI_INSTALL", limits)
+                    .Select(item => NormalizeInstall(RequireObject(item, "OPENCLI_INSTALL"), limits))
+                    .ToArray()
+        };
+    }
+
+    private static CanonicalLicense NormalizeLicense(JsonObject value, NormalizationLimits limits)
+    {
+        return new CanonicalLicense
+        {
+            Name = RequiredString(value, "name", "OPENCLI_INFO", limits),
+            SpdxId = OptionalString(value, "spdxId", limits),
+            Url = OptionalString(value, "url", limits)
+        };
+    }
+
+    private static CanonicalContact NormalizeContact(JsonObject value, NormalizationLimits limits)
+    {
+        return new CanonicalContact
+        {
+            Name = OptionalString(value, "name", limits),
+            Email = OptionalString(value, "email", limits),
+            Url = OptionalString(value, "url", limits)
+        };
+    }
+
+    private static CanonicalInstall NormalizeInstall(JsonObject value, NormalizationLimits limits)
+    {
+        return new CanonicalInstall
+        {
+            Name = RequiredString(value, "name", "OPENCLI_INSTALL", limits),
+            Command = OptionalString(value, "command", limits),
+            Url = OptionalString(value, "url", limits),
+            Description = OptionalString(value, "description", limits)
         };
     }
 

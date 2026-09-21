@@ -7,7 +7,42 @@ public sealed class CanonicalManifest
     public int SchemaVersion { get; init; } = 1;
     public required string Adapter { get; init; }
     public required string SourceVersion { get; init; }
+    public CanonicalInfo Info { get; init; } = new();
     public required CanonicalCommand Root { get; init; }
+}
+
+public sealed class CanonicalInfo
+{
+    public string? Title { get; init; }
+    public string? Summary { get; init; }
+    public string? Description { get; init; }
+    public string? Binary { get; init; }
+    public string? Version { get; init; }
+    public CanonicalLicense? License { get; init; }
+    public CanonicalContact? Contact { get; init; }
+    public CanonicalInstall[] Install { get; init; } = [];
+}
+
+public sealed class CanonicalLicense
+{
+    public required string Name { get; init; }
+    public string? SpdxId { get; init; }
+    public string? Url { get; init; }
+}
+
+public sealed class CanonicalContact
+{
+    public string? Name { get; init; }
+    public string? Email { get; init; }
+    public string? Url { get; init; }
+}
+
+public sealed class CanonicalInstall
+{
+    public required string Name { get; init; }
+    public string? Command { get; init; }
+    public string? Url { get; init; }
+    public string? Description { get; init; }
 }
 
 public sealed class CanonicalCommand

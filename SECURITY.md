@@ -16,3 +16,7 @@ coordinate a responsible fix and disclosure.
 The maintained `0.1.x` version line is supported with security fixes. Older versions and unreleased development builds
 are not guaranteed to receive security updates; use the latest maintained version before reporting whether a problem
 remains.
+
+## Input and network safety
+
+Schema parsing and comparison are offline and never fetch a network resource. Remote schema references that would require resolution, including `$ref`, `$dynamicRef`, `$recursiveRef`, includes, and remote document references, fail closed with `OPENCLI_REMOTE_REFERENCE` and exit code `3`. Informational scalar URL values declared by the pinned OpenCLI schema, such as `info.contact.url`, `info.license.url`, and `info.install.url`, are accepted as data, preserved verbatim in the canonical manifest, and never fetched. Optional telemetry is separate from parsing and comparison and can be disabled with `--no-telemetry`, `KEELMATRIX_NO_TELEMETRY=1`, `KEELMATRIX_DEVELOPMENT=true`, or `CI=true`.

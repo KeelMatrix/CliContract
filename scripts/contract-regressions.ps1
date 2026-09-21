@@ -49,8 +49,24 @@ try {
     foreach ($name in $badInputs.Keys) {
         $path = Join-Path $temp ($name + '.json')
         Write-Utf8 $path $badInputs[$name]
-        Assert-Case $name (Invoke-Tool @('validate', $path, '--input', 'auto', '--no-telemetry')) 3 $null
+        $expectedText = if ($name -eq 'remote-ref') { 'OPENCLI_REMOTE_REFERENCE' } else { $null }
+        Assert-Case $name (Invoke-Tool @('validate', $path, '--input', 'auto', '--no-telemetry')) 3 $expectedText
     }
+
+    $contactUrl = 'https://metadata.example.invalid/contact?source=OpenCLI%2F1.0.0-alpha.14'
+    $licenseUrl = 'https://metadata.example.invalid/license'
+    $installUrl = 'https://metadata.example.invalid/install?channel=stable'
+    $metadata = $valid.Replace('"info":{"title":"Tool","binary":"tool","version":"1"}', ('"info":{"title":"Tool","binary":"tool","version":"1","contact":{"url":"' + $contactUrl + '"},"license":{"name":"MIT","url":"' + $licenseUrl + '"}}'))
+    $metadata = $metadata.Replace(',"commands":', (',"install":[{"name":"download","url":"' + $installUrl + '"}],"commands":'))
+    $metadataPath = Join-Path $temp 'metadata-urls.json'
+    $metadataManifest = Join-Path $temp 'metadata-urls.canonical.json'
+    Write-Utf8 $metadataPath $metadata
+    Assert-Case 'informational-metadata-url' (Invoke-Tool @('snapshot', $metadataPath, '--input', 'opencli', '--output', $metadataManifest, '--no-telemetry')) 0 'SNAPSHOT'
+    $metadataDocument = Get-Content -Raw -LiteralPath $metadataManifest | ConvertFrom-Json
+    if ($metadataDocument.Info.Contact.Url -cne $contactUrl -or $metadataDocument.Info.License.Url -cne $licenseUrl -or $metadataDocument.Info.Install[0].Url -cne $installUrl) {
+        throw 'Informational metadata URLs were not preserved verbatim in the canonical manifest.'
+    }
+    Write-Output 'CASE=informational-metadata-url preserved=true network=not-requested'
     $malformedPath = Join-Path $temp 'malformed.json'
     $unsupportedPath = Join-Path $temp 'unsupported.json'
     Write-Utf8 $malformedPath '{'

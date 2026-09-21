@@ -280,6 +280,39 @@ public sealed class NormalizationTests
     }
 
     [Fact]
+    public void InformationalMetadataUrlsArePreservedVerbatimAndNeverResolved()
+    {
+        const string contactUrl = "https://metadata.example.invalid/contact?source=OpenCLI%2F1.0.0-alpha.14";
+        const string licenseUrl = "https://metadata.example.invalid/license";
+        const string installUrl = "https://metadata.example.invalid/install?channel=stable";
+        var document = JsonNode.Parse(OpenCliDocument("{\"commands\":{}}"))!.AsObject();
+        document["info"] = new JsonObject
+        {
+            ["title"] = "Tool",
+            ["binary"] = "tool",
+            ["version"] = "1",
+            ["contact"] = new JsonObject { ["url"] = contactUrl },
+            ["license"] = new JsonObject { ["name"] = "MIT", ["url"] = licenseUrl }
+        };
+        document["install"] = new JsonArray(new JsonObject
+        {
+            ["name"] = "download",
+            ["url"] = installUrl
+        });
+
+        var manifest = Normalizer.Normalize("opencli", document.ToJsonString());
+        Assert.Equal(contactUrl, manifest.Info.Contact!.Url);
+        Assert.Equal(licenseUrl, manifest.Info.License!.Url);
+        Assert.Equal(installUrl, manifest.Info.Install.Single().Url);
+
+        var serialized = Normalizer.Serialize(manifest);
+        Assert.Contains($"\"Url\": \"{contactUrl}\"", serialized, StringComparison.Ordinal);
+        Assert.Contains($"\"Url\": \"{licenseUrl}\"", serialized, StringComparison.Ordinal);
+        Assert.Contains($"\"Url\": \"{installUrl}\"", serialized, StringComparison.Ordinal);
+        Assert.Equal(serialized, Normalizer.Serialize(CanonicalManifestReader.Read(serialized)));
+    }
+
+    [Fact]
     public void EquivalentNumericDefaultsHaveByteIdenticalCanonicalOutput()
     {
         var integer = OpenCliDocument("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"retries\",\"type\":\"number\",\"default\":7}]}}}");

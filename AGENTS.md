@@ -7,7 +7,6 @@
 - `src/KeelMatrix.CliContract.Tool` is the packable `net8.0` `clicontract` tool.
 - `tests/KeelMatrix.CliContract.Tests` contains focused regression tests for normalization, compatibility, parser limits, and the OpenCLI adapter.
 - `fixtures/opencli` contains pinned OpenCLI alpha.14 examples and authored regression fixtures.
-- `docs` contains standards freshness notes and reproducibility records.
 - `scripts` contains the deterministic validation, package inspection, and packed-tool smoke gates.
 
 ## Commands

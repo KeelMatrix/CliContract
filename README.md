@@ -8,6 +8,10 @@ KeelMatrix CliContract fails CI when an [OpenCLI](https://opencli.dev/specificat
 dotnet tool install --global KeelMatrix.CliContract
 ```
 
+## Requirements
+
+CliContract targets `net8.0` and requires the .NET 8 runtime. It is intended to run on Windows, Linux, and macOS where .NET 8 is available.
+
 ## Quick Start
 
 ```bash
