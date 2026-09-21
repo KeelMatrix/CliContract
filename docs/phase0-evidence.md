@@ -52,13 +52,16 @@ fields and `x-*` extension fields follow the same ignore policy. Resource limits
   root-command aliases are retained on `Root` exactly like aliases on nested commands.
 - `global.flags` is represented as root options. Command `flags` and `args` are represented; argument declaration order
   is retained, while option and alias collections are canonically sorted.
-- Parameter `name`, `type`, `required`, `variadic`, `minItems`, and `maxItems` are represented as canonical name, type,
-  required state, and minimum/maximum arity.
-- Parameter `summary` and `description` are retained. Flag aliases are retained and sorted.
+- Argument `name` is required and `type` is optional; flag `name` and `type` are both required. The parameter
+  `required`, `variadic`, `minItems`, and `maxItems` fields are represented as canonical required state and
+  minimum/maximum arity.
+- Parameter `summary` and `description` are retained. Flag aliases are retained and sorted; argument aliases are not a
+  recognized alpha.14 field.
 - `choices[].value` is retained only when it is a scalar string, number, or boolean. Choice declaration order is
   canonically sorted by scalar value; choice descriptions are outside the contract.
-- Scalar `default` values are retained. Ordered `alternativeSources` entries retain their `$ENV`/`$FILE` type and
-  property in source order.
+- Scalar `default` values and ordered `alternativeSources` entries are valid only on flags. Sources retain their
+  `$ENV`/`$FILE` type and property in source order. Arguments carrying either field are rejected with
+  `OPENCLI_ARGUMENT_FIELD`.
 
 ### Outside the v1 compatibility contract
 
@@ -74,8 +77,93 @@ The adapter explicitly ignores these alpha.14 fields rather than treating them a
 - choice `description` fields;
 - every `x-*` extension field and any other upstream field not represented above.
 
-Invalid values for recognized in-contract fields are rejected as bounded adapter errors. A non-scalar `default`, an
-explicit null container, or another malformed recognized value is not outside data and is not silently ignored.
+Invalid values for recognized in-contract fields are rejected as bounded adapter errors. The required fields are
+`opencliVersion`, `info`, `info.title`, `info.binary`, `info.version`, every command/parameter `name`, and every flag
+`type`; argument `type` is optional in the pinned alpha.14 schema. A missing or invalid flag type fails with
+`OPENCLI_FLAG_TYPE`. A non-scalar flag `default`, an explicit null container, or another malformed recognized value is
+not outside data and is not silently ignored.
+
+### Recognized OpenCLI parameter fields
+
+| Field | Argument | Flag | Canonical treatment |
+|---|---|---|---|
+| `name` | required | required | canonical parameter name |
+| `type` | optional | required | canonical `Type`; an omitted argument type remains null |
+| `required` | optional, default false | optional, default false | canonical requiredness |
+| `variadic` | optional, default false | optional, default false | contributes to canonical arity |
+| `minItems`, `maxItems` | optional; used when variadic | optional; used when variadic | canonical arity bounds |
+| `choices[].value` | optional scalar | optional scalar | sorted canonical allowed values; choice descriptions are ignored |
+| `summary`, `description` | optional | optional | canonical help fields |
+| `aliases` | not defined | optional | sorted canonical aliases |
+| `default` | rejected | optional scalar | canonical default value |
+| `alternativeSources` | rejected | optional, ordered | canonical `$ENV`/`$FILE` fallback sources |
+
+### Resource limits
+
+The default limits are enforced while parsing every adapter input. `MaxInputBytes` is measured in UTF-8 encoded bytes,
+not .NET characters or UTF-16 code units. The exact limit is accepted; one byte over the limit fails with
+`INPUT_TOO_LARGE`. `MaxCollectionItems` applies to every JSON/YAML array, JSON object property collection, and YAML
+mapping, including command maps, parameter maps, flags, arguments, choices, aliases, alternative sources, and nested
+objects. The exact item/property limit is accepted; one over fails with `COLLECTION_TOO_LARGE`.
+
+| Limit | Default | Unit |
+|---|---:|---|
+| `MaxInputBytes` | 2,097,152 | UTF-8 bytes for the complete input string |
+| `MaxNodes` | 20,000 | parsed values/nodes |
+| `MaxDepth` | 64 | nesting levels |
+| `MaxStringLength` | 16,384 | UTF-16 code units per string |
+| `MaxCollectionItems` | 2,000 | items or object properties per collection |
+
+Duplicate JSON object property names are rejected at the root and at every nested object level with
+`DUPLICATE_JSON_KEY`; there is no last-wins policy. YAML duplicate keys remain rejected with
+`DUPLICATE_YAML_KEY`.
+
+## Regression counterexamples
+
+The following raw outputs were captured from the prior candidate before the resource and field-boundary fixes:
+
+~~~
+utf8-over-byte-cap inputChars=1111082 inputUtf8Bytes=2211082
+utf8-over-byte-cap exit=0 outputExists=True outputBytes=284
+
+2001-command-object exit=0 outputExists=True outputBytes=471418
+~~~
+
+~~~
+duplicate-key exit=0 outputExists=True outputBytes=301
+single-key exit=0 outputExists=True outputBytes=301
+duplicate-vs-single-sha=74B525945F5B88D2E28ADD88741AD12203E7FE764AD3B1977E4A65745BA1DC9B/74B525945F5B88D2E28ADD88741AD3B1977E4A65745BA1DC9B
+~~~
+
+~~~
+argument-default-not-in-alpha14 exit=0 outputExists=True outputBytes=620
+... "DefaultValue": "x"
+
+argument-alternative-source-not-in-alpha14 exit=0 outputExists=True outputBytes=719
+... "AlternativeSources": [{"Type":"$ENV","Property":"VALUE"}]
+
+flag-missing-required-type exit=0 outputExists=True outputBytes=643
+... "Type": null
+~~~
+
+The corresponding regression tests cover exact-limit acceptance and one-over rejection for UTF-8 input bytes,
+command/property maps, flags, arguments, choices, aliases, alternative sources, and .NET parameter maps. They also
+cover duplicate keys at the root, in nested command objects, and inside parameter objects in arrays.
+
+The regression test set was overlaid on the old normalizer at commit `914e442a222a7ef7e83f11d25ca2a9b7a7e7e162`;
+the old source failed these new cases:
+
+~~~
+dotnet test tests/KeelMatrix.CliContract.Tests/KeelMatrix.CliContract.Tests.csproj -c Release --nologo --no-restore
+Failed:     5, Passed:    23, Skipped:     0, Total:    28, EXIT=1
+~~~
+
+The fixed normalizer passes the same regression set and the complete existing suite:
+
+~~~
+dotnet test KeelMatrix.CliContract.sln -c Release --no-build --nologo
+Passed!  - Failed:     0, Passed:    28, Skipped:     0, Total:    28, EXIT=0
+~~~
 
 ## Verdict
 

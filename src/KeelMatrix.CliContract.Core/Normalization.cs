@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using YamlDotNet.Core;
@@ -37,9 +38,9 @@ public static class Normalizer
         try
         {
             var bounded = limits ?? new NormalizationLimits();
-            if (input.Length > bounded.MaxInputBytes)
+            if (Encoding.UTF8.GetByteCount(input) > bounded.MaxInputBytes)
             {
-                throw new NormalizationException("INPUT_TOO_LARGE", "The input description exceeds the configured size limit.");
+                throw new NormalizationException("INPUT_TOO_LARGE", "The input description exceeds the configured size limit in UTF-8 bytes.");
             }
 
             return adapter.ToLowerInvariant() switch
@@ -200,9 +201,21 @@ public static class Normalizer
 
     private static JsonObject ConvertObject(JsonElement value, int depth, NormalizationLimits limits, Counter counter)
     {
-        var result = new JsonObject();
-        foreach (var property in value.EnumerateObject())
+        var properties = value.EnumerateObject().ToArray();
+        if (properties.Length > limits.MaxCollectionItems)
         {
+            throw new NormalizationException("COLLECTION_TOO_LARGE", "A JSON object exceeds the configured property limit.");
+        }
+
+        var result = new JsonObject();
+        var propertyNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in properties)
+        {
+            if (!propertyNames.Add(property.Name))
+            {
+                throw new NormalizationException("DUPLICATE_JSON_KEY", "The JSON document contains a duplicate object key.");
+            }
+
             BoundedString(property.Name, limits);
             result[property.Name] = ConvertJsonElement(property.Value, depth + 1, limits, counter);
         }
@@ -361,13 +374,22 @@ public static class Normalizer
         {
             var parameter = RequireObject(item, "OPENCLI_PARAMETER");
             var name = RequiredString(parameter, "name", "OPENCLI_PARAMETER");
+            if (!option && (parameter.ContainsKey("default") || parameter.ContainsKey("alternativeSources")))
+            {
+                throw new NormalizationException("OPENCLI_ARGUMENT_FIELD", "OpenCLI arguments do not support default or alternativeSources fields.");
+            }
+
             var required = OptionalBoolean(parameter, "required") ?? false;
             var variadic = OptionalBoolean(parameter, "variadic") ?? false;
             var minimum = variadic ? OptionalInt(parameter, "minItems") ?? (required == true ? 1 : 0) : required == true ? 1 : 0;
             var maximum = variadic ? OptionalInt(parameter, "maxItems") : 1;
             var choices = ReadChoices(OptionalProperty(parameter, "choices", "OPENCLI_CHOICES"), limits);
-            var type = OptionalString(parameter, "type", limits);
-            var alternativeSources = ReadAlternativeSources(OptionalProperty(parameter, "alternativeSources", "OPENCLI_DEFAULT_SOURCES"), limits);
+            var type = option
+                ? RequiredString(parameter, "type", "OPENCLI_FLAG_TYPE", limits)
+                : OptionalString(parameter, "type", limits);
+            var alternativeSources = option
+                ? ReadAlternativeSources(OptionalProperty(parameter, "alternativeSources", "OPENCLI_DEFAULT_SOURCES"), limits)
+                : [];
             var common = new ParameterValues(
                 name,
                 OptionalString(parameter, "summary", limits),
@@ -377,7 +399,7 @@ public static class Normalizer
                 minimum,
                 maximum,
                 choices,
-                OptionalScalar(parameter, "default", limits),
+                option ? OptionalScalar(parameter, "default", limits) : null,
                 alternativeSources,
                 null);
             if (option)

@@ -66,6 +66,110 @@ public sealed class NormalizationTests
     }
 
     [Fact]
+    public void InputByteLimitUsesUtf8BytesAndAcceptsExactBoundary()
+    {
+        var input = "{\"opencliVersion\":\"1.0.0-alpha.14\",\"info\":{\"title\":\"t\",\"binary\":\"b\",\"version\":\"1\"},\"commands\":{\"tool\":{\"description\":\"" + new string('é', 1_000) + "\"}}}";
+        var inputBytes = System.Text.Encoding.UTF8.GetByteCount(input);
+
+        Normalizer.Normalize("opencli", input, new NormalizationLimits(MaxInputBytes: inputBytes));
+
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", input, new NormalizationLimits(MaxInputBytes: inputBytes - 1)));
+        Assert.Equal("INPUT_TOO_LARGE", error.Code);
+        Assert.Contains("UTF-8 bytes", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void JsonObjectCollectionLimitAcceptsExactCommandMapAndRejectsOneOver()
+    {
+        var exactCommands = new JsonObject();
+        var overCommands = new JsonObject();
+        for (var index = 0; index < 3; index++)
+        {
+            exactCommands[$"tool {index}"] = new JsonObject();
+        }
+
+        for (var index = 0; index < 4; index++)
+        {
+            overCommands[$"tool {index}"] = new JsonObject();
+        }
+
+        Normalizer.Normalize("opencli", OpenCliDocument(new JsonObject { ["commands"] = exactCommands }.ToJsonString()), new NormalizationLimits(MaxCollectionItems: 3));
+
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", OpenCliDocument(new JsonObject { ["commands"] = overCommands }.ToJsonString()), new NormalizationLimits(MaxCollectionItems: 3)));
+        Assert.Equal("COLLECTION_TOO_LARGE", error.Code);
+    }
+
+    [Theory]
+    [InlineData("flags")]
+    [InlineData("args")]
+    [InlineData("choices")]
+    [InlineData("aliases")]
+    [InlineData("alternativeSources")]
+    public void OpenCliCollectionLimitsAcceptExactBoundaryAndRejectOneOver(string collection)
+    {
+        var exact = ParameterCollectionDocument(collection, 3);
+        var over = ParameterCollectionDocument(collection, 4);
+        var limits = new NormalizationLimits(MaxCollectionItems: 3);
+
+        Normalizer.Normalize("opencli", exact, limits);
+
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", over, limits));
+        Assert.Equal("COLLECTION_TOO_LARGE", error.Code);
+    }
+
+    [Fact]
+    public void DotnetObjectCollectionLimitAcceptsExactBoundaryAndRejectsOneOver()
+    {
+        var exact = DotnetParameterMapDocument(3);
+        var over = DotnetParameterMapDocument(4);
+        var limits = new NormalizationLimits(MaxCollectionItems: 3);
+
+        Normalizer.Normalize("dotnet", exact, limits);
+
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("dotnet", over, limits));
+        Assert.Equal("COLLECTION_TOO_LARGE", error.Code);
+    }
+
+    [Fact]
+    public void DuplicateJsonObjectKeysAreRejectedAtEveryLevel()
+    {
+        var cases = new[]
+        {
+            "{\"opencliVersion\":\"1.0.0-alpha.14\",\"opencliVersion\":\"1.0.0-alpha.14\",\"info\":{\"title\":\"t\",\"binary\":\"b\",\"version\":\"1\"}}",
+            "{\"opencliVersion\":\"1.0.0-alpha.14\",\"info\":{\"title\":\"t\",\"binary\":\"b\",\"version\":\"1\"},\"commands\":{\"tool\":{\"description\":\"a\",\"description\":\"b\"}}}",
+            "{\"opencliVersion\":\"1.0.0-alpha.14\",\"info\":{\"title\":\"t\",\"binary\":\"b\",\"version\":\"1\"},\"commands\":{\"tool\":{\"flags\":[{\"name\":\"x\",\"name\":\"y\",\"type\":\"string\"}]}}}"
+        };
+
+        foreach (var input in cases)
+        {
+            var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", input));
+            Assert.Equal("DUPLICATE_JSON_KEY", error.Code);
+        }
+    }
+
+    [Fact]
+    public void OpenCliRejectsFlagOnlyFieldsOnArgumentsAndRequiresFlagType()
+    {
+        var argumentDefault = OpenCliDocument("{\"commands\":{\"tool\":{\"args\":[{\"name\":\"value\",\"default\":\"x\"}]}}}");
+        var argumentSource = OpenCliDocument("{\"commands\":{\"tool\":{\"args\":[{\"name\":\"value\",\"alternativeSources\":[{\"type\":\"$ENV\",\"property\":\"VALUE\"}]}]}}}");
+        var missingFlagType = OpenCliDocument("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\"}]}}}");
+
+        Assert.Equal("OPENCLI_ARGUMENT_FIELD", Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", argumentDefault)).Code);
+        Assert.Equal("OPENCLI_ARGUMENT_FIELD", Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", argumentSource)).Code);
+        Assert.Equal("OPENCLI_FLAG_TYPE", Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", missingFlagType)).Code);
+    }
+
+    [Fact]
+    public void OpenCliArgumentTypeRemainsOptionalPerAlpha14Schema()
+    {
+        var input = OpenCliDocument("{\"commands\":{\"tool run <value>\":{\"args\":[{\"name\":\"value\"}]}}}");
+
+        var argument = Normalizer.Normalize("opencli", input).Root.Subcommands.Single().Arguments.Single();
+
+        Assert.Null(argument.Type);
+    }
+
+    [Fact]
     public void OpenCliPreservesScalarChoiceValuesAndRejectsMalformedChoices()
     {
         var input = OpenCliDocument("""
@@ -281,7 +385,7 @@ public sealed class NormalizationTests
     public void UnexpectedAdapterFailureIsBounded()
     {
         var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", "{\"opencliVersion\":\"1.0.0-alpha.14\",\"info\":{\"title\":\"t\",\"binary\":\"b\",\"version\":\"1\"},\"commands\":{\"tool\":{\"flags\":[{\"name\":\"x\",\"type\":{}}]}}}"));
-        Assert.Equal("INVALID_STRING", error.Code);
+        Assert.Equal("OPENCLI_FLAG_TYPE", error.Code);
     }
 
     private static string OpenCliDocument(string commandsAndOptionalProperties)
@@ -295,6 +399,73 @@ public sealed class NormalizationTests
             ["version"] = "1"
         };
         return document.ToJsonString();
+    }
+
+    private static string ParameterCollectionDocument(string collection, int count)
+    {
+        JsonNode values = collection switch
+        {
+            "flags" or "args" => new JsonArray(Enumerable.Range(0, count).Select(index => (JsonNode)new JsonObject
+            {
+                ["name"] = $"value{index}",
+                ["type"] = "string"
+            }).ToArray()),
+            "choices" => new JsonArray(Enumerable.Range(0, count).Select(index => (JsonNode)new JsonObject
+            {
+                ["value"] = $"value{index}"
+            }).ToArray()),
+            "aliases" => new JsonArray(Enumerable.Range(0, count).Select(index => (JsonNode)$"-v{index}").ToArray()),
+            "alternativeSources" => new JsonArray(Enumerable.Range(0, count).Select(index => (JsonNode)new JsonObject
+            {
+                ["type"] = "$ENV",
+                ["property"] = $"VALUE{index}"
+            }).ToArray()),
+            _ => throw new ArgumentOutOfRangeException(nameof(collection))
+        };
+
+        JsonObject command;
+        if (collection is "flags" or "args")
+        {
+            command = new JsonObject { [collection] = values };
+        }
+        else
+        {
+            var parameter = new JsonObject
+            {
+                ["name"] = "value",
+                ["type"] = "string",
+                [collection] = values
+            };
+            command = new JsonObject { ["flags"] = new JsonArray(parameter) };
+        }
+
+        return OpenCliDocument(new JsonObject
+        {
+            ["commands"] = new JsonObject { ["tool"] = command }
+        }.ToJsonString());
+    }
+
+    private static string DotnetParameterMapDocument(int count)
+    {
+        var options = new JsonObject();
+        for (var index = 0; index < count; index++)
+        {
+            options[$"--value{index}"] = new JsonObject
+            {
+                ["arity"] = new JsonObject
+                {
+                    ["minimum"] = 0,
+                    ["maximum"] = 1
+                }
+            };
+        }
+
+        return new JsonObject
+        {
+            ["name"] = "dotnet",
+            ["version"] = "10.0.401",
+            ["options"] = options
+        }.ToJsonString();
     }
 
     private static string Fixture(params string[] parts)
