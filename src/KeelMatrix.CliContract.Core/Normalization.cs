@@ -735,9 +735,9 @@ public static class Normalizer
         {
             foreach (var property in obj)
             {
-                if (property.Key is "$ref" or "$dynamicRef" or "$recursiveRef")
+                if (property.Key is "$ref" or "$dynamicRef" or "$recursiveRef" or "include")
                 {
-                    throw new NormalizationException("OPENCLI_REMOTE_REFERENCE", "Schema references are not supported.");
+                    throw new NormalizationException("OPENCLI_REMOTE_REFERENCE", "Remote schema references and includes are not supported.");
                 }
 
                 RejectReferences(property.Value, depth + 1, limits, counter);
@@ -916,6 +916,11 @@ public static class Normalizer
             ? Array.Empty<CanonicalOption>()
             : ReadOpenCliParameters(OptionalProperty(global, "flags", "OPENCLI_COLLECTION"), true, limits).Cast<CanonicalOption>().ToArray();
         var rootCommand = normalized.FirstOrDefault(c => c.Path == "root");
+        var rootOptions = globalOptions
+            .Concat(rootCommand?.Options ?? [])
+            .OrderBy(a => a.Name, StringComparer.Ordinal)
+            .ToArray();
+        EnsureUniqueParameterNames(rootOptions, "option");
 
         return new CanonicalManifest
         {
@@ -927,7 +932,7 @@ public static class Normalizer
                 Path = "root",
                 Subcommands = normalized.Where(c => c.Path != "root").OrderBy(c => c.Path, StringComparer.Ordinal).ToArray(),
                 Arguments = rootCommand?.Arguments ?? [],
-                Options = globalOptions.Concat(rootCommand?.Options ?? []).OrderBy(a => a.Name, StringComparer.Ordinal).ToArray(),
+                Options = rootOptions,
                 Aliases = rootCommand?.Aliases ?? [],
                 Summary = rootCommand?.Summary,
                 Description = rootCommand?.Description
@@ -1020,6 +1025,7 @@ public static class Normalizer
             throw new NormalizationException("COLLECTION_TOO_LARGE", "An OpenCLI parameter collection exceeds the configured item limit.");
         }
 
+        var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in array)
         {
             var parameter = RequireObject(item, "OPENCLI_PARAMETER");
@@ -1040,6 +1046,12 @@ public static class Normalizer
             var alternativeSources = option
                 ? ReadAlternativeSources(OptionalProperty(parameter, "alternativeSources", "OPENCLI_DEFAULT_SOURCES"), limits)
                 : [];
+            var normalizedName = option ? "--" + name.TrimStart('-') : name;
+            if (!names.Add(normalizedName))
+            {
+                throw new NormalizationException("OPENCLI_DUPLICATE_PARAMETER", "An OpenCLI parameter collection contains duplicate normalized names.");
+            }
+
             var common = new ParameterValues(
                 name,
                 OptionalString(parameter, "summary", limits),
@@ -1056,7 +1068,7 @@ public static class Normalizer
             {
                 yield return new CanonicalOption
                 {
-                    Name = "--" + name.TrimStart('-'),
+                    Name = normalizedName,
                     Aliases = Strings(parameter["aliases"], limits).OrderBy(x => x, StringComparer.Ordinal).ToArray(),
                     Summary = common.Summary,
                     Description = common.Description,
@@ -1086,6 +1098,19 @@ public static class Normalizer
                     AlternativeSources = common.AlternativeSources,
                     Status = common.Status
                 };
+            }
+        }
+    }
+
+    private static void EnsureUniqueParameterNames<TParameter>(IEnumerable<TParameter> parameters, string kind)
+        where TParameter : CanonicalParameter
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var parameter in parameters)
+        {
+            if (!names.Add(parameter.Name))
+            {
+                throw new NormalizationException("OPENCLI_DUPLICATE_PARAMETER", $"An OpenCLI {kind} collection contains duplicate normalized names.");
             }
         }
     }

@@ -73,6 +73,8 @@ clicontract check ./opencli.yaml --baseline ./cli-contract.json --format json
 - `UNSUPPORTED_OPENCLI_VERSION`: update the source to the pinned OpenCLI version or wait for a tool version that supports it.
 - `AMBIGUOUS_INPUT`: pass `--input opencli` after removing competing schema markers.
 - `DUPLICATE_OPTION`: provide each command-line option at most once.
+- `OPENCLI_DUPLICATE_PARAMETER`: remove duplicate argument or option names after OpenCLI option-name normalization.
+- `OPENCLI_REMOTE_REFERENCE`: remove the remote reference or include; this tool never resolves it or accesses the network.
 - `INVALID_BASELINE` or `BASELINE_VERSION_MISMATCH`: recreate the baseline with `snapshot` from the same supported format version.
 - `CANONICALIZATION_FAILED`: inspect the bounded diagnostic and source fields; no baseline is rewritten after a failed `check`.
 

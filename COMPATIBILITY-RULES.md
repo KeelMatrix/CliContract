@@ -27,6 +27,7 @@ This document defines the v1 change-classification contract for KeelMatrix CliCo
 | `KMCLI106` | breaking | Accepted arity narrowed |
 | `KMCLI107` | breaking | Explicit type or allowed-value domain narrowed |
 | `KMCLI108` | breaking | Required option or argument added |
+| `KMCLI109` | breaking | Positional argument declaration order changed |
 | `KMCLI201` | warning | Default value changed |
 | `KMCLI202` | warning | Status or deprecation state changed when represented |
 | `KMCLI203` | warning | Other represented type/domain change that is not a narrowing |
@@ -37,11 +38,13 @@ Each finding has a stable code, category, logical command path, and bounded mess
 
 | Code | Exit code | Meaning |
 | --- | ---: | --- |
+| `OPENCLI_REMOTE_REFERENCE` | `3` | Remote schema reference or include is unsupported; no network resolution is attempted |
+| `OPENCLI_DUPLICATE_PARAMETER` | `3` | An argument or option collection contains duplicate normalized names |
 | `UNEXPECTED_ERROR` | `4` | Unexpected tool failure |
 
 ## Semantics
 
-The analyzer compares commands by logical path, options by normalized long name, and arguments by name. Source declaration order does not affect command, option, alias, or choice collections. Argument declaration order remains in the canonical manifest because positional order is part of the contract; reordering positional arguments is represented by the manifest and should be reviewed as a contract change.
+The analyzer compares commands by logical path, options by normalized long name, and arguments by name. Source declaration order does not affect command, option, alias, or choice collections. Argument declaration order remains in the canonical manifest because positional order is part of the contract; reordering the same positional arguments produces breaking finding `KMCLI109`.
 
 Breaking rules are command/option/argument removal, callable alias removal, optional-to-required changes, arity narrowing, required type narrowing, and allowed-value domain narrowing. Adding an optional command/option/argument or alias is informational. Adding a required parameter is breaking. Default changes are warnings. Summary/description changes are informational by default. Deprecation/status changes are warnings only when represented by the supported format.
 
@@ -55,7 +58,7 @@ The adapter supports nested commands, root/global flags, aliases, positional arg
 
 ## Failure and privacy behavior
 
-Unknown upstream or canonical manifest versions are rejected explicitly. JSON duplicate keys, malformed JSON/YAML, YAML anchors/aliases, excessive size/depth/node/string/collection limits, invalid recognized fields, and incompatible baselines are errors, never compatible results. The described CLI is never started.
+Unknown upstream or canonical manifest versions are rejected explicitly. JSON duplicate keys, duplicate normalized parameter names, malformed JSON/YAML, YAML anchors/aliases, excessive size/depth/node/string/collection limits, invalid recognized fields, and incompatible baselines are errors, never compatible results. The described CLI is never started.
 
 The tool never fetches a network resource and makes no network access while parsing or comparing. Remote schema references that would require resolution, including `$ref`, `$dynamicRef`, `$recursiveRef`, includes, and remote document references, fail closed with `OPENCLI_REMOTE_REFERENCE` (CLI exit code `3`). In contrast, schema-valid scalar URL values in informational OpenCLI metadata, including `info.contact.url`, `info.license.url`, and `info.install.url`, are accepted and preserved verbatim in `CanonicalManifest.Info`. These values are data only and are never fetched. The optional post-comparison telemetry request is separate from schema parsing and comparison and is disabled by the documented opt-out and development/CI controls.
 

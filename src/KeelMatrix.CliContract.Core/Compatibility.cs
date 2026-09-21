@@ -50,12 +50,21 @@ public static class CompatibilityAnalyzer
         CompareText(baseline.Description, current.Description, baseline.Path, "description", findings);
         CompareStatus(baseline.Status, current.Status, baseline.Path, findings);
 
-        var baselineOptions = baseline.Options.ToDictionary(option => option.Name, StringComparer.Ordinal);
-        var currentOptions = current.Options.ToDictionary(option => option.Name, StringComparer.Ordinal);
+        var baselineOptions = ToUniqueMap(baseline.Options, "option", baseline.Path);
+        var currentOptions = ToUniqueMap(current.Options, "option", current.Path);
         CompareParameters(baselineOptions, currentOptions, baseline.Path, "option", findings);
 
-        var baselineArguments = baseline.Arguments.ToDictionary(argument => argument.Name, StringComparer.Ordinal);
-        var currentArguments = current.Arguments.ToDictionary(argument => argument.Name, StringComparer.Ordinal);
+        var baselineArgumentNames = baseline.Arguments.Select(argument => argument.Name).ToArray();
+        var currentArgumentNames = current.Arguments.Select(argument => argument.Name).ToArray();
+        if (baselineArgumentNames.Length == currentArgumentNames.Length &&
+            !baselineArgumentNames.SequenceEqual(currentArgumentNames, StringComparer.Ordinal) &&
+            baselineArgumentNames.Order(StringComparer.Ordinal).SequenceEqual(currentArgumentNames.Order(StringComparer.Ordinal), StringComparer.Ordinal))
+        {
+            findings.Add(new CompatibilityFinding("KMCLI109", "breaking", baseline.Path, "Positional argument order changed."));
+        }
+
+        var baselineArguments = ToUniqueMap(baseline.Arguments, "argument", baseline.Path);
+        var currentArguments = ToUniqueMap(current.Arguments, "argument", current.Path);
         CompareParameters(baselineArguments, currentArguments, baseline.Path, "argument", findings);
 
         var baselineCommands = baseline.Subcommands.ToDictionary(command => command.Path, StringComparer.Ordinal);
@@ -74,6 +83,26 @@ public static class CompatibilityAnalyzer
         {
             CompareCommand(baselineCommands[path], currentCommands[path], findings);
         }
+    }
+
+    private static Dictionary<string, TParameter> ToUniqueMap<TParameter>(
+        IEnumerable<TParameter> parameters,
+        string kind,
+        string commandPath)
+        where TParameter : CanonicalParameter
+    {
+        var result = new Dictionary<string, TParameter>(StringComparer.Ordinal);
+        foreach (var parameter in parameters)
+        {
+            if (!result.TryAdd(parameter.Name, parameter))
+            {
+                throw new CompatibilityException(
+                    "OPENCLI_DUPLICATE_PARAMETER",
+                    $"The canonical {kind} collection at {commandPath} contains duplicate normalized names.");
+            }
+        }
+
+        return result;
     }
 
     private static void CompareParameters<TParameter>(

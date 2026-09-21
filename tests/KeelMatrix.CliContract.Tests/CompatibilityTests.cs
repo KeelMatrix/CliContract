@@ -46,6 +46,40 @@ public sealed class CompatibilityTests
     }
 
     [Fact]
+    public void PositionalArgumentReorderingIsBreaking()
+    {
+        var baseline = Normalize("""{"commands":{"tool run <first> <second>":{"args":[{"name":"first"},{"name":"second"}]}}}""");
+        var current = Normalize("""{"commands":{"tool run <first> <second>":{"args":[{"name":"second"},{"name":"first"}]}}}""");
+
+        var findings = CompatibilityAnalyzer.Compare(baseline, current).Findings;
+
+        Assert.Contains(findings, finding => finding.Code == "KMCLI109" && finding.Category == "breaking" && finding.Path == "root / run");
+    }
+
+    [Fact]
+    public void CompatibilityAnalyzerRejectsDuplicateCanonicalParameterNames()
+    {
+        var manifest = new CanonicalManifest
+        {
+            Adapter = "opencli",
+            SourceVersion = Normalizer.OpenCliVersion,
+            Root = new CanonicalCommand
+            {
+                Path = "root",
+                Options =
+                [
+                    new CanonicalOption { Name = "--region" },
+                    new CanonicalOption { Name = "--region" }
+                ]
+            }
+        };
+
+        var error = Assert.Throws<CompatibilityException>(() => CompatibilityAnalyzer.Compare(manifest, manifest));
+
+        Assert.Equal("OPENCLI_DUPLICATE_PARAMETER", error.Code);
+    }
+
+    [Fact]
     public void DomainNarrowingIsBreakingButWideningIsNot()
     {
         var oldManifest = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"number","choices":[{"value":1},{"value":2}]}]}}}""");

@@ -45,11 +45,33 @@ try {
         'bad-min' = $valid.Replace('"type":"string"', '"type":"string","minItems":2,"maxItems":1')
         'empty-sources' = $valid.Replace('"type":"string"', '"type":"string","alternativeSources":[]')
         'remote-ref' = $valid.Replace('"type":"string"', '"type":"string","$ref":"https://example.invalid/schema"')
+        'remote-include' = $valid.Replace(',"commands":', ',"include":"https://example.invalid/schema","commands":')
     }
+
+    $duplicateFlag = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"region","type":"string"},{"name":"region","type":"string"}]}}}'
+    $duplicateArgument = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run <region> <region>":{"args":[{"name":"region"},{"name":"region"}]}}}'
+    $normalizedCollision = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"region","type":"string"},{"name":"--region","type":"string"}]}}}'
+    foreach ($case in @(
+        @{ Name = 'duplicate-flag-name'; Value = $duplicateFlag },
+        @{ Name = 'duplicate-argument-name'; Value = $duplicateArgument },
+        @{ Name = 'normalized-parameter-collision'; Value = $normalizedCollision }
+    )) {
+        $path = Join-Path $temp ($case.Name + '.json')
+        Write-Utf8 $path $case.Value
+        Assert-Case $case.Name (Invoke-Tool @('validate', $path, '--input', 'opencli', '--no-telemetry')) 3 'OPENCLI_DUPLICATE_PARAMETER'
+    }
+
+    $oldArguments = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run <first> <second>":{"args":[{"name":"first"},{"name":"second"}]}}}'
+    $newArguments = $oldArguments.Replace('[{"name":"first"},{"name":"second"}]', '[{"name":"second"},{"name":"first"}]')
+    $oldArgumentsPath = Join-Path $temp 'old-arguments.json'
+    $newArgumentsPath = Join-Path $temp 'new-arguments.json'
+    Write-Utf8 $oldArgumentsPath $oldArguments
+    Write-Utf8 $newArgumentsPath $newArguments
+    Assert-Case 'positional-argument-order' (Invoke-Tool @('diff', $oldArgumentsPath, $newArgumentsPath, '--format', 'text', '--no-telemetry')) 1 'KMCLI109'
     foreach ($name in $badInputs.Keys) {
         $path = Join-Path $temp ($name + '.json')
         Write-Utf8 $path $badInputs[$name]
-        $expectedText = if ($name -eq 'remote-ref') { 'OPENCLI_REMOTE_REFERENCE' } else { $null }
+        $expectedText = if ($name -in @('remote-ref', 'remote-include')) { 'OPENCLI_REMOTE_REFERENCE' } else { $null }
         Assert-Case $name (Invoke-Tool @('validate', $path, '--input', 'auto', '--no-telemetry')) 3 $expectedText
     }
 

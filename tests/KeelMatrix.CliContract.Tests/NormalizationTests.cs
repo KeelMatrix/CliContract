@@ -273,10 +273,23 @@ public sealed class NormalizationTests
     [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"string\",\"minItems\":2,\"maxItems\":1}]}}}", "OPENCLI_ARITY")]
     [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"string\",\"alternativeSources\":[]}]}}}", "OPENCLI_DEFAULT_SOURCES")]
     [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"string\",\"$ref\":\"https://example.invalid/schema\"}]}}}", "OPENCLI_REMOTE_REFERENCE")]
+    [InlineData("{\"include\":\"https://example.invalid/schema\"}", "OPENCLI_REMOTE_REFERENCE")]
     public void OpenCliSchemaViolationsFailClosed(string commands, string expectedCode)
     {
         var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", OpenCliDocument(commands)));
         Assert.Equal(expectedCode, error.Code);
+    }
+
+    [Theory]
+    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"region\",\"type\":\"string\"},{\"name\":\"region\",\"type\":\"string\"}]}}}")]
+    [InlineData("{\"commands\":{\"tool run <region> <region>\":{\"args\":[{\"name\":\"region\"},{\"name\":\"region\"}]}}}")]
+    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"region\",\"type\":\"string\"},{\"name\":\"--region\",\"type\":\"string\"}]}}}")]
+    [InlineData("{\"global\":{\"flags\":[{\"name\":\"region\",\"type\":\"string\"}]},\"commands\":{\"tool\":{\"flags\":[{\"name\":\"--region\",\"type\":\"string\"}]}}}")]
+    public void DuplicateNormalizedParameterNamesFailClosed(string commands)
+    {
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", OpenCliDocument(commands)));
+
+        Assert.Equal("OPENCLI_DUPLICATE_PARAMETER", error.Code);
     }
 
     [Fact]
