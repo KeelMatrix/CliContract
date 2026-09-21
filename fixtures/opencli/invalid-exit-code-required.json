@@ -1,0 +1,11 @@
+{
+  "opencliVersion": "1.0.0-alpha.14",
+  "info": {
+    "title": "Tool",
+    "binary": "tool",
+    "version": "1"
+  },
+  "global": {
+    "exitCodes": [{ "code": 1, "status": "INTERNAL_CLI_ERROR" }]
+  }
+}

@@ -7,7 +7,6 @@
 - `src/KeelMatrix.CliContract.Tool` is the packable `net8.0` `clicontract` tool.
 - `tests/KeelMatrix.CliContract.Tests` contains focused regression tests for normalization, compatibility, parser limits, and the OpenCLI adapter.
 - `fixtures/opencli` contains pinned OpenCLI alpha.14 examples and authored regression fixtures.
-- `fixtures/dotnet` contains .NET CLI-schema captures used as Phase 0 evidence; they are not a supported v1 adapter.
 - `docs` contains standards freshness notes and reproducibility evidence.
 - `scripts` contains the deterministic validation, package inspection, and packed-tool smoke gates.
 
@@ -26,7 +25,7 @@ The shipping command surface is OpenCLI-only: `--input auto|opencli`. The tool p
 
 ## Invariants
 
-- The shipping tool accepts only OpenCLI `1.0.0-alpha.14`. The `.NET CLI-schema` captures remain regression evidence and are not a v1 adapter.
+- The shipping tool and probe accept only OpenCLI `1.0.0-alpha.14`.
 - Input is untrusted: size, node, depth, collection, and string limits are enforced.
 - Normalization is offline and never starts a process, loads a described executable, or fetches a URL.
 - Canonical paths are logical command paths such as `root / deploy / --region`.

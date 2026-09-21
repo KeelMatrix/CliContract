@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Globalization;
+using System.Numerics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -24,12 +25,19 @@ public sealed class NormalizationException(string code, string message) : Except
 public static class Normalizer
 {
     public const string OpenCliVersion = "1.0.0-alpha.14";
-    public const string DotnetSchemaContract = "dotnet-cli-schema-v1-observed";
     private static readonly string[] InfoTextProperties = ["title", "summary", "description", "binary", "version"];
     private static readonly string[] LicenseTextProperties = ["name", "spdxId", "url"];
     private static readonly string[] ContactTextProperties = ["name", "email", "url"];
     private static readonly string[] InstallTextProperties = ["name", "command", "url", "description"];
     private static readonly string[] ExitCodeTextProperties = ["status", "summary", "description"];
+    private static readonly string[] ExitCodeStatuses = [
+        "BAD_USER_INPUT_ERROR",
+        "UNAUTHENTICATED_ERROR",
+        "UNAUTHORIZED_ERROR",
+        "CANCELED_ERROR",
+        "INTERNAL_CLI_ERROR",
+        "NOT_IMPLEMENTED_ERROR",
+        "OK"];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -53,11 +61,6 @@ public static class Normalizer
                 var document = ParseOpenCliDocument(input, bounded);
                 ValidateOpenCliDocument(document, bounded);
                 return NormalizeOpenCli(document, bounded);
-            }
-
-            if (adapter.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
-            {
-                return NormalizeDotnet(ParseJson(input, bounded, "DOTNET_JSON"), bounded);
             }
 
             throw new NormalizationException("UNSUPPORTED_ADAPTER", "The requested input adapter is not supported by this probe.");
@@ -199,7 +202,7 @@ public static class Normalizer
         }
         catch (JsonException)
         {
-            throw new NormalizationException(code == "DOTNET_JSON" ? "MALFORMED_DOTNET_JSON" : "MALFORMED_JSON", "The JSON document could not be parsed.");
+            throw new NormalizationException("MALFORMED_JSON", "The JSON document could not be parsed.");
         }
     }
 
@@ -326,19 +329,95 @@ public static class Normalizer
 
     private static JsonValue CanonicalizeNumber(string raw)
     {
-        if (decimal.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalValue))
+        var index = 0;
+        var negative = raw.Length > 0 && raw[0] == '-';
+        if (negative) index++;
+
+        var integerStart = index;
+        while (index < raw.Length && char.IsDigit(raw[index])) index++;
+        if (index == integerStart)
         {
-            var normalized = decimal.Parse(decimalValue.ToString("G29", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
-            return JsonValue.Create(normalized);
+            throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is invalid.");
         }
 
-        if (double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var doubleValue) &&
-            !double.IsNaN(doubleValue) && !double.IsInfinity(doubleValue))
+        var integerDigits = raw[integerStart..index];
+        var fractionDigits = string.Empty;
+        if (index < raw.Length && raw[index] == '.')
         {
-            return JsonValue.Create(doubleValue);
+            var fractionStart = ++index;
+            while (index < raw.Length && char.IsDigit(raw[index])) index++;
+            fractionDigits = raw[fractionStart..index];
+            if (fractionDigits.Length == 0)
+            {
+                throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is invalid.");
+            }
         }
 
-        throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is outside the supported canonical range.");
+        var exponent = BigInteger.Zero;
+        if (index < raw.Length && (raw[index] is 'e' or 'E'))
+        {
+            index++;
+            var exponentNegative = index < raw.Length && raw[index] == '-';
+            if (exponentNegative || (index < raw.Length && raw[index] == '+')) index++;
+            var exponentStart = index;
+            while (index < raw.Length && char.IsDigit(raw[index])) index++;
+            if (index == exponentStart)
+            {
+                throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is invalid.");
+            }
+
+            exponent = BigInteger.Parse(raw[exponentStart..index], CultureInfo.InvariantCulture);
+            if (exponentNegative) exponent = -exponent;
+        }
+
+        if (index != raw.Length)
+        {
+            throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is invalid.");
+        }
+
+        var digits = (integerDigits + fractionDigits).TrimStart('0');
+        if (digits.Length == 0)
+        {
+            return JsonNode.Parse("0")!.AsValue();
+        }
+
+        var trailingZeroCount = digits.Length - digits.TrimEnd('0').Length;
+        if (trailingZeroCount > 0)
+        {
+            digits = digits[..^trailingZeroCount];
+        }
+
+        var scale = exponent - fractionDigits.Length + trailingZeroCount;
+        var decimalPoint = scale + digits.Length;
+        var normalized = decimalPoint >= -28 && decimalPoint <= 29
+            ? FormatPlainNumber(digits, decimalPoint, negative)
+            : FormatScientificNumber(digits, decimalPoint, negative);
+
+        return JsonNode.Parse(normalized)!.AsValue();
+    }
+
+    private static string FormatPlainNumber(string digits, BigInteger decimalPoint, bool negative)
+    {
+        var prefix = negative ? "-" : string.Empty;
+        if (decimalPoint <= 0)
+        {
+            return prefix + "0." + new string('0', checked((int)-decimalPoint)) + digits;
+        }
+
+        if (decimalPoint >= digits.Length)
+        {
+            return prefix + digits + new string('0', checked((int)(decimalPoint - digits.Length)));
+        }
+
+        var point = checked((int)decimalPoint);
+        return prefix + digits[..point] + "." + digits[point..];
+    }
+
+    private static string FormatScientificNumber(string digits, BigInteger decimalPoint, bool negative)
+    {
+        var prefix = negative ? "-" : string.Empty;
+        var significand = digits.Length == 1 ? digits : digits[0] + "." + digits[1..];
+        return prefix + significand + "e" + (decimalPoint - 1).ToString(CultureInfo.InvariantCulture);
     }
 
     private static void ValidateOpenCliDocument(JsonNode document, NormalizationLimits limits)
@@ -379,6 +458,7 @@ public static class Normalizer
         {
             ValidateObject(info["license"], "license", limits, ["name", "spdxId", "url"], static (value, bounded) =>
             {
+                RequireProperty(value, "name", "OPENCLI_INFO");
                 foreach (var property in LicenseTextProperties)
                 {
                     ValidateOptionalString(value, property, bounded, "OPENCLI_INFO");
@@ -390,6 +470,11 @@ public static class Normalizer
         {
             ValidateObject(info["contact"], "contact", limits, ["name", "email", "url"], static (value, bounded) =>
             {
+                if (!value.ContainsKey("name") && !value.ContainsKey("email") && !value.ContainsKey("url"))
+                {
+                    throw new NormalizationException("OPENCLI_INFO", "A contact must contain a name, email, or URL.");
+                }
+
                 foreach (var property in ContactTextProperties)
                 {
                     ValidateOptionalString(value, property, bounded, "OPENCLI_INFO");
@@ -406,6 +491,12 @@ public static class Normalizer
         {
             ValidateObject(item, "install", limits, ["name", "command", "url", "description"], static (value, bounded) =>
             {
+                RequireProperty(value, "name", "OPENCLI_INSTALL");
+                if (!value.ContainsKey("command") && !value.ContainsKey("url"))
+                {
+                    throw new NormalizationException("OPENCLI_INSTALL", "An install method must contain a command or URL.");
+                }
+
                 foreach (var property in InstallTextProperties)
                 {
                     ValidateOptionalString(value, property, bounded, "OPENCLI_INSTALL");
@@ -470,6 +561,7 @@ public static class Normalizer
             {
                 ValidateObject(example, "example", limits, ["title", "content"], static (value, bounded) =>
                 {
+                    RequireProperty(value, "content", "OPENCLI_COMMAND");
                     ValidateOptionalString(value, "title", bounded, "OPENCLI_COMMAND");
                     ValidateOptionalString(value, "content", bounded, "OPENCLI_COMMAND");
                 });
@@ -487,12 +579,13 @@ public static class Normalizer
 
         var allowed = option
             ? new[] { "name", "aliases", "type", "variadic", "minItems", "maxItems", "choices", "hint", "summary", "description", "required", "default", "alternativeSources", "hidden" }
-            : new[] { "name", "type", "variadic", "minItems", "maxItems", "choices", "summary", "description", "required" };
+            : new[] { "name", "type", "variadic", "minItems", "maxItems", "choices", "summary", "description", "required", "passthrough" };
         EnsureOpenCliProperties(parameter, option ? "flag" : "argument", allowed);
         _ = RequiredStringValue(parameter["name"], "OPENCLI_PARAMETER");
         ValidateType(parameter, limits, option);
         ValidateOptionalBoolean(parameter, "variadic", "OPENCLI_PARAMETER");
         ValidateOptionalBoolean(parameter, "required", "OPENCLI_PARAMETER");
+        ValidateOptionalBoolean(parameter, "passthrough", "OPENCLI_PARAMETER");
         ValidateOptionalBoolean(parameter, "hidden", "OPENCLI_PARAMETER");
         ValidateOptionalString(parameter, "hint", limits, "OPENCLI_PARAMETER");
         ValidateOptionalString(parameter, "summary", limits, "OPENCLI_PARAMETER");
@@ -583,6 +676,11 @@ public static class Normalizer
     {
         if (node is null) return;
         var config = RequireObject(node, "OPENCLI_GLOBAL");
+        if (config.Count == 0)
+        {
+            throw new NormalizationException("OPENCLI_GLOBAL", "The global config object must not be empty.");
+        }
+
         EnsureOpenCliProperties(config, "config", "json", "toml", "yaml");
         foreach (var property in new[] { "json", "toml", "yaml" })
         {
@@ -597,9 +695,18 @@ public static class Normalizer
         {
             ValidateObject(item, "exit code", limits, ["code", "status", "summary", "description"], static (value, bounded) =>
             {
-                if (value.ContainsKey("code") && (value["code"] is not JsonValue code || code.GetValueKind() != JsonValueKind.Number || !TryGetInt(code, out _)))
+                RequireProperty(value, "code", "OPENCLI_EXIT_CODE");
+                RequireProperty(value, "status", "OPENCLI_EXIT_CODE");
+                RequireProperty(value, "summary", "OPENCLI_EXIT_CODE");
+                if (value["code"] is not JsonValue code || code.GetValueKind() != JsonValueKind.Number || !TryGetInt(code, out _))
                 {
-                    throw new NormalizationException("OPENCLI_GLOBAL", "An exit code must be an integer.");
+                    throw new NormalizationException("OPENCLI_EXIT_CODE", "An exit code must be an integer.");
+                }
+
+                if (value["status"] is not JsonValue status || status.GetValueKind() != JsonValueKind.String ||
+                    !ExitCodeStatuses.Contains(status.GetValue<string>(), StringComparer.Ordinal))
+                {
+                    throw new NormalizationException("OPENCLI_EXIT_CODE", "An exit code status is invalid.");
                 }
 
                 foreach (var property in ExitCodeTextProperties)
@@ -696,6 +803,14 @@ public static class Normalizer
         }
 
         _ = BoundedString(node.GetValue<string>(), limits);
+    }
+
+    private static void RequireProperty(JsonObject value, string property, string code)
+    {
+        if (!value.ContainsKey(property))
+        {
+            throw new NormalizationException(code, $"The required '{property}' field is missing.");
+        }
     }
 
     private static void ValidateOptionalBoolean(JsonObject value, string property, string code)
@@ -900,104 +1015,6 @@ public static class Normalizer
                 yield return new CanonicalArgument
                 {
                     Name = name,
-                    Summary = common.Summary,
-                    Description = common.Description,
-                    Type = common.Type,
-                    Required = common.Required,
-                    ArityMinimum = common.Minimum,
-                    ArityMaximum = common.Maximum,
-                    AllowedValues = common.AllowedValues,
-                    DefaultValue = common.DefaultValue,
-                    AlternativeSources = common.AlternativeSources,
-                    Status = common.Status
-                };
-            }
-        }
-    }
-
-    private static CanonicalManifest NormalizeDotnet(JsonNode document, NormalizationLimits limits)
-    {
-        var root = RequireObject(document, "DOTNET_ROOT");
-        var name = RequiredString(root, "name", "DOTNET_ROOT");
-        var version = RequiredString(root, "version", "DOTNET_ROOT");
-        var rootCommand = NormalizeDotnetCommand("root", root, limits);
-        return new CanonicalManifest { Adapter = "dotnet", SourceVersion = version, Root = rootCommand };
-    }
-
-    private static CanonicalCommand NormalizeDotnetCommand(string path, JsonObject value, NormalizationLimits limits)
-    {
-        var arguments = ReadDotnetParameters(value["arguments"], false, limits).Cast<CanonicalArgument>().OrderBy(x => x.Name, StringComparer.Ordinal).ToArray();
-        var options = ReadDotnetParameters(value["options"], true, limits).Cast<CanonicalOption>().OrderBy(x => x.Name, StringComparer.Ordinal).ToArray();
-        var children = new List<CanonicalCommand>();
-        if (value["subcommands"] is JsonObject subcommands)
-        {
-            foreach (var child in subcommands.OrderBy(p => p.Key, StringComparer.Ordinal))
-            {
-                children.Add(NormalizeDotnetCommand(path == "root" ? "root / " + child.Key : path + " / " + child.Key, RequireObject(child.Value, "DOTNET_COMMAND"), limits));
-            }
-        }
-
-        return new CanonicalCommand
-        {
-            Path = path,
-            Summary = OptionalString(value, "description", limits),
-            Description = OptionalString(value, "description", limits),
-            Arguments = arguments,
-            Options = options,
-            Subcommands = children.ToArray()
-        };
-    }
-
-    private static IEnumerable<CanonicalParameter> ReadDotnetParameters(JsonNode? node, bool option, NormalizationLimits limits)
-    {
-        if (node is null)
-        {
-            yield break;
-        }
-
-        var map = node as JsonObject ?? throw new NormalizationException("DOTNET_COLLECTION", "The .NET CLI-schema parameter collection must be an object.");
-        foreach (var property in map.OrderBy(p => p.Key, StringComparer.Ordinal))
-        {
-            var value = RequireObject(property.Value, "DOTNET_PARAMETER");
-            var arity = RequireObject(value["arity"], "DOTNET_ARITY");
-            var minimum = OptionalInt(arity, "minimum");
-            var maximum = OptionalInt(arity, "maximum");
-            var required = option ? OptionalBoolean(value, "required") : minimum is not null ? minimum > 0 : null;
-            var common = new ParameterValues(
-                option ? property.Key.TrimStart('-') : property.Key,
-                null,
-                OptionalString(value, "description", limits),
-                OptionalString(value, "valueType", limits),
-                required,
-                minimum,
-                maximum,
-                [],
-                OptionalBoolean(value, "hasDefaultValue") == true ? value["defaultValue"]?.DeepClone() : null,
-                [],
-                null);
-            if (option)
-            {
-                yield return new CanonicalOption
-                {
-                    Name = property.Key.StartsWith("--", StringComparison.Ordinal) ? property.Key : "--" + property.Key,
-                    Aliases = Strings(value["aliases"], limits).OrderBy(x => x, StringComparer.Ordinal).ToArray(),
-                    Summary = common.Summary,
-                    Description = common.Description,
-                    Type = common.Type,
-                    Required = common.Required,
-                    ArityMinimum = common.Minimum,
-                    ArityMaximum = common.Maximum,
-                    AllowedValues = common.AllowedValues,
-                    DefaultValue = common.DefaultValue,
-                    AlternativeSources = common.AlternativeSources,
-                    Status = common.Status
-                };
-            }
-            else
-            {
-                yield return new CanonicalArgument
-                {
-                    Name = common.Name,
                     Summary = common.Summary,
                     Description = common.Description,
                     Type = common.Type,

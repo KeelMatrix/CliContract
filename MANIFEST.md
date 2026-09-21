@@ -27,7 +27,7 @@ The current serializer includes null optional values so null and omission have o
 - Omitted OpenCLI booleans use their documented defaults; null/default/alternative-source distinctions are preserved according to the supported adapter contract.
 - JSON escaping and indentation are produced by the stable .NET JSON serializer; no machine path or source-document metadata is retained.
 - Size, node, depth, string, and collection bounds apply while parsing.
-- Numeric scalars use one invariant canonical representation, so equivalent values such as `7` and `7.0` produce identical bytes.
+- Numeric scalars use lexical invariant canonicalization with plain notation for ordinary magnitudes and scientific notation for extreme magnitudes; equivalent values such as `7` and `7.0`, `0.00001` and `1e-5`, and negative zero spellings produce identical bytes without floating-point range loss.
 
 Semantically equivalent OpenCLI JSON/YAML documents therefore produce byte-identical manifests across Windows, Linux, and macOS when run with the same tool version.
 

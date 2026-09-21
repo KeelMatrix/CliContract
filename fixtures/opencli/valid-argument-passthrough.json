@@ -1,0 +1,13 @@
+{
+  "opencliVersion": "1.0.0-alpha.14",
+  "info": {
+    "title": "Tool",
+    "binary": "tool",
+    "version": "1"
+  },
+  "commands": {
+    "tool run": {
+      "args": [{ "name": "rest", "passthrough": true }]
+    }
+  }
+}

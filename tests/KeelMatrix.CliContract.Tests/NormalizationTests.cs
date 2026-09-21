@@ -33,17 +33,37 @@ public sealed class NormalizationTests
         Assert.Equal(Normalizer.Serialize(Normalizer.Normalize("opencli", first)), Normalizer.Serialize(Normalizer.Normalize("opencli", yaml)));
     }
 
-    [Fact]
-    public void DotnetSchemaNormalizesNestedCommandsAndOptions()
+    [Theory]
+    [InlineData("invalid-license-missing-name.json", "OPENCLI_INFO")]
+    [InlineData("invalid-contact-anyof.json", "OPENCLI_INFO")]
+    [InlineData("invalid-install-anyof.json", "OPENCLI_INSTALL")]
+    [InlineData("invalid-example-content.json", "OPENCLI_COMMAND")]
+    [InlineData("invalid-global-config-empty.json", "OPENCLI_GLOBAL")]
+    [InlineData("invalid-exit-code-required.json", "OPENCLI_EXIT_CODE")]
+    [InlineData("invalid-exit-code-status.json", "OPENCLI_EXIT_CODE")]
+    public void OpenCliSchemaRequiredShapesFailClosed(string fixture, string expectedCode)
     {
-        var input = File.ReadAllText(Fixture("dotnet", "synthetic-minimal.json"));
-        var manifest = Normalizer.Normalize("dotnet", input);
-        var command = manifest.Root.Subcommands.Single(c => c.Path == "root / deploy").Subcommands.Single(c => c.Path == "root / deploy / region");
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", fixture))));
 
-        Assert.Equal("10.0.401", manifest.SourceVersion);
-        Assert.Equal("--format", command.Options.Single().Name);
-        Assert.Equal(["-f"], command.Options.Single().Aliases);
-        Assert.Equal(1, command.Options.Single().ArityMinimum);
+        Assert.Equal(expectedCode, error.Code);
+    }
+
+    [Fact]
+    public void OpenCliAcceptsSchemaValidArgumentPassthrough()
+    {
+        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "valid-argument-passthrough.json")));
+
+        Assert.Equal("rest", manifest.Root.Subcommands.Single().Arguments.Single().Name);
+    }
+
+    [Fact]
+    public void NumericSpellingsCanonicalizeAcrossSmallLargeAndNegativeZeroValues()
+    {
+        var plain = Normalizer.Serialize(Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "numeric-defaults-plain.json"))));
+        var exponent = Normalizer.Serialize(Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "numeric-defaults-exponent.json"))));
+
+        Assert.Equal(plain, exponent);
+        Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "numeric-defaults-extreme.json")));
     }
 
     [Fact]
@@ -114,19 +134,6 @@ public sealed class NormalizationTests
         Normalizer.Normalize("opencli", exact, limits);
 
         var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", over, limits));
-        Assert.Equal("COLLECTION_TOO_LARGE", error.Code);
-    }
-
-    [Fact]
-    public void DotnetObjectCollectionLimitAcceptsExactBoundaryAndRejectsOneOver()
-    {
-        var exact = DotnetParameterMapDocument(3);
-        var over = DotnetParameterMapDocument(4);
-        var limits = new NormalizationLimits(MaxCollectionItems: 3);
-
-        Normalizer.Normalize("dotnet", exact, limits);
-
-        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("dotnet", over, limits));
         Assert.Equal("COLLECTION_TOO_LARGE", error.Code);
     }
 
@@ -535,29 +542,6 @@ public sealed class NormalizationTests
         {
             ["commands"] = new JsonObject { ["tool"] = command }
         }.ToJsonString());
-    }
-
-    private static string DotnetParameterMapDocument(int count)
-    {
-        var options = new JsonObject();
-        for (var index = 0; index < count; index++)
-        {
-            options[$"--value{index}"] = new JsonObject
-            {
-                ["arity"] = new JsonObject
-                {
-                    ["minimum"] = 0,
-                    ["maximum"] = 1
-                }
-            };
-        }
-
-        return new JsonObject
-        {
-            ["name"] = "dotnet",
-            ["version"] = "10.0.401",
-            ["options"] = options
-        }.ToJsonString();
     }
 
     private static string Fixture(params string[] parts)

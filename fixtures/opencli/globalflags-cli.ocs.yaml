@@ -19,7 +19,8 @@ global:
     - code: 2
       status: BAD_USER_INPUT_ERROR
       summary: Missing or invalid input
-  config: {}
+  config:
+    json: ~/.config/gflag/config.json
   flags:
     # help/version are filtered out by codegen and must NOT appear in GlobalFlags.
     - name: "help"

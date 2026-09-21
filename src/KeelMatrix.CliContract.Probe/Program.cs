@@ -2,7 +2,13 @@ using KeelMatrix.CliContract.Core;
 
 if (args.Length != 4 || !string.Equals(args[0], "normalize", StringComparison.OrdinalIgnoreCase))
 {
-    Console.Error.WriteLine("Phase 0 probe usage: normalize <opencli|dotnet> <input> <output>");
+    Console.Error.WriteLine("Probe usage: normalize opencli <input> <output>");
+    return 2;
+}
+
+if (!string.Equals(args[1], "opencli", StringComparison.OrdinalIgnoreCase))
+{
+    Console.Error.WriteLine("Only the OpenCLI adapter is supported.");
     return 2;
 }
 

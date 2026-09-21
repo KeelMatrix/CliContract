@@ -8,6 +8,8 @@ Set-Location $root
 $tool = (Resolve-Path -LiteralPath $ToolPath).Path
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-regressions-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp | Out-Null
+$previousNoTelemetry = $env:KEELMATRIX_NO_TELEMETRY
+$env:KEELMATRIX_NO_TELEMETRY = '1'
 
 function Invoke-Tool([string[]] $Arguments) {
     $output = @(& dotnet $tool @Arguments 2>&1)
@@ -84,6 +86,9 @@ try {
     Assert-Case 'requiredness-suppressed' $suppressed 0 'COMPATIBLE'
     if (($suppressed.Output -join "`n") -match 'KMCLI106') { throw 'Suppressing KMCLI105 left an implicit KMCLI106.' }
 
+    $defaultTelemetryOptOut = Invoke-Tool @('diff', $optional, $required, '--format', 'text')
+    Assert-Case 'shared-telemetry-optout' $defaultTelemetryOptOut 1 'KMCLI105'
+
     Assert-Case 'duplicate-format' (Invoke-Tool @('validate', $source, '--format', 'text', '--format', 'json', '--no-telemetry')) 2 'DUPLICATE_OPTION'
     Assert-Case 'duplicate-fail-on' (Invoke-Tool @('validate', $source, '--fail-on', 'breaking', '--fail-on', 'warning', '--no-telemetry')) 2 'DUPLICATE_OPTION'
     Assert-Case 'duplicate-output' (Invoke-Tool @('snapshot', $source, '--output', (Join-Path $temp 'one.json'), '--output', (Join-Path $temp 'two.json'), '--no-telemetry')) 2 'DUPLICATE_OPTION'
@@ -95,4 +100,6 @@ try {
 }
 finally {
     if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
+    if ($null -eq $previousNoTelemetry) { Remove-Item Env:KEELMATRIX_NO_TELEMETRY -ErrorAction SilentlyContinue }
+    else { $env:KEELMATRIX_NO_TELEMETRY = $previousNoTelemetry }
 }

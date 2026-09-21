@@ -1,0 +1,18 @@
+{
+  "opencliVersion": "1.0.0-alpha.14",
+  "info": {
+    "title": "Tool",
+    "binary": "tool",
+    "version": "1"
+  },
+  "commands": {
+    "tool run": {
+      "flags": [
+        { "name": "tiny", "type": "number", "default": 1e-5 },
+        { "name": "veryTiny", "type": "number", "default": 1e-29 },
+        { "name": "large", "type": "number", "default": 1e29 },
+        { "name": "negativeZero", "type": "number", "default": -0e+99 }
+      ]
+    }
+  }
+}

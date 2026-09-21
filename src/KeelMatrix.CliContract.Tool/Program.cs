@@ -91,10 +91,11 @@ internal static class CliApplication
         var baseline = LoadDescription(invocation.Positionals[0], invocation.InputKind);
         var current = LoadDescription(invocation.Positionals[1], invocation.InputKind);
         var result = CompatibilityAnalyzer.Compare(baseline, current);
-        TrackSuccessfulComparison(invocation, baseline);
         var filtered = ApplySuppressions(result.Findings, invocation.IgnoreFile);
         WriteFindings(invocation.Format, filtered, [], CountCommands(current));
-        return GatedExit(filtered, invocation.FailOn);
+        var exitCode = GatedExit(filtered, invocation.FailOn);
+        TrackSuccessfulComparison(invocation, baseline);
+        return exitCode;
     }
 
     private static int Check(Invocation invocation)
@@ -104,10 +105,11 @@ internal static class CliApplication
         var current = LoadSource(invocation.Positionals[0], invocation.InputKind);
         var baseline = ReadManifest(invocation.Baseline);
         var result = CompatibilityAnalyzer.Compare(baseline, current);
-        TrackSuccessfulComparison(invocation, baseline);
         var filtered = ApplySuppressions(result.Findings, invocation.IgnoreFile);
         WriteFindings(invocation.Format, filtered, [], CountCommands(current));
-        return GatedExit(filtered, invocation.FailOn);
+        var exitCode = GatedExit(filtered, invocation.FailOn);
+        TrackSuccessfulComparison(invocation, baseline);
+        return exitCode;
     }
 
     private static CanonicalManifest LoadSource(string path, InputKind inputKind)
@@ -290,7 +292,7 @@ internal static class CliApplication
 
     private static void TrackSuccessfulComparison(Invocation invocation, CanonicalManifest baseline)
     {
-        if (invocation.NoTelemetry || !HasNonEmptyCommandSurface(baseline) || IsKeelMatrixDevelopmentOrCi())
+        if (invocation.NoTelemetry || !HasNonEmptyCommandSurface(baseline) || IsTelemetrySuppressedForDevelopmentOrCi())
         {
             return;
         }
@@ -314,15 +316,11 @@ internal static class CliApplication
             root.Summary is not null || root.Description is not null;
     }
 
-    private static bool IsKeelMatrixDevelopmentOrCi()
+    private static bool IsTelemetrySuppressedForDevelopmentOrCi()
     {
-        if (IsTrue(Environment.GetEnvironmentVariable("KEELMATRIX_DEVELOPMENT"))) return true;
-        if (!IsTrue(Environment.GetEnvironmentVariable("CI"))) return false;
-
-        var repository = Environment.GetEnvironmentVariable("GITHUB_REPOSITORY");
-        var owner = Environment.GetEnvironmentVariable("GITHUB_REPOSITORY_OWNER");
-        return string.Equals(owner, "KeelMatrix", StringComparison.OrdinalIgnoreCase) ||
-            (repository?.StartsWith("KeelMatrix/", StringComparison.OrdinalIgnoreCase) ?? false);
+        return IsTrue(Environment.GetEnvironmentVariable("KEELMATRIX_NO_TELEMETRY")) ||
+            IsTrue(Environment.GetEnvironmentVariable("KEELMATRIX_DEVELOPMENT")) ||
+            IsTrue(Environment.GetEnvironmentVariable("CI"));
     }
 
     private static bool IsTrue(string? value) => value is "1" or "true" or "TRUE" or "True";
