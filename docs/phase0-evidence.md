@@ -36,6 +36,47 @@ The pinned upstream alpha.14 examples are included as `fixtures/opencli/petstore
 | description/help change | `summary`, `description` | `description` | summary/description | Unicode and SDK descriptions | yes |
 | deprecation/status change | not represented by alpha.14 fields | not represented | `Status` remains null | raw schemas contain no deprecation/status field | no; not advertised as a represented rule |
 
+## OpenCLI alpha.14 contract boundary
+
+The Phase 0 canonical manifest is an explicit compatibility contract, not a lossless copy of every OpenCLI field. The
+adapter parses the complete bounded document, validates fields that are part of the supported shape, and ignores
+outside fields as non-contract data. Outside fields do not affect canonical bytes or compatibility decisions. Unknown
+fields and `x-*` extension fields follow the same ignore policy. Resource limits still apply while parsing ignored data.
+
+### Inside the v1 compatibility contract
+
+- `opencliVersion` is required to be exactly `1.0.0-alpha.14` and is retained as the canonical `SourceVersion`.
+- `info.title`, `info.binary`, and `info.version` are required strings for input validation. They identify and validate
+  the source document but are not compatibility attributes and are not retained in the canonical manifest.
+- The `commands` map keys become logical command paths. Command `aliases`, `summary`, and `description` are retained;
+  root-command aliases are retained on `Root` exactly like aliases on nested commands.
+- `global.flags` is represented as root options. Command `flags` and `args` are represented; argument declaration order
+  is retained, while option and alias collections are canonically sorted.
+- Parameter `name`, `type`, `required`, `variadic`, `minItems`, and `maxItems` are represented as canonical name, type,
+  required state, and minimum/maximum arity.
+- Parameter `summary` and `description` are retained. Flag aliases are retained and sorted.
+- `choices[].value` is retained only when it is a scalar string, number, or boolean. Choice declaration order is
+  canonically sorted by scalar value; choice descriptions are outside the contract.
+- Scalar `default` values are retained. Ordered `alternativeSources` entries retain their `$ENV`/`$FILE` type and
+  property in source order.
+
+### Outside the v1 compatibility contract
+
+The adapter explicitly ignores these alpha.14 fields rather than treating them as compatibility semantics:
+
+- top-level `install`;
+- `info.summary`, `info.description`, `info.license` (`name`, `spdxId`, `url`), and `info.contact` (`name`, `email`,
+  `url`);
+- `global.exitCodes` and `global.config` (`json`, `toml`, and `yaml` paths);
+- command `hidden`, `kind`, `exitCodes`, and `examples`;
+- argument `passthrough`;
+- flag `hint` and `hidden`;
+- choice `description` fields;
+- every `x-*` extension field and any other upstream field not represented above.
+
+Invalid values for recognized in-contract fields are rejected as bounded adapter errors. A non-scalar `default`, an
+explicit null container, or another malformed recognized value is not outside data and is not silently ignored.
+
 ## Verdict
 
 **PARTIAL PASS.** OpenCLI alpha.14 passes the represented v1 compatibility attributes and deterministic normalization. The .NET CLI-schema probe is not advertised because the observed SDK output has no explicit format version, no structured allowed-value/domain field, and the flag is documented and observed as .NET SDK CLI introspection rather than a stable general application export. The raw capture also contains a callable alias at `fixtures/dotnet/tool-cli-schema.json:7-12` (`subcommands.execute.aliases: ["exec"]`), so callable-alias absence is not a valid reason for the decision. The proposed v1 `--input` kinds are `auto|opencli`; `dotnet` is not advertised.

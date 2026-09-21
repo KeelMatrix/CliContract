@@ -2,6 +2,8 @@ using System.Collections;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using YamlDotNet.Core;
+using YamlDotNet.Core.Events;
 using YamlDotNet.Serialization;
 
 namespace KeelMatrix.CliContract.Core;
@@ -70,10 +72,7 @@ public static class Normalizer
             return ParseJson(input, limits, "OPENCLI_JSON");
         }
 
-        if (System.Text.RegularExpressions.Regex.IsMatch(input, @"(?m)(^|\s)[&*][A-Za-z0-9_-]+"))
-        {
-            throw new NormalizationException("YAML_ALIASES_UNSUPPORTED", "YAML anchors and aliases are not accepted by the bounded probe.");
-        }
+        RejectYamlAnchorsAndAliases(input, limits);
 
         try
         {
@@ -97,6 +96,65 @@ public static class Normalizer
         catch (Exception)
         {
             throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+        }
+    }
+
+    private static void RejectYamlAnchorsAndAliases(string input, NormalizationLimits limits)
+    {
+        try
+        {
+            var parser = new Parser(new StringReader(input));
+            var depth = 0;
+            var counter = new Counter();
+            while (parser.MoveNext())
+            {
+                switch (parser.Current)
+                {
+                    case AnchorAlias:
+                        throw new NormalizationException("YAML_ALIASES_UNSUPPORTED", "YAML anchors and aliases are not accepted by the bounded probe.");
+                    case MappingStart mapping:
+                        CheckYamlNode(mapping, depth, limits, counter);
+                        depth++;
+                        break;
+                    case SequenceStart sequence:
+                        CheckYamlNode(sequence, depth, limits, counter);
+                        depth++;
+                        break;
+                    case Scalar scalar:
+                        CheckYamlNode(scalar, depth, limits, counter);
+                        break;
+                    case MappingEnd:
+                    case SequenceEnd:
+                        if (--depth < 0)
+                        {
+                            throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+                        }
+
+                        break;
+                }
+            }
+
+            if (depth != 0)
+            {
+                throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+            }
+        }
+        catch (NormalizationException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+        }
+    }
+
+    private static void CheckYamlNode(NodeEvent node, int depth, NormalizationLimits limits, Counter counter)
+    {
+        CheckNode(depth, limits, counter);
+        if (!node.Anchor.IsEmpty)
+        {
+            throw new NormalizationException("YAML_ALIASES_UNSUPPORTED", "YAML anchors and aliases are not accepted by the bounded probe.");
         }
     }
 
@@ -236,17 +294,19 @@ public static class Normalizer
         _ = RequiredString(info, "title", "OPENCLI_INFO");
         _ = RequiredString(info, "binary", "OPENCLI_INFO");
         _ = RequiredString(info, "version", "OPENCLI_INFO");
-        var commands = root["commands"] is null ? [] : RequireObject(root["commands"], "OPENCLI_COMMANDS");
+        var commandsNode = OptionalProperty(root, "commands", "OPENCLI_COMMANDS");
+        var commands = commandsNode is null ? [] : RequireObject(commandsNode, "OPENCLI_COMMANDS");
         var normalized = new List<CanonicalCommand>();
         foreach (var property in commands.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
             normalized.Add(NormalizeOpenCliCommand(property.Key, RequireObject(property.Value, "OPENCLI_COMMAND"), limits));
         }
 
-        var global = root["global"] is null ? null : RequireObject(root["global"], "OPENCLI_GLOBAL");
+        var globalNode = OptionalProperty(root, "global", "OPENCLI_GLOBAL");
+        var global = globalNode is null ? null : RequireObject(globalNode, "OPENCLI_GLOBAL");
         var globalOptions = global is null
             ? Array.Empty<CanonicalOption>()
-            : ReadOpenCliParameters(global["flags"], true, limits).Cast<CanonicalOption>().ToArray();
+            : ReadOpenCliParameters(OptionalProperty(global, "flags", "OPENCLI_COLLECTION"), true, limits).Cast<CanonicalOption>().ToArray();
         var rootCommand = normalized.FirstOrDefault(c => c.Path == "root");
 
         return new CanonicalManifest
@@ -259,6 +319,7 @@ public static class Normalizer
                 Subcommands = normalized.Where(c => c.Path != "root").OrderBy(c => c.Path, StringComparer.Ordinal).ToArray(),
                 Arguments = rootCommand?.Arguments ?? [],
                 Options = globalOptions.Concat(rootCommand?.Options ?? []).OrderBy(a => a.Name, StringComparer.Ordinal).ToArray(),
+                Aliases = rootCommand?.Aliases ?? [],
                 Summary = rootCommand?.Summary,
                 Description = rootCommand?.Description
             }
@@ -268,9 +329,9 @@ public static class Normalizer
     private static CanonicalCommand NormalizeOpenCliCommand(string key, JsonObject value, NormalizationLimits limits)
     {
         var path = ParseOpenCliPath(key);
-        var aliases = Strings(value["aliases"], limits).OrderBy(x => x, StringComparer.Ordinal).ToArray();
-        var arguments = ReadOpenCliParameters(value["args"], false, limits).Cast<CanonicalArgument>().ToArray();
-        var options = ReadOpenCliParameters(value["flags"], true, limits).Cast<CanonicalOption>().OrderBy(x => x.Name, StringComparer.Ordinal).ToArray();
+        var aliases = Strings(OptionalProperty(value, "aliases", "COLLECTION_TYPE"), limits).OrderBy(x => x, StringComparer.Ordinal).ToArray();
+        var arguments = ReadOpenCliParameters(OptionalProperty(value, "args", "OPENCLI_COLLECTION"), false, limits).Cast<CanonicalArgument>().ToArray();
+        var options = ReadOpenCliParameters(OptionalProperty(value, "flags", "OPENCLI_COLLECTION"), true, limits).Cast<CanonicalOption>().OrderBy(x => x.Name, StringComparer.Ordinal).ToArray();
         return new CanonicalCommand
         {
             Path = path,
@@ -304,9 +365,9 @@ public static class Normalizer
             var variadic = OptionalBoolean(parameter, "variadic") ?? false;
             var minimum = variadic ? OptionalInt(parameter, "minItems") ?? (required == true ? 1 : 0) : required == true ? 1 : 0;
             var maximum = variadic ? OptionalInt(parameter, "maxItems") : 1;
-            var choices = ReadChoices(parameter["choices"], limits);
+            var choices = ReadChoices(OptionalProperty(parameter, "choices", "OPENCLI_CHOICES"), limits);
             var type = OptionalString(parameter, "type", limits);
-            var alternativeSources = ReadAlternativeSources(parameter["alternativeSources"], limits);
+            var alternativeSources = ReadAlternativeSources(OptionalProperty(parameter, "alternativeSources", "OPENCLI_DEFAULT_SOURCES"), limits);
             var common = new ParameterValues(
                 name,
                 OptionalString(parameter, "summary", limits),
@@ -316,7 +377,7 @@ public static class Normalizer
                 minimum,
                 maximum,
                 choices,
-                parameter["default"]?.DeepClone(),
+                OptionalScalar(parameter, "default", limits),
                 alternativeSources,
                 null);
             if (option)
@@ -475,6 +536,16 @@ public static class Normalizer
         return node as JsonObject ?? throw new NormalizationException(code, "The input schema has an object where an object was required.");
     }
 
+    private static JsonNode? OptionalProperty(JsonObject objectNode, string property, string code)
+    {
+        if (!objectNode.ContainsKey(property))
+        {
+            return null;
+        }
+
+        return objectNode[property] ?? throw new NormalizationException(code, $"The '{property}' field must not be null.");
+    }
+
     private static string RequiredString(JsonObject objectNode, string property, string code, NormalizationLimits? limits = null)
     {
         var node = objectNode[property];
@@ -494,12 +565,12 @@ public static class Normalizer
 
     private static string? OptionalString(JsonObject objectNode, string property, NormalizationLimits limits)
     {
-        if (objectNode[property] is null)
+        if (!objectNode.ContainsKey(property))
         {
             return null;
         }
 
-        var node = objectNode[property]!;
+        var node = objectNode[property] ?? throw new NormalizationException("INVALID_STRING", $"The '{property}' field must be a string.");
         if (node is not JsonValue || node.GetValueKind() != JsonValueKind.String)
         {
             throw new NormalizationException("INVALID_STRING", $"The '{property}' field must be a string.");
@@ -542,12 +613,12 @@ public static class Normalizer
 
     private static bool? OptionalBoolean(JsonObject objectNode, string property)
     {
-        if (objectNode[property] is null)
+        if (!objectNode.ContainsKey(property))
         {
             return null;
         }
 
-        var node = objectNode[property]!;
+        var node = objectNode[property] ?? throw new NormalizationException("INVALID_BOOLEAN", $"The '{property}' field must be a boolean.");
         if (node is not JsonValue || (node.GetValueKind() != JsonValueKind.True && node.GetValueKind() != JsonValueKind.False))
         {
             throw new NormalizationException("INVALID_BOOLEAN", $"The '{property}' field must be a boolean.");
@@ -558,14 +629,35 @@ public static class Normalizer
 
     private static int? OptionalInt(JsonObject objectNode, string property)
     {
-        if (objectNode[property] is null || objectNode[property]!.GetValueKind() == JsonValueKind.Null) return null;
-        var node = objectNode[property]!;
+        if (!objectNode.ContainsKey(property)) return null;
+        var node = objectNode[property] ?? throw new NormalizationException("INVALID_INTEGER", $"The '{property}' field must be an integer.");
         if (node is not JsonValue jsonValue || node.GetValueKind() != JsonValueKind.Number || !jsonValue.TryGetValue<int>(out var value))
         {
             throw new NormalizationException("INVALID_INTEGER", $"The '{property}' field must be an integer.");
         }
 
         return value;
+    }
+
+    private static JsonNode? OptionalScalar(JsonObject objectNode, string property, NormalizationLimits limits)
+    {
+        if (!objectNode.ContainsKey(property))
+        {
+            return null;
+        }
+
+        var node = objectNode[property];
+        if (node is not JsonValue || node.GetValueKind() is not (JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new NormalizationException("OPENCLI_DEFAULT", "The default field must be a string, number, or boolean.");
+        }
+
+        if (node.GetValueKind() == JsonValueKind.String)
+        {
+            _ = BoundedString(node.GetValue<string>(), limits);
+        }
+
+        return node.DeepClone();
     }
 
     private static JsonNode[] ReadChoices(JsonNode? node, NormalizationLimits limits)

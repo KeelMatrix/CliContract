@@ -121,6 +121,80 @@ public sealed class NormalizationTests
     }
 
     [Fact]
+    public void OpenCliRootAliasesArePreservedAndAliasRemovalChangesCanonicalBytes()
+    {
+        var withAlias = OpenCliDocument("""
+        {"commands":{"tool":{"aliases":["t"]}}}
+        """);
+        var withoutAlias = OpenCliDocument("""
+        {"commands":{"tool":{}}}
+        """);
+
+        var aliasedManifest = Normalizer.Normalize("opencli", withAlias);
+        var unaliasedManifest = Normalizer.Normalize("opencli", withoutAlias);
+
+        Assert.Equal(["t"], aliasedManifest.Root.Aliases);
+        Assert.Empty(unaliasedManifest.Root.Aliases);
+        Assert.NotEqual(Normalizer.Serialize(aliasedManifest), Normalizer.Serialize(unaliasedManifest));
+    }
+
+    [Fact]
+    public void OpenCliExplicitNullContainersAndNonScalarDefaultsFailAsBoundedAdapterErrors()
+    {
+        var cases = new[]
+        {
+            ("{\"commands\":null}", "OPENCLI_COMMANDS"),
+            ("{\"global\":{\"flags\":null}}", "OPENCLI_COLLECTION"),
+            ("{\"commands\":{\"tool\":{\"flags\":null}}}", "OPENCLI_COLLECTION"),
+            ("{\"commands\":{\"tool\":{\"args\":null}}}", "OPENCLI_COLLECTION"),
+            ("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"string\",\"default\":null}]}}}", "OPENCLI_DEFAULT"),
+            ("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"string\",\"default\":{\"nested\":true}}]}}}", "OPENCLI_DEFAULT")
+        };
+
+        foreach (var (commands, expectedCode) in cases)
+        {
+            var exception = Record.Exception(() => Normalizer.Normalize("opencli", OpenCliDocument(commands)));
+            var error = Assert.IsType<NormalizationException>(exception);
+            Assert.Equal(expectedCode, error.Code);
+        }
+    }
+
+    [Fact]
+    public void OpenCliYamlAnchorsAndAliasesAreRejectedInFlowForms()
+    {
+        var cases = new[]
+        {
+            """
+            opencliVersion: 1.0.0-alpha.14
+            info: {title: Tool, binary: tool, version: '1'}
+            commands: {tool: {flags: [&flag {name: value, type: string}]}}
+            """,
+            """
+            opencliVersion: 1.0.0-alpha.14
+            info: {title: Tool, binary: tool, version: '1'}
+            commands: {tool: {flags: [&flag {name: value, type: string}, *flag]}}
+            """,
+            """
+            opencliVersion: 1.0.0-alpha.14
+            info: {title: Tool, binary: tool, version: '1'}
+            commands: {tool: {flags: &level1 [*flag, *flag]}}
+            flag: &flag {name: value, type: string}
+            """,
+            """
+            opencliVersion: 1.0.0-alpha.14
+            info: {title: Tool, binary: tool, version: '1'}
+            commands: {tool: &command {flags: []}}
+            """
+        };
+
+        foreach (var input in cases)
+        {
+            var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", input));
+            Assert.Equal("YAML_ALIASES_UNSUPPORTED", error.Code);
+        }
+    }
+
+    [Fact]
     public void OpenCliArgumentDeclarationOrderIsCanonicalContract()
     {
         var first = OpenCliDocument("""
