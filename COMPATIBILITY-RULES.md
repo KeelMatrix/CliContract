@@ -49,7 +49,7 @@ The adapter supports nested commands, root/global flags, aliases, positional arg
 
 ## Failure and privacy behavior
 
-Unknown upstream or canonical manifest versions are rejected explicitly. JSON duplicate keys, malformed JSON/YAML, YAML anchors/aliases, excessive size/depth/node/string/collection limits, invalid recognized fields, and incompatible baselines are errors, never compatible results. No remote `$ref`, URL, include, or network operation is performed. The described CLI is never started.
+Unknown upstream or canonical manifest versions are rejected explicitly. JSON duplicate keys, malformed JSON/YAML, YAML anchors/aliases, excessive size/depth/node/string/collection limits, invalid recognized fields, and incompatible baselines are errors, never compatible results. No remote `$ref`, URL, include, or target-CLI/network operation is performed during parsing or comparison; the optional activation request described below is the only network behavior. The described CLI is never started.
 
 Diagnostics do not echo complete documents, defaults, descriptions, or schema fragments. After a successful nonempty comparison, the tool requests one failure-isolated activation through the published `KeelMatrix.Telemetry` package without passing schema-derived values. `--no-telemetry`, `KEELMATRIX_NO_TELEMETRY=1`, `KEELMATRIX_DEVELOPMENT=true`, and `CI=true` disable the request; no schema data is emitted.
 

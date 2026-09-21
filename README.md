@@ -17,7 +17,7 @@ git commit -m "Record CLI contract baseline"
 clicontract check ./opencli.yaml --baseline cli-contract.json
 ```
 
-Commit the baseline with the CLI description, then run `check` in CI. The default input mode is `auto`; use `--input opencli` to require OpenCLI. `auto` recognizes a single OpenCLI shape and fails on ambiguity. No target CLI is started and no help text is scraped. Schema parsing and comparison are local; after a successful comparison with a nonempty baseline, one bounded best-effort activation request may be sent through `KeelMatrix.Telemetry` unless telemetry is disabled.
+Commit the baseline with the CLI description, then run `check` in CI. The default input mode is `auto`; use `--input opencli` to require OpenCLI. `auto` recognizes a single OpenCLI shape and fails on ambiguity. No target CLI is started and no help text is scraped. Schema parsing and comparison require no network connection; after a successful comparison with a nonempty baseline, one bounded best-effort activation request may be sent through `KeelMatrix.Telemetry` unless telemetry is disabled. The request is automatically suppressed for `CI=true` and `KEELMATRIX_DEVELOPMENT=true` runs.
 
 ```bash
 clicontract diff ./old-opencli.yaml ./new-opencli.yaml --format json
@@ -44,7 +44,7 @@ JSON output always separates `findings` from `errors`. A parser or adapter error
 
 ## Privacy and limitations
 
-CliContract uses the published `KeelMatrix.Telemetry` package for one best-effort activation request after a successful comparison with a nonempty baseline. The request passes no schema-derived values; the shared package emits only its bounded platform, tool-version, CI, and anonymous identity contract. `--no-telemetry`, `KEELMATRIX_NO_TELEMETRY=1`, `KEELMATRIX_DEVELOPMENT=true`, and `CI=true` disable the request. Telemetry failure never changes the comparison result. No schema content, paths, command names, defaults, or diagnostics leave the machine.
+CliContract uses the published `KeelMatrix.Telemetry` package for one best-effort activation request after a successful comparison with a nonempty baseline. The request passes no schema-derived values; the shared package emits only its bounded platform, tool-version, CI, and anonymous identity contract. `--no-telemetry`, `KEELMATRIX_NO_TELEMETRY=1`, `KEELMATRIX_DEVELOPMENT=true`, and `CI=true` disable the request; development and CI are therefore always telemetry-suppressed. Telemetry failure never changes the comparison result. No schema content, paths, command names, defaults, or diagnostics leave the machine.
 
 The only supported upstream format is OpenCLI `1.0.0-alpha.14`. Unknown format versions, malformed documents, invalid UTF-8, duplicate keys, unknown fields outside `x-*` extensions, YAML anchors/aliases, remote references, and unsupported canonical manifest versions fail closed. Schema validity means the document is well-formed and within the supported contract; it does not mean the document is backward compatible with a baseline.
 

@@ -4,4 +4,4 @@ KeelMatrix CliContract processes command-line schema files locally. After a succ
 
 The tool reads only paths supplied to its commands and writes a snapshot only when `snapshot --output` succeeds. Diagnostics use stable codes and logical paths; they do not echo complete schemas, descriptions, defaults, credentials, repository names, or filesystem paths.
 
-`--no-telemetry`, `KEELMATRIX_NO_TELEMETRY=1`, `KEELMATRIX_DEVELOPMENT=true`, and `CI=true` disable the activation request. There is no periodic heartbeat. Any telemetry construction or delivery failure is swallowed so it cannot affect tool behavior. See [`KeelMatrix.Telemetry`](https://github.com/KeelMatrix/Telemetry) for the canonical shared field and retention policy.
+`--no-telemetry`, `KEELMATRIX_NO_TELEMETRY=1`, `KEELMATRIX_DEVELOPMENT=true`, and `CI=true` disable the activation request; development and CI are always telemetry-suppressed. There is no periodic heartbeat. Any telemetry construction or delivery failure is swallowed so it cannot affect tool behavior. See [`KeelMatrix.Telemetry`](https://github.com/KeelMatrix/Telemetry) for the canonical shared field and retention policy.

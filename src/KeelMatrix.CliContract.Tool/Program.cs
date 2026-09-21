@@ -493,6 +493,6 @@ internal static class CliApplication
       --format text|json         Output format (default: text)
       --fail-on breaking|warning Failure threshold (default: breaking)
       --ignore <file>            Explicit JSON suppression file
-      --no-telemetry             Disable optional telemetry
+      --no-telemetry             Disable optional telemetry; CI/development suppress automatically
     """;
 }
