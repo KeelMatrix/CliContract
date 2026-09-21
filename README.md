@@ -44,9 +44,9 @@ JSON output always separates `findings` from `errors`. A parser or adapter error
 
 ## Privacy and limitations
 
-CliContract is offline after restore. It does not send telemetry in v1: the standalone tool has no stable shared telemetry integration, so no schema content, paths, identifiers, or usage payloads leave the machine. `--no-telemetry` is accepted as an explicit opt-out for the optional telemetry boundary.
+CliContract uses the published `KeelMatrix.Telemetry` package for one best-effort activation request after a successful comparison with a nonempty baseline. The request passes no schema-derived values; the shared package emits only its bounded platform, tool-version, CI, and anonymous identity contract. `--no-telemetry` disables the request, KeelMatrix development/CI runs are disabled, and telemetry failure never changes the comparison result. No schema content, paths, command names, defaults, or diagnostics leave the machine.
 
-The only supported upstream format is OpenCLI `1.0.0-alpha.14`. Unknown format versions, malformed documents, YAML anchors/aliases, remote references, and unsupported canonical manifest versions fail closed. Schema validity means the document is well-formed and within the supported contract; it does not mean the document is backward compatible with a baseline.
+The only supported upstream format is OpenCLI `1.0.0-alpha.14`. Unknown format versions, malformed documents, invalid UTF-8, duplicate keys, unknown fields outside `x-*` extensions, YAML anchors/aliases, remote references, and unsupported canonical manifest versions fail closed. Schema validity means the document is well-formed and within the supported contract; it does not mean the document is backward compatible with a baseline.
 
 The OpenCLI adapter status is pinned to `1.0.0-alpha.14`; official examples and the regression corpus are revalidated before each material adapter release. A future upstream version is not accepted until its contract is explicitly reviewed and versioned.
 
@@ -63,8 +63,10 @@ clicontract check ./opencli.yaml --baseline ./cli-contract.json --format json
 ## Troubleshooting
 
 - `MALFORMED_JSON` or `MALFORMED_YAML`: fix the source syntax; the tool never prints the whole input.
+- `INVALID_UTF8`: save the source as strict UTF-8 without a malformed byte sequence.
 - `UNSUPPORTED_OPENCLI_VERSION`: update the source to the pinned OpenCLI version or wait for a tool version that supports it.
 - `AMBIGUOUS_INPUT`: pass `--input opencli` after removing competing schema markers.
+- `DUPLICATE_OPTION`: provide each command-line option at most once.
 - `INVALID_BASELINE` or `BASELINE_VERSION_MISMATCH`: recreate the baseline with `snapshot` from the same supported format version.
 - `CANONICALIZATION_FAILED`: inspect the bounded diagnostic and source fields; no baseline is rewritten after a failed `check`.
 

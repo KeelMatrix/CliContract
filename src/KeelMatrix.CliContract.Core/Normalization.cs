@@ -25,6 +25,11 @@ public static class Normalizer
 {
     public const string OpenCliVersion = "1.0.0-alpha.14";
     public const string DotnetSchemaContract = "dotnet-cli-schema-v1-observed";
+    private static readonly string[] InfoTextProperties = ["title", "summary", "description", "binary", "version"];
+    private static readonly string[] LicenseTextProperties = ["name", "spdxId", "url"];
+    private static readonly string[] ContactTextProperties = ["name", "email", "url"];
+    private static readonly string[] InstallTextProperties = ["name", "command", "url", "description"];
+    private static readonly string[] ExitCodeTextProperties = ["status", "summary", "description"];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -43,12 +48,19 @@ public static class Normalizer
                 throw new NormalizationException("INPUT_TOO_LARGE", "The input description exceeds the configured size limit in UTF-8 bytes.");
             }
 
-            return adapter.ToLowerInvariant() switch
+            if (adapter.Equals("opencli", StringComparison.OrdinalIgnoreCase))
             {
-                "opencli" => NormalizeOpenCli(ParseOpenCliDocument(input, bounded), bounded),
-                "dotnet" => NormalizeDotnet(ParseJson(input, bounded, "DOTNET_JSON"), bounded),
-                _ => throw new NormalizationException("UNSUPPORTED_ADAPTER", "The requested input adapter is not supported by this probe.")
-            };
+                var document = ParseOpenCliDocument(input, bounded);
+                ValidateOpenCliDocument(document, bounded);
+                return NormalizeOpenCli(document, bounded);
+            }
+
+            if (adapter.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+            {
+                return NormalizeDotnet(ParseJson(input, bounded, "DOTNET_JSON"), bounded);
+            }
+
+            throw new NormalizationException("UNSUPPORTED_ADAPTER", "The requested input adapter is not supported by this probe.");
         }
         catch (NormalizationException)
         {
@@ -199,7 +211,7 @@ public static class Normalizer
             JsonValueKind.Object => ConvertObject(value, depth, limits, counter),
             JsonValueKind.Array => ConvertArray(value, depth, limits, counter),
             JsonValueKind.String => BoundedString(JsonValue.Create(value.GetString() ?? string.Empty), limits),
-            JsonValueKind.Number => JsonNode.Parse(value.GetRawText()),
+            JsonValueKind.Number => CanonicalizeNumber(value.GetRawText()),
             JsonValueKind.True => JsonValue.Create(true),
             JsonValueKind.False => JsonValue.Create(false),
             JsonValueKind.Null => null,
@@ -297,9 +309,464 @@ public static class Normalizer
         return value switch
         {
             bool boolean => JsonValue.Create(boolean),
-            byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal => JsonNode.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!)!,
+            byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal => CanonicalizeNumber(Convert.ToString(value, CultureInfo.InvariantCulture)!),
             _ => BoundedString(JsonValue.Create(Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty), limits)
         };
+    }
+
+    internal static JsonNode CanonicalizeScalar(JsonNode node)
+    {
+        return node.GetValueKind() switch
+        {
+            JsonValueKind.Number => CanonicalizeNumber(node.ToJsonString()),
+            JsonValueKind.String or JsonValueKind.True or JsonValueKind.False => node.DeepClone(),
+            _ => throw new NormalizationException("OPENCLI_SCALAR", "A scalar value must be a string, number, or boolean.")
+        };
+    }
+
+    private static JsonValue CanonicalizeNumber(string raw)
+    {
+        if (decimal.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalValue))
+        {
+            var normalized = decimal.Parse(decimalValue.ToString("G29", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
+            return JsonValue.Create(normalized);
+        }
+
+        if (double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var doubleValue) &&
+            !double.IsNaN(doubleValue) && !double.IsInfinity(doubleValue))
+        {
+            return JsonValue.Create(doubleValue);
+        }
+
+        throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is outside the supported canonical range.");
+    }
+
+    private static void ValidateOpenCliDocument(JsonNode document, NormalizationLimits limits)
+    {
+        RejectReferences(document, limits);
+        var root = RequireObject(document, "OPENCLI_ROOT");
+        EnsureOpenCliProperties(root, "root", "opencliVersion", "info", "install", "global", "commands");
+        ValidateOptionalString(root, "opencliVersion", limits, "OPENCLI_VERSION");
+        ValidateInfo(root["info"], limits);
+        ValidateInstall(root["install"], limits);
+        ValidateGlobal(root["global"], limits);
+
+        if (root.ContainsKey("commands"))
+        {
+            var commands = RequireCollection(root["commands"], "OPENCLI_COMMANDS", limits);
+            foreach (var command in commands)
+            {
+                if (command.Value is null)
+                {
+                    throw new NormalizationException("OPENCLI_COMMAND", "An OpenCLI command must be an object.");
+                }
+
+                ValidateCommand(command.Value, limits);
+            }
+        }
+    }
+
+    private static void ValidateInfo(JsonNode? node, NormalizationLimits limits)
+    {
+        var info = RequireObject(node, "OPENCLI_INFO");
+        EnsureOpenCliProperties(info, "info", "title", "summary", "description", "license", "contact", "binary", "version");
+        foreach (var property in InfoTextProperties)
+        {
+            ValidateOptionalString(info, property, limits, "OPENCLI_INFO");
+        }
+
+        if (info.ContainsKey("license"))
+        {
+            ValidateObject(info["license"], "license", limits, ["name", "spdxId", "url"], static (value, bounded) =>
+            {
+                foreach (var property in LicenseTextProperties)
+                {
+                    ValidateOptionalString(value, property, bounded, "OPENCLI_INFO");
+                }
+            });
+        }
+
+        if (info.ContainsKey("contact"))
+        {
+            ValidateObject(info["contact"], "contact", limits, ["name", "email", "url"], static (value, bounded) =>
+            {
+                foreach (var property in ContactTextProperties)
+                {
+                    ValidateOptionalString(value, property, bounded, "OPENCLI_INFO");
+                }
+            });
+        }
+    }
+
+    private static void ValidateInstall(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is null) return;
+        var install = RequireArray(node, "OPENCLI_INSTALL", limits);
+        foreach (var item in install)
+        {
+            ValidateObject(item, "install", limits, ["name", "command", "url", "description"], static (value, bounded) =>
+            {
+                foreach (var property in InstallTextProperties)
+                {
+                    ValidateOptionalString(value, property, bounded, "OPENCLI_INSTALL");
+                }
+            });
+        }
+    }
+
+    private static void ValidateGlobal(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is null) return;
+        var global = RequireObject(node, "OPENCLI_GLOBAL");
+        EnsureOpenCliProperties(global, "global", "exitCodes", "config", "flags");
+        ValidateExitCodes(global["exitCodes"], limits);
+        ValidateConfig(global["config"], limits);
+        if (global.ContainsKey("flags"))
+        {
+            foreach (var flag in RequireArray(global["flags"], "OPENCLI_COLLECTION", limits))
+            {
+                ValidateParameter(flag, true, limits);
+            }
+        }
+    }
+
+    private static void ValidateCommand(JsonNode node, NormalizationLimits limits)
+    {
+        var command = RequireObject(node, "OPENCLI_COMMAND");
+        EnsureOpenCliProperties(command, "command", "summary", "description", "aliases", "args", "flags", "hidden", "kind", "exitCodes", "examples");
+        ValidateOptionalString(command, "summary", limits, "OPENCLI_COMMAND");
+        ValidateOptionalString(command, "description", limits, "OPENCLI_COMMAND");
+        ValidateStringArray(command["aliases"], "OPENCLI_ALIASES", limits);
+        ValidateExitCodes(command["exitCodes"], limits);
+        ValidateOptionalBoolean(command, "hidden", "OPENCLI_COMMAND");
+        if (command.TryGetPropertyValue("kind", out var kind) && kind is not null)
+        {
+            var value = RequiredStringValue(kind, "OPENCLI_COMMAND");
+            if (value is not ("action" or "group"))
+            {
+                throw new NormalizationException("OPENCLI_COMMAND", "The command kind must be action or group.");
+            }
+        }
+
+        if (command.ContainsKey("args"))
+        {
+            foreach (var argument in RequireArray(command["args"], "OPENCLI_COLLECTION", limits))
+            {
+                ValidateParameter(argument, false, limits);
+            }
+        }
+
+        if (command.ContainsKey("flags"))
+        {
+            foreach (var flag in RequireArray(command["flags"], "OPENCLI_COLLECTION", limits))
+            {
+                ValidateParameter(flag, true, limits);
+            }
+        }
+
+        if (command.TryGetPropertyValue("examples", out var examples) && examples is not null)
+        {
+            foreach (var example in RequireArray(examples, "OPENCLI_COMMAND", limits))
+            {
+                ValidateObject(example, "example", limits, ["title", "content"], static (value, bounded) =>
+                {
+                    ValidateOptionalString(value, "title", bounded, "OPENCLI_COMMAND");
+                    ValidateOptionalString(value, "content", bounded, "OPENCLI_COMMAND");
+                });
+            }
+        }
+    }
+
+    private static void ValidateParameter(JsonNode? node, bool option, NormalizationLimits limits)
+    {
+        var parameter = RequireObject(node, "OPENCLI_PARAMETER");
+        if (!option && (parameter.ContainsKey("default") || parameter.ContainsKey("alternativeSources")))
+        {
+            throw new NormalizationException("OPENCLI_ARGUMENT_FIELD", "OpenCLI arguments do not support default or alternativeSources fields.");
+        }
+
+        var allowed = option
+            ? new[] { "name", "aliases", "type", "variadic", "minItems", "maxItems", "choices", "hint", "summary", "description", "required", "default", "alternativeSources", "hidden" }
+            : new[] { "name", "type", "variadic", "minItems", "maxItems", "choices", "summary", "description", "required" };
+        EnsureOpenCliProperties(parameter, option ? "flag" : "argument", allowed);
+        _ = RequiredStringValue(parameter["name"], "OPENCLI_PARAMETER");
+        ValidateType(parameter, limits, option);
+        ValidateOptionalBoolean(parameter, "variadic", "OPENCLI_PARAMETER");
+        ValidateOptionalBoolean(parameter, "required", "OPENCLI_PARAMETER");
+        ValidateOptionalBoolean(parameter, "hidden", "OPENCLI_PARAMETER");
+        ValidateOptionalString(parameter, "hint", limits, "OPENCLI_PARAMETER");
+        ValidateOptionalString(parameter, "summary", limits, "OPENCLI_PARAMETER");
+        ValidateOptionalString(parameter, "description", limits, "OPENCLI_PARAMETER");
+        ValidateStringArray(parameter["aliases"], "OPENCLI_ALIASES", limits);
+        ValidateArity(parameter, limits);
+        ValidateChoices(parameter["choices"], limits);
+
+        if (option)
+        {
+            if (parameter.ContainsKey("default")) ValidateScalar(parameter["default"], limits, "OPENCLI_DEFAULT");
+            if (parameter.ContainsKey("alternativeSources")) ValidateAlternativeSources(parameter["alternativeSources"], limits);
+        }
+    }
+
+    private static void ValidateType(JsonObject parameter, NormalizationLimits limits, bool required)
+    {
+        if (!parameter.ContainsKey("type"))
+        {
+            if (required) throw new NormalizationException("OPENCLI_FLAG_TYPE", "The required 'type' field is missing or invalid.");
+            return;
+        }
+
+        if (parameter["type"] is not JsonValue typeNode || typeNode.GetValueKind() != JsonValueKind.String)
+        {
+            throw new NormalizationException(required ? "OPENCLI_FLAG_TYPE" : "OPENCLI_TYPE", "The type field must be a string.");
+        }
+
+        var type = typeNode.GetValue<string>();
+        if (type is not ("string" or "number" or "integer" or "boolean"))
+        {
+            throw new NormalizationException(required ? "OPENCLI_FLAG_TYPE" : "OPENCLI_TYPE", "The type field must be string, number, integer, or boolean.");
+        }
+
+        _ = limits;
+    }
+
+    private static void ValidateArity(JsonObject parameter, NormalizationLimits limits)
+    {
+        var minimum = ReadOptionalNonNegativeInt(parameter, "minItems", limits);
+        var maximum = ReadOptionalNonNegativeInt(parameter, "maxItems", limits);
+        if (minimum.HasValue && maximum.HasValue && minimum.Value > maximum.Value)
+        {
+            throw new NormalizationException("OPENCLI_ARITY", "minItems cannot be greater than maxItems.");
+        }
+    }
+
+    private static void ValidateChoices(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is null) return;
+        foreach (var choice in RequireArray(node, "OPENCLI_CHOICES", limits))
+        {
+            ValidateObject(choice, "choice", limits, ["value", "description"], static (value, bounded) =>
+            {
+                if (!value.ContainsKey("value")) throw new NormalizationException("OPENCLI_CHOICE", "A choice value is required.");
+                ValidateScalar(value["value"], bounded, "OPENCLI_CHOICE");
+                ValidateOptionalString(value, "description", bounded, "OPENCLI_CHOICE");
+            });
+        }
+    }
+
+    private static void ValidateAlternativeSources(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is null) return;
+        var sources = RequireArray(node, "OPENCLI_DEFAULT_SOURCES", limits);
+        if (sources.Count == 0)
+        {
+            throw new NormalizationException("OPENCLI_DEFAULT_SOURCES", "alternativeSources must contain at least one source.");
+        }
+
+        foreach (var source in sources)
+        {
+            ValidateObject(source, "alternative source", limits, ["type", "property"], static (value, bounded) =>
+            {
+                var type = RequiredStringValue(value["type"], "OPENCLI_DEFAULT_SOURCE");
+                if (type is not ("$ENV" or "$FILE"))
+                {
+                    throw new NormalizationException("OPENCLI_DEFAULT_SOURCE", "The alternative source type must be $ENV or $FILE.");
+                }
+
+                _ = RequiredStringValue(value["property"], "OPENCLI_DEFAULT_SOURCE");
+                ValidateOptionalString(value, "property", bounded, "OPENCLI_DEFAULT_SOURCE");
+            });
+        }
+    }
+
+    private static void ValidateConfig(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is null) return;
+        var config = RequireObject(node, "OPENCLI_GLOBAL");
+        EnsureOpenCliProperties(config, "config", "json", "toml", "yaml");
+        foreach (var property in new[] { "json", "toml", "yaml" })
+        {
+            ValidateOptionalString(config, property, limits, "OPENCLI_GLOBAL");
+        }
+    }
+
+    private static void ValidateExitCodes(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is null) return;
+        foreach (var item in RequireArray(node, "OPENCLI_GLOBAL", limits))
+        {
+            ValidateObject(item, "exit code", limits, ["code", "status", "summary", "description"], static (value, bounded) =>
+            {
+                if (value.ContainsKey("code") && (value["code"] is not JsonValue code || code.GetValueKind() != JsonValueKind.Number || !TryGetInt(code, out _)))
+                {
+                    throw new NormalizationException("OPENCLI_GLOBAL", "An exit code must be an integer.");
+                }
+
+                foreach (var property in ExitCodeTextProperties)
+                {
+                    ValidateOptionalString(value, property, bounded, "OPENCLI_GLOBAL");
+                }
+            });
+        }
+    }
+
+    private static void RejectReferences(JsonNode node, NormalizationLimits limits)
+    {
+        var counter = new Counter();
+        RejectReferences(node, 0, limits, counter);
+    }
+
+    private static void RejectReferences(JsonNode? node, int depth, NormalizationLimits limits, Counter counter)
+    {
+        if (node is null) return;
+        CheckNode(depth, limits, counter);
+        if (node is JsonObject obj)
+        {
+            foreach (var property in obj)
+            {
+                if (property.Key is "$ref" or "$dynamicRef" or "$recursiveRef")
+                {
+                    throw new NormalizationException("OPENCLI_REMOTE_REFERENCE", "Schema references are not supported.");
+                }
+
+                RejectReferences(property.Value, depth + 1, limits, counter);
+            }
+        }
+        else if (node is JsonArray array)
+        {
+            foreach (var item in array)
+            {
+                RejectReferences(item, depth + 1, limits, counter);
+            }
+        }
+    }
+
+    private static void EnsureOpenCliProperties(JsonObject value, string subject, params string[] allowed)
+    {
+        foreach (var property in value)
+        {
+            if (property.Key.StartsWith("x-", StringComparison.Ordinal)) continue;
+            if (!allowed.Contains(property.Key, StringComparer.Ordinal))
+            {
+                throw new NormalizationException("OPENCLI_UNKNOWN_FIELD", $"The OpenCLI {subject} contains an unsupported field.");
+            }
+        }
+    }
+
+    private static void ValidateObject(JsonNode? node, string subject, NormalizationLimits limits, IReadOnlyCollection<string> allowed, Action<JsonObject, NormalizationLimits> validate)
+    {
+        var value = RequireObject(node, "OPENCLI_STRUCTURE");
+        EnsureOpenCliProperties(value, subject, [.. allowed]);
+        validate(value, limits);
+    }
+
+    private static JsonObject RequireObject(JsonNode? node, string code)
+    {
+        return node as JsonObject ?? throw new NormalizationException(code, "The input schema has an object where an object was required.");
+    }
+
+    private static JsonArray RequireArray(JsonNode? node, string code, NormalizationLimits limits)
+    {
+        var array = node as JsonArray ?? throw new NormalizationException(code, "The input schema has an array where an array was required.");
+        if (array.Count > limits.MaxCollectionItems)
+        {
+            throw new NormalizationException("COLLECTION_TOO_LARGE", "An OpenCLI collection exceeds the configured item limit.");
+        }
+
+        return array;
+    }
+
+    private static JsonObject RequireCollection(JsonNode? node, string code, NormalizationLimits limits)
+    {
+        var value = RequireObject(node, code);
+        if (value.Count > limits.MaxCollectionItems)
+        {
+            throw new NormalizationException("COLLECTION_TOO_LARGE", "An OpenCLI collection exceeds the configured item limit.");
+        }
+
+        return value;
+    }
+
+    private static void ValidateOptionalString(JsonObject value, string property, NormalizationLimits limits, string code)
+    {
+        if (!value.ContainsKey(property)) return;
+        if (value[property] is not JsonValue node || node.GetValueKind() != JsonValueKind.String)
+        {
+            throw new NormalizationException(code, "A recognized OpenCLI string field is invalid.");
+        }
+
+        _ = BoundedString(node.GetValue<string>(), limits);
+    }
+
+    private static void ValidateOptionalBoolean(JsonObject value, string property, string code)
+    {
+        if (!value.ContainsKey(property)) return;
+        if (value[property] is not JsonValue node || node.GetValueKind() is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new NormalizationException(code, "A recognized OpenCLI boolean field is invalid.");
+        }
+    }
+
+    private static void ValidateStringArray(JsonNode? node, string code, NormalizationLimits limits)
+    {
+        if (node is null) return;
+        foreach (var item in RequireArray(node, code, limits))
+        {
+            if (item is not JsonValue value || value.GetValueKind() != JsonValueKind.String)
+            {
+                throw new NormalizationException(code, "A recognized OpenCLI string collection is invalid.");
+            }
+
+            _ = BoundedString(value.GetValue<string>(), limits);
+        }
+    }
+
+    private static void ValidateScalar(JsonNode? node, NormalizationLimits limits, string code)
+    {
+        if (node is not JsonValue value || value.GetValueKind() is not (JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new NormalizationException(code, "A recognized OpenCLI scalar field is invalid.");
+        }
+
+        if (value.GetValueKind() == JsonValueKind.String)
+        {
+            _ = BoundedString(value.GetValue<string>(), limits);
+        }
+    }
+
+    private static int? ReadOptionalNonNegativeInt(JsonObject value, string property, NormalizationLimits limits)
+    {
+        if (!value.ContainsKey(property)) return null;
+        if (value[property] is not JsonValue node || node.GetValueKind() != JsonValueKind.Number || !TryGetInt(node, out var result) || result < 0)
+        {
+            throw new NormalizationException("OPENCLI_ARITY", "minItems and maxItems must be non-negative integers.");
+        }
+
+        _ = limits;
+        return result;
+    }
+
+    private static string RequiredStringValue(JsonNode? node, string code)
+    {
+        if (node is not JsonValue value || value.GetValueKind() != JsonValueKind.String || string.IsNullOrEmpty(value.GetValue<string>()))
+        {
+            throw new NormalizationException(code, "A required OpenCLI string field is missing or invalid.");
+        }
+
+        return value.GetValue<string>();
+    }
+
+    private static bool TryGetInt(JsonValue value, out int result)
+    {
+        if (value.TryGetValue<int>(out result)) return true;
+        if (value.TryGetValue<decimal>(out var decimalValue) && decimal.Truncate(decimalValue) == decimalValue && decimalValue >= int.MinValue && decimalValue <= int.MaxValue)
+        {
+            result = (int)decimalValue;
+            return true;
+        }
+
+        result = default;
+        return false;
     }
 
     private static CanonicalManifest NormalizeOpenCli(JsonNode document, NormalizationLimits limits)
@@ -561,11 +1028,6 @@ public static class Normalizer
         return tokens.Length == 1 ? "root" : "root / " + string.Join(" / ", tokens.Skip(1));
     }
 
-    private static JsonObject RequireObject(JsonNode? node, string code)
-    {
-        return node as JsonObject ?? throw new NormalizationException(code, "The input schema has an object where an object was required.");
-    }
-
     private static JsonNode? OptionalProperty(JsonObject objectNode, string property, string code)
     {
         if (!objectNode.ContainsKey(property))
@@ -661,7 +1123,7 @@ public static class Normalizer
     {
         if (!objectNode.ContainsKey(property)) return null;
         var node = objectNode[property] ?? throw new NormalizationException("INVALID_INTEGER", $"The '{property}' field must be an integer.");
-        if (node is not JsonValue jsonValue || node.GetValueKind() != JsonValueKind.Number || !jsonValue.TryGetValue<int>(out var value))
+        if (node is not JsonValue jsonValue || node.GetValueKind() != JsonValueKind.Number || !TryGetInt(jsonValue, out var value))
         {
             throw new NormalizationException("INVALID_INTEGER", $"The '{property}' field must be an integer.");
         }
@@ -687,7 +1149,7 @@ public static class Normalizer
             _ = BoundedString(node.GetValue<string>(), limits);
         }
 
-        return node.DeepClone();
+        return CanonicalizeScalar(node);
     }
 
     private static JsonNode[] ReadChoices(JsonNode? node, NormalizationLimits limits)
@@ -752,7 +1214,7 @@ public static class Normalizer
             _ = BoundedString(node.GetValue<string>(), limits);
         }
 
-        return node.DeepClone();
+        return CanonicalizeScalar(node);
     }
 
     private static string ScalarSortKey(JsonNode node)

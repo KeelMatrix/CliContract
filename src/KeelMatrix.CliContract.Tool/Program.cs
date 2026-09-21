@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using KeelMatrix.CliContract.Core;
+using KeelMatrix.Telemetry;
 
 return CliApplication.Run(args);
 
@@ -90,6 +91,7 @@ internal static class CliApplication
         var baseline = LoadDescription(invocation.Positionals[0], invocation.InputKind);
         var current = LoadDescription(invocation.Positionals[1], invocation.InputKind);
         var result = CompatibilityAnalyzer.Compare(baseline, current);
+        TrackSuccessfulComparison(invocation, baseline);
         var filtered = ApplySuppressions(result.Findings, invocation.IgnoreFile);
         WriteFindings(invocation.Format, filtered, [], CountCommands(current));
         return GatedExit(filtered, invocation.FailOn);
@@ -102,6 +104,7 @@ internal static class CliApplication
         var current = LoadSource(invocation.Positionals[0], invocation.InputKind);
         var baseline = ReadManifest(invocation.Baseline);
         var result = CompatibilityAnalyzer.Compare(baseline, current);
+        TrackSuccessfulComparison(invocation, baseline);
         var filtered = ApplySuppressions(result.Findings, invocation.IgnoreFile);
         WriteFindings(invocation.Format, filtered, [], CountCommands(current));
         return GatedExit(filtered, invocation.FailOn);
@@ -118,14 +121,11 @@ internal static class CliApplication
         var trimmed = input.TrimStart();
         if (trimmed.StartsWith('{'))
         {
-            JsonObject? root;
-            try { root = JsonNode.Parse(input) as JsonObject; }
-            catch (JsonException) { root = null; }
-            if (root is not null && root.ContainsKey("opencliVersion") && root.ContainsKey("SchemaVersion"))
+            if (HasTopLevelProperty(input, "opencliVersion") && HasTopLevelProperty(input, "SchemaVersion"))
             {
                 throw new NormalizationException("AMBIGUOUS_INPUT", "The input matches more than one supported schema shape.");
             }
-            if (root is not null && root.ContainsKey("schemaVersion"))
+            if (HasTopLevelProperty(input, "SchemaVersion") && HasTopLevelProperty(input, "Adapter"))
             {
                 throw new NormalizationException("UNSUPPORTED_INPUT", "Canonical manifests are not source schemas for snapshot or validate.");
             }
@@ -150,10 +150,7 @@ internal static class CliApplication
         var trimmed = input.TrimStart();
         if (trimmed.StartsWith('{'))
         {
-            JsonObject? root;
-            try { root = JsonNode.Parse(input) as JsonObject; }
-            catch (JsonException) { root = null; }
-            if (root is not null && root.ContainsKey("opencliVersion") && root.ContainsKey("schemaVersion"))
+            if (HasTopLevelProperty(input, "opencliVersion") && HasTopLevelProperty(input, "SchemaVersion"))
             {
                 throw new NormalizationException("AMBIGUOUS_INPUT", "The input matches more than one supported schema shape.");
             }
@@ -167,20 +164,35 @@ internal static class CliApplication
         return CanonicalManifestReader.Read(ReadFile(path, "BASELINE_NOT_FOUND"));
     }
 
-    private static string ReadFile(string path, string code)
+    private static string ReadFile(string path, string code, bool schemaInput = true)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
         {
             throw new InvocationException(code, "The requested input file does not exist.");
         }
 
+        byte[] bytes;
         try
         {
-            return File.ReadAllText(path, Encoding.UTF8);
+            bytes = File.ReadAllBytes(path);
         }
         catch (Exception) when (code is "INPUT_NOT_FOUND" or "BASELINE_NOT_FOUND")
         {
             throw new InvocationException(code, "The requested input file could not be read.");
+        }
+
+        try
+        {
+            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
+        }
+        catch (DecoderFallbackException)
+        {
+            if (schemaInput)
+            {
+                throw new NormalizationException("INVALID_UTF8", "The input file is not valid UTF-8.");
+            }
+
+            throw new InvocationException("INVALID_UTF8", "The ignore file is not valid UTF-8.");
         }
     }
 
@@ -204,8 +216,24 @@ internal static class CliApplication
         if (!input.TrimStart().StartsWith('{')) return false;
         try
         {
-            var root = JsonNode.Parse(input) as JsonObject;
-            return root?.ContainsKey("SchemaVersion") == true && root.ContainsKey("Adapter") && root.ContainsKey("Root");
+            return HasTopLevelProperty(input, "SchemaVersion") && HasTopLevelProperty(input, "Adapter") && HasTopLevelProperty(input, "Root");
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool HasTopLevelProperty(string input, string property)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(input, new JsonDocumentOptions
+            {
+                AllowTrailingCommas = false,
+                CommentHandling = JsonCommentHandling.Disallow
+            });
+            return document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.TryGetProperty(property, out _);
         }
         catch (JsonException)
         {
@@ -216,7 +244,7 @@ internal static class CliApplication
     private static IReadOnlyList<CompatibilityFinding> ApplySuppressions(IReadOnlyList<CompatibilityFinding> findings, string? ignorePath)
     {
         if (ignorePath is null) return findings;
-        var input = ReadFile(ignorePath, "IGNORE_NOT_FOUND");
+        var input = ReadFile(ignorePath, "IGNORE_NOT_FOUND", schemaInput: false);
         JsonNode document;
         try { document = JsonNode.Parse(input) ?? throw new JsonException(); }
         catch (JsonException) { throw new InvocationException("INVALID_IGNORE", "The ignore file must be valid JSON."); }
@@ -259,6 +287,45 @@ internal static class CliApplication
     {
         return findings.Any(finding => finding.Category == "breaking" || (failOn == FailOn.Warning && finding.Category == "warning")) ? 1 : 0;
     }
+
+    private static void TrackSuccessfulComparison(Invocation invocation, CanonicalManifest baseline)
+    {
+        if (invocation.NoTelemetry || !HasNonEmptyCommandSurface(baseline) || IsKeelMatrixDevelopmentOrCi())
+        {
+            return;
+        }
+
+        try
+        {
+            // The published telemetry contract accepts only shared bounded activation data.
+            // No schema-derived value is passed to the telemetry package.
+            new Client("devtool", typeof(CliApplication)).TrackActivation();
+        }
+        catch
+        {
+            // Telemetry is optional and must never affect comparison behavior.
+        }
+    }
+
+    private static bool HasNonEmptyCommandSurface(CanonicalManifest manifest)
+    {
+        var root = manifest.Root;
+        return root.Subcommands.Length > 0 || root.Arguments.Length > 0 || root.Options.Length > 0 || root.Aliases.Length > 0 ||
+            root.Summary is not null || root.Description is not null;
+    }
+
+    private static bool IsKeelMatrixDevelopmentOrCi()
+    {
+        if (IsTrue(Environment.GetEnvironmentVariable("KEELMATRIX_DEVELOPMENT"))) return true;
+        if (!IsTrue(Environment.GetEnvironmentVariable("CI"))) return false;
+
+        var repository = Environment.GetEnvironmentVariable("GITHUB_REPOSITORY");
+        var owner = Environment.GetEnvironmentVariable("GITHUB_REPOSITORY_OWNER");
+        return string.Equals(owner, "KeelMatrix", StringComparison.OrdinalIgnoreCase) ||
+            (repository?.StartsWith("KeelMatrix/", StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private static bool IsTrue(string? value) => value is "1" or "true" or "TRUE" or "True";
 
     private static void WriteFindings(OutputFormat format, IReadOnlyList<CompatibilityFinding> findings, IReadOnlyList<ToolError> errors, int commandCount)
     {
@@ -322,18 +389,20 @@ internal static class CliApplication
         string? output = null;
         string? baseline = null;
         string? ignore = null;
+        var noTelemetry = false;
+        var seenOptions = new HashSet<string>(StringComparer.Ordinal);
         for (var index = 1; index < args.Length; index++)
         {
             var argument = args[index];
             switch (argument)
             {
-                case "--input": inputKind = ParseInputKind(NextValue(args, ref index, "--input")); break;
-                case "--format": format = ParseFormat(NextValue(args, ref index, "--format")); break;
-                case "--fail-on": failOn = ParseFailOn(NextValue(args, ref index, "--fail-on")); break;
-                case "--output": output = NextValue(args, ref index, "--output"); break;
-                case "--baseline": baseline = NextValue(args, ref index, "--baseline"); break;
-                case "--ignore": ignore = NextValue(args, ref index, "--ignore"); break;
-                case "--no-telemetry": break;
+                case "--input": EnsureSingleOption(seenOptions, argument); inputKind = ParseInputKind(NextValue(args, ref index, "--input")); break;
+                case "--format": EnsureSingleOption(seenOptions, argument); format = ParseFormat(NextValue(args, ref index, "--format")); break;
+                case "--fail-on": EnsureSingleOption(seenOptions, argument); failOn = ParseFailOn(NextValue(args, ref index, "--fail-on")); break;
+                case "--output": EnsureSingleOption(seenOptions, argument); output = NextValue(args, ref index, "--output"); break;
+                case "--baseline": EnsureSingleOption(seenOptions, argument); baseline = NextValue(args, ref index, "--baseline"); break;
+                case "--ignore": EnsureSingleOption(seenOptions, argument); ignore = NextValue(args, ref index, "--ignore"); break;
+                case "--no-telemetry": EnsureSingleOption(seenOptions, argument); noTelemetry = true; break;
                 default:
                     if (argument.StartsWith('-')) throw new InvocationException("UNKNOWN_OPTION", $"Unknown option '{argument}'.");
                     positionals.Add(argument);
@@ -342,7 +411,15 @@ internal static class CliApplication
         }
 
         if (command is not ("snapshot" or "check" or "diff" or "validate")) throw new InvocationException("UNKNOWN_COMMAND", "Use snapshot, check, diff, or validate.");
-        return new Invocation(command, positionals, inputKind, format, failOn, output, baseline, ignore);
+        return new Invocation(command, positionals, inputKind, format, failOn, output, baseline, ignore, noTelemetry);
+    }
+
+    private static void EnsureSingleOption(HashSet<string> seenOptions, string option)
+    {
+        if (!seenOptions.Add(option))
+        {
+            throw new InvocationException("DUPLICATE_OPTION", $"Option '{option}' was provided more than once; provide it only once.");
+        }
     }
 
     private static string NextValue(string[] args, ref int index, string option)
@@ -395,7 +472,7 @@ internal static class CliApplication
         Console.WriteLine(JsonSerializer.Serialize(value, OutputJsonOptions));
     }
 
-    private sealed record Invocation(string Command, List<string> Positionals, InputKind InputKind, OutputFormat Format, FailOn FailOn, string? Output, string? Baseline, string? IgnoreFile);
+    private sealed record Invocation(string Command, List<string> Positionals, InputKind InputKind, OutputFormat Format, FailOn FailOn, string? Output, string? Baseline, string? IgnoreFile, bool NoTelemetry);
     private sealed record ToolStatus(string Operation, string Result, string InputKind, int CommandCount, int ChangeCount);
     private sealed record ToolError(string Code, string Message);
     private sealed record OutputEnvelope(ToolStatus Tool, IReadOnlyList<CompatibilityFinding> Findings, IReadOnlyList<ToolError> Errors);

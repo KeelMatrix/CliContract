@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+$env:KEELMATRIX_NO_TELEMETRY = '1'
 $packageDir = Join-Path $root 'artifacts/packages'
 if (Test-Path -LiteralPath $packageDir) { Remove-Item -LiteralPath $packageDir -Recurse -Force }
 New-Item -ItemType Directory -Path $packageDir | Out-Null
@@ -16,6 +17,8 @@ dotnet build KeelMatrix.CliContract.sln -c Release --no-restore --nologo
 Assert-NativeSuccess 'Release build'
 dotnet test KeelMatrix.CliContract.sln -c Release --no-build --nologo
 Assert-NativeSuccess 'Release tests'
+& pwsh -NoProfile -File ./scripts/contract-regressions.ps1
+Assert-NativeSuccess 'Consumer contract regressions'
 & pwsh -NoProfile -File ./scripts/verify-determinism.ps1
 Assert-NativeSuccess 'Determinism verification'
 & pwsh -NoProfile -File ./scripts/check-no-execution.ps1
@@ -35,7 +38,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $symbolEntries = [IO.Compression.ZipFile]::OpenRead($symbols).Entries | ForEach-Object FullName
 if (-not ($symbolEntries | Where-Object { $_ -like '*.pdb' })) { throw 'Symbol package contains no PDB entries.' }
 Write-Output "SYMBOL_PACKAGE=PASS entries=$(@($symbolEntries).Count)"
-& pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath $package -AllowMissingIcon
+& pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath $package
 Assert-NativeSuccess 'Package inspection'
 & pwsh -NoProfile -File ./scripts/package-consumer-smoke.ps1 -PackagePath $package
 Assert-NativeSuccess 'Package consumer smoke'

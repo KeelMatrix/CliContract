@@ -192,7 +192,9 @@ public static class CompatibilityAnalyzer
         var newMinimum = current.ArityMinimum ?? 0;
         var oldMaximum = baseline.ArityMaximum ?? int.MaxValue;
         var newMaximum = current.ArityMaximum ?? int.MaxValue;
-        return newMinimum > oldMinimum || newMaximum < oldMaximum;
+        var minimumNarrowed = newMinimum > oldMinimum &&
+            !(baseline.Required != true && current.Required == true && oldMinimum == 0 && newMinimum == 1);
+        return minimumNarrowed || newMaximum < oldMaximum;
     }
 
     private static DomainChange CompareDomain(CanonicalParameter baseline, CanonicalParameter current)

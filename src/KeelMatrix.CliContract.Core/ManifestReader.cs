@@ -123,7 +123,7 @@ public static class CanonicalManifestReader
                 ReadNullableInt(value, "ArityMinimum"),
                 ReadNullableInt(value, "ArityMaximum"),
                 ReadScalarArray(value["AllowedValues"], limits),
-                value.ContainsKey("DefaultValue") ? value["DefaultValue"]?.DeepClone() : null,
+                ReadNullableScalar(value, "DefaultValue"),
                 ReadSources(value["AlternativeSources"], limits),
                 ReadNullableString(value, "Status", limits));
 
@@ -197,8 +197,14 @@ public static class CanonicalManifestReader
                 _ = Bounded(item.GetValue<string>(), limits);
             }
 
-            return item.DeepClone();
+            return Normalizer.CanonicalizeScalar(item);
         }).ToArray();
+    }
+
+    private static JsonNode? ReadNullableScalar(JsonObject value, string property)
+    {
+        if (!value.ContainsKey(property) || value[property] is null) return null;
+        return Normalizer.CanonicalizeScalar(value[property]!);
     }
 
     private static string[] ReadStrings(JsonNode? node, NormalizationLimits limits)

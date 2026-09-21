@@ -32,7 +32,7 @@ To pack and inspect the tool separately:
 
 ```powershell
 dotnet pack src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj -c Release --no-build --include-symbols --output ./artifacts/packages --nologo
-pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath ./artifacts/packages/KeelMatrix.CliContract.0.1.0.nupkg -AllowMissingIcon
+pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath ./artifacts/packages/KeelMatrix.CliContract.0.1.0.nupkg
 pwsh -NoProfile -File ./scripts/package-consumer-smoke.ps1 -PackagePath ./artifacts/packages/KeelMatrix.CliContract.0.1.0.nupkg
 ```
 

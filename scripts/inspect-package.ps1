@@ -27,7 +27,7 @@ try {
         Write-Output 'ICON_GATE=UNVERIFIED package icon metadata and package-root icon are absent.'
     }
     if ($metadata.repository.url -ne 'https://github.com/KeelMatrix/CliContract') { throw 'Repository metadata is incorrect.' }
-    $required = @('README.md', 'KeelMatrix.CliContract.nuspec', 'tools/net8.0/any/KeelMatrix.CliContract.dll', 'tools/net8.0/any/KeelMatrix.CliContract.Core.dll', 'tools/net8.0/any/YamlDotNet.dll')
+    $required = @('README.md', 'KeelMatrix.CliContract.nuspec', 'tools/net8.0/any/KeelMatrix.CliContract.dll', 'tools/net8.0/any/KeelMatrix.CliContract.Core.dll', 'tools/net8.0/any/KeelMatrix.Telemetry.dll', 'tools/net8.0/any/YamlDotNet.dll')
     foreach ($entry in $required) { if ($entries -notcontains $entry) { throw "Required package entry is missing: $entry" } }
     if ($entries -notcontains 'LICENSE') { throw 'The package must contain LICENSE.' }
     $unexpected = @($entries | Where-Object { $_ -notmatch '^(_rels/[^/]+|\[Content_Types\].xml|package/services/metadata/core-properties/[^/]+.psmdcp|README.md|LICENSE|icon.png|[^/]+.nuspec|tools/net8.0/any/[^/]+)$' })
@@ -44,11 +44,18 @@ try {
     }
     else {
         if ($entries -notcontains 'icon.png') { throw 'Package-root icon.png is missing.' }
+        $iconBytes = [IO.File]::ReadAllBytes($iconPath)
+        if ($iconBytes.Length -gt 200KB) { throw 'Repository icon exceeds the 200 KB limit.' }
+        if ($iconBytes.Length -lt 24 -or $iconBytes[0] -ne 0x89 -or $iconBytes[1] -ne 0x50 -or $iconBytes[2] -ne 0x4E -or $iconBytes[3] -ne 0x47) { throw 'Repository icon is not a PNG.' }
+        $width = ([int]$iconBytes[16] -shl 24) -bor ([int]$iconBytes[17] -shl 16) -bor ([int]$iconBytes[18] -shl 8) -bor [int]$iconBytes[19]
+        $height = ([int]$iconBytes[20] -shl 24) -bor ([int]$iconBytes[21] -shl 16) -bor ([int]$iconBytes[22] -shl 8) -bor [int]$iconBytes[23]
+        if ($width -ne 512 -or $height -ne 512) { throw "Repository icon dimensions are ${width}x${height}, expected 512x512." }
         $repoHash = (Get-FileHash -LiteralPath $iconPath -Algorithm SHA256).Hash
-        $packageHash = (Get-FileHash -LiteralPath (Join-Path $temp 'icon.png') -Algorithm SHA256).Hash
+        $packageIconPath = Join-Path $temp 'icon.png'
+        $packageHash = (Get-FileHash -LiteralPath $packageIconPath -Algorithm SHA256).Hash
         if ($repoHash -ne $packageHash) { throw 'Package-root icon.png is not byte-identical to repository-root icon.png.' }
         $iconVerified = $true
-        Write-Output "ICON_GATE=PASS path=icon.png sha256=$repoHash"
+        Write-Output "ICON_GATE=PASS path=icon.png bytes=$($iconBytes.Length) dimensions=${width}x${height} sha256=$repoHash"
     }
     $dependencyGroups = @($metadata.dependencies.group | ForEach-Object { $_.dependency | ForEach-Object { $_.id } })
     Write-Output "PACKAGE_ID=$($metadata.id)"

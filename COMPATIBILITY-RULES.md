@@ -43,7 +43,7 @@ Type/domain widening does not produce a breaking finding. A changed represented 
 
 ## Supported upstream boundary
 
-The adapter requires `opencliVersion: 1.0.0-alpha.14`, required `info.title`, `info.binary`, and `info.version`, and validates all recognized in-contract fields. Unsupported upstream fields are ignored as non-contract data, including `x-*` extensions, install metadata, examples, hidden/kind fields, and choice descriptions. Invalid recognized values fail closed.
+The adapter requires `opencliVersion: 1.0.0-alpha.14`, required `info.title`, `info.binary`, and `info.version`, and validates all recognized in-contract fields. Schema-declared fields outside the compatibility contract remain accepted and ignored, including install metadata, examples, hidden/kind fields, and choice descriptions. `x-*` extensions are accepted and ignored. Unknown non-extension fields on the root, command, argument, flag, choice, and other recognized schema objects fail closed. Invalid recognized values fail closed.
 
 The adapter supports nested commands, root/global flags, aliases, positional arguments, requiredness, represented arity, scalar choices, scalar defaults, `$ENV`/`$FILE` alternative sources, summaries, descriptions, and bounded Unicode text. It does not claim support for deprecation/status because alpha.14 does not represent that contract field.
 
@@ -51,7 +51,7 @@ The adapter supports nested commands, root/global flags, aliases, positional arg
 
 Unknown upstream or canonical manifest versions are rejected explicitly. JSON duplicate keys, malformed JSON/YAML, YAML anchors/aliases, excessive size/depth/node/string/collection limits, invalid recognized fields, and incompatible baselines are errors, never compatible results. No remote `$ref`, URL, include, or network operation is performed. The described CLI is never started.
 
-Diagnostics do not echo complete documents, defaults, descriptions, or schema fragments. The tool emits no telemetry in v1 because no stable shared telemetry integration is available for this standalone tool; `--no-telemetry` is an explicit opt-out boundary and no schema data is emitted.
+Diagnostics do not echo complete documents, defaults, descriptions, or schema fragments. After a successful nonempty comparison, the tool requests one failure-isolated activation through the published `KeelMatrix.Telemetry` package without passing schema-derived values. `--no-telemetry` disables the request; no schema data is emitted.
 
 ## Schema validity versus compatibility
 

@@ -35,6 +35,17 @@ public sealed class CompatibilityTests
     }
 
     [Fact]
+    public void RequirednessChangeDoesNotAlsoReportImplicitArityNarrowing()
+    {
+        var optional = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string","required":false}]}}}""");
+        var required = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string","required":true}]}}}""");
+
+        var findings = CompatibilityAnalyzer.Compare(optional, required).Findings;
+
+        Assert.Equal(["KMCLI105"], findings.Select(finding => finding.Code));
+    }
+
+    [Fact]
     public void DomainNarrowingIsBreakingButWideningIsNot()
     {
         var oldManifest = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"number","choices":[{"value":1},{"value":2}]}]}}}""");

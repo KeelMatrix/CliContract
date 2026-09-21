@@ -25,7 +25,7 @@ Use `--format json` for CI consumers, `--fail-on warning` to gate warnings, and 
 
 ## Privacy and limitations
 
-Version 0.1 emits no telemetry because the standalone tool has no stable shared telemetry integration. It never sends schema contents, defaults, paths, or identifiers. `--no-telemetry` explicitly disables the optional telemetry boundary. Unknown versions, malformed input, YAML aliases, remote references, and unsupported constructs fail closed. A schema can be valid without being backward compatible.
+After a successful comparison with a nonempty baseline, version 0.1 requests one best-effort activation through the published `KeelMatrix.Telemetry` package. No schema-derived values are passed; the shared package's bounded platform, tool-version, CI, and anonymous identity contract is used. `--no-telemetry` disables the request, development/CI runs are disabled, and telemetry failure cannot affect the result. The tool never sends schema contents, defaults, paths, command names, or diagnostics. Unknown versions, malformed input, invalid UTF-8, YAML aliases, remote references, and unsupported constructs fail closed. A schema can be valid without being backward compatible.
 
 ## License
 

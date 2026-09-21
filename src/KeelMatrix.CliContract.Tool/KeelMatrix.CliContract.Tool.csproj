@@ -25,7 +25,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\KeelMatrix.CliContract.Core\KeelMatrix.CliContract.Core.csproj" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.401" PrivateAssets="all" />
+    <PackageReference Include="KeelMatrix.Telemetry" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="" />

@@ -257,6 +257,31 @@ public sealed class NormalizationTests
         Assert.Equal("OPENCLI_CHOICE", error.Code);
     }
 
+    [Theory]
+    [InlineData("{\"unexpected\":true}", "OPENCLI_UNKNOWN_FIELD")]
+    [InlineData("{\"commands\":{\"tool\":{\"unexpected\":true}}}", "OPENCLI_UNKNOWN_FIELD")]
+    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":[\"string\"]}]}}}", "OPENCLI_FLAG_TYPE")]
+    [InlineData("{\"commands\":{\"tool\":{\"args\":[{\"name\":\"value\",\"minItems\":-1}]}}}", "OPENCLI_ARITY")]
+    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"string\",\"minItems\":2,\"maxItems\":1}]}}}", "OPENCLI_ARITY")]
+    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"string\",\"alternativeSources\":[]}]}}}", "OPENCLI_DEFAULT_SOURCES")]
+    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"string\",\"$ref\":\"https://example.invalid/schema\"}]}}}", "OPENCLI_REMOTE_REFERENCE")]
+    public void OpenCliSchemaViolationsFailClosed(string commands, string expectedCode)
+    {
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", OpenCliDocument(commands)));
+        Assert.Equal(expectedCode, error.Code);
+    }
+
+    [Fact]
+    public void EquivalentNumericDefaultsHaveByteIdenticalCanonicalOutput()
+    {
+        var integer = OpenCliDocument("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"retries\",\"type\":\"number\",\"default\":7}]}}}");
+        var decimalValue = OpenCliDocument("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"retries\",\"type\":\"number\",\"default\":7.0}]}}}");
+
+        Assert.Equal(
+            Normalizer.Serialize(Normalizer.Normalize("opencli", integer)),
+            Normalizer.Serialize(Normalizer.Normalize("opencli", decimalValue)));
+    }
+
     [Fact]
     public void OpenCliPreservesGlobalFlagsAtRoot()
     {
@@ -460,7 +485,7 @@ public sealed class NormalizationTests
         for (var index = 0; index < nestedObjectDepth; index++)
         {
             var nested = new JsonObject();
-            current["ignored"] = nested;
+            current["x-depth"] = nested;
             current = nested;
         }
 
