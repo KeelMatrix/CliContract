@@ -1,5 +1,5 @@
-using KeelMatrix.CliContract.Core;
 using System.Text.Json.Nodes;
+using KeelMatrix.CliContract.Core;
 using Xunit;
 
 namespace KeelMatrix.CliContract.Tests;

@@ -3,7 +3,8 @@
 ## Navigation
 
 - `src/KeelMatrix.CliContract.Core` contains the bounded, offline normalization prototype.
-- `src/KeelMatrix.CliContract.Probe` is a disposable command-line harness for Phase 0 evidence.
+- `src/KeelMatrix.CliContract.Probe` is a disposable normalization harness for regression evidence.
+- `src/KeelMatrix.CliContract.Tool` is the packable `net8.0` `clicontract` tool.
 - `tests/KeelMatrix.CliContract.Tests` contains focused regression tests for both input adapters.
 - `fixtures/opencli` contains pinned OpenCLI alpha.14 examples and order/line-ending variants.
 - `fixtures/dotnet` contains raw output captured from installed .NET SDKs.
@@ -16,13 +17,15 @@
 dotnet restore KeelMatrix.CliContract.sln
 dotnet test tests/KeelMatrix.CliContract.Tests/KeelMatrix.CliContract.Tests.csproj -c Release --no-restore
 dotnet run --project src/KeelMatrix.CliContract.Probe/KeelMatrix.CliContract.Probe.csproj -c Release --no-restore -- normalize opencli fixtures/opencli/phase0.json output.canonical.json
+dotnet build KeelMatrix.CliContract.sln -c Release --no-restore
+pwsh -NoProfile -File ./scripts/local-gate.ps1
 ```
 
-The repository is intentionally not packable in this phase. There is no shipped command surface.
+The shipping command surface is OpenCLI-only: `--input auto|opencli`. The tool project is the only packable project; core, probe, tests, and fixtures are not separate package products.
 
 ## Invariants
 
-- The prototype accepts only the pinned OpenCLI version and the observed .NET CLI-schema shape.
+- The shipping tool accepts only the pinned OpenCLI version. The `.NET CLI-schema` captures remain regression evidence and are not a v1 adapter.
 - Input is untrusted: size, node, depth, collection, and string limits are enforced.
 - Normalization is offline and never starts a process, loads a described executable, or fetches a URL.
 - Canonical paths are logical command paths such as `root / deploy / --region`.

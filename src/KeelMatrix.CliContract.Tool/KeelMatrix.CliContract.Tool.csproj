@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>KeelMatrix.CliContract</AssemblyName>
+    <RootNamespace>KeelMatrix.CliContract.Tool</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>clicontract</ToolCommandName>
+    <PackageId>KeelMatrix.CliContract</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>KeelMatrix</Authors>
+    <Description>Detects breaking command-line interface changes from deterministic OpenCLI contracts.</Description>
+    <PackageTags>dotnet-tool;cli;command-line;compatibility;contract;opencli;schema;breaking-change;ci;semver</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon Condition="Exists('..\..\icon.png')">icon.png</PackageIcon>
+    <RepositoryUrl>https://github.com/KeelMatrix/CliContract</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/KeelMatrix/CliContract</PackageProjectUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\KeelMatrix.CliContract.Core\KeelMatrix.CliContract.Core.csproj" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.401" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
+    <None Include="..\..\icon.png" Pack="true" PackagePath="icon.png" Link="icon.png" Condition="Exists('..\..\icon.png')" />
+  </ItemGroup>
+</Project>
