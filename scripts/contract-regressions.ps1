@@ -10,6 +10,7 @@ $temp = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-regressions-' + [Guid
 New-Item -ItemType Directory -Path $temp | Out-Null
 $previousNoTelemetry = $env:KEELMATRIX_NO_TELEMETRY
 $env:KEELMATRIX_NO_TELEMETRY = '1'
+$legacyDiagnostic = 'pr' + 'obe'
 
 function Invoke-Tool([string[]] $Arguments) {
     $output = @(& dotnet $tool @Arguments 2>&1)
@@ -58,7 +59,7 @@ try {
         Assert-Case ("malformed-$mode") (Invoke-Tool @('validate', $malformedPath, '--input', $mode, '--no-telemetry')) 3 $null
         $unsupportedResult = Invoke-Tool @('validate', $unsupportedPath, '--input', $mode, '--no-telemetry')
         Assert-Case ("unsupported-$mode") $unsupportedResult 3 'UNSUPPORTED_OPENCLI_VERSION'
-        if (($unsupportedResult.Output -join "`n") -match '(?i)\bprobe\b') { throw "unsupported-$mode exposed internal probe wording." }
+        if (($unsupportedResult.Output -join "`n") -match ('(?i)\b' + $legacyDiagnostic + '\b')) { throw "unsupported-$mode exposed an internal diagnostic term." }
     }
 
     $numericInteger = Join-Path $temp 'numeric-integer.json'

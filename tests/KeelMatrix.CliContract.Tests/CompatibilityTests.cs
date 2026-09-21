@@ -82,7 +82,7 @@ public sealed class CompatibilityTests
     [Fact]
     public void FixtureManifestReaderPreservesEveryCanonicalField()
     {
-        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "phase0.json")));
+        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "example-cli.json")));
         var roundTrip = CanonicalManifestReader.Read(Normalizer.Serialize(manifest));
 
         Assert.Equal(Normalizer.Serialize(manifest), Normalizer.Serialize(roundTrip));

@@ -11,7 +11,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{5C374197
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeelMatrix.CliContract.Tests", "tests\KeelMatrix.CliContract.Tests\KeelMatrix.CliContract.Tests.csproj", "{96F2ACC0-5E33-4A8F-93D9-E5295BD80BBE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeelMatrix.CliContract.Probe", "src\KeelMatrix.CliContract.Probe\KeelMatrix.CliContract.Probe.csproj", "{45FE3C5C-0158-45C5-9426-01B98D6FA80A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeelMatrix.CliContract.Harness", "src\KeelMatrix.CliContract.Harness\KeelMatrix.CliContract.Harness.csproj", "{45FE3C5C-0158-45C5-9426-01B98D6FA80A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeelMatrix.CliContract.Tool", "src\KeelMatrix.CliContract.Tool\KeelMatrix.CliContract.Tool.csproj", "{7A0F2024-7248-4D03-A6E8-1FBEBA2C0CB5}"
 EndProject

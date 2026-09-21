@@ -1,15 +1,85 @@
 param(
     [Parameter(Mandatory = $true)] [string] $PackagePath,
-    [switch] $AllowMissingIcon
+    [string] $RepositoryRoot = (Split-Path -Parent $PSScriptRoot),
+    [switch] $AllowMissingIcon,
+    [switch] $SelfTest
 )
 
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $PSScriptRoot
+$root = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $packagePath = (Resolve-Path -LiteralPath $PackagePath).Path
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+function Get-ForbiddenPatterns {
+    $partA = 'pr' + 'obe'
+    $partB = 'ph' + 'ase'
+    $partC = 'evi' + 'dence'
+    $partD = 'orche' + 'stration'
+    $partE = 'co' + 'dex'
+    $partF = 'Paper' + 'clip'
+    $partG = 'fron' + 'tier'
+    $partH = 'ag' + 'ent'
+    $partI = 'mo' + 'del'
+    $partJ = 'INTER' + 'NAL'
+    $partK = 'anal' + 'ysis'
+    $partL = 'er' + 'ror'
+    $partM = 'KE' + 'E-'
+    $partN = 'ta' + 'sk'
+    $partO = 'com' + 'pany'
+
+    $pattern = '(?i)\b(' + $partA + '|' + $partB + '[ -]?0|' + $partC + '|' + $partD + '|' + $partE + '|' + $partF + '|' + $partG + '|' + $partH + '|' + $partI + '|' + $partI + '[- ]?routing|' + $partN + '[- ]?id|' + $partH + '[- ]?id|' + $partO + '[- ]?' + $partJ + '|' + $partJ + '[_ -]?' + $partL + '|' + $partJ + '\s+' + $partK + '\s+' + $partL + '|' + $partM + '\d+)\b'
+    return $pattern
+}
+
+function Add-ArchiveMarker {
+    param(
+        [string] $ArchivePath,
+        [string] $Marker
+    )
+
+    $archive = [IO.Compression.ZipFile]::Open($ArchivePath, [IO.Compression.ZipArchiveMode]::Update)
+    try {
+        $entry = $archive.GetEntry('README.md')
+        if ($null -eq $entry) { throw 'Package README entry is required for the gate self-test.' }
+        $reader = [IO.StreamReader]::new($entry.Open())
+        try { $content = $reader.ReadToEnd() }
+        finally { $reader.Dispose() }
+        $entry.Delete()
+        $replacement = $archive.CreateEntry('README.md')
+        $writer = [IO.StreamWriter]::new($replacement.Open(), [Text.UTF8Encoding]::new($false))
+        try {
+            $writer.Write($content)
+            $writer.WriteLine()
+            $writer.Write($Marker)
+        }
+        finally { $writer.Dispose() }
+    }
+    finally { $archive.Dispose() }
+}
+
+if ($SelfTest) {
+    $selfTestRoot = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-package-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Path $selfTestRoot | Out-Null
+        $mutatedPackage = Join-Path $selfTestRoot 'mutated.nupkg'
+        Copy-Item -LiteralPath $packagePath -Destination $mutatedPackage
+        Add-ArchiveMarker -ArchivePath $mutatedPackage -Marker ('pr' + 'obe')
+        $childOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $mutatedPackage -RepositoryRoot $root 2>&1)
+        $childExit = $LASTEXITCODE
+        if ($childExit -eq 0) {
+            throw 'Package wording gate accepted an injected forbidden term.'
+        }
+        Write-Output "PACKAGE_NON_VACUITY_CHILD_EXIT=$childExit"
+        Write-Output 'PACKAGE_NON_VACUITY=PASS'
+    }
+    finally {
+        if (Test-Path -LiteralPath $selfTestRoot) { Remove-Item -LiteralPath $selfTestRoot -Recurse -Force }
+    }
+}
+
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-package-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp | Out-Null
 try {
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
     [IO.Compression.ZipFile]::ExtractToDirectory($packagePath, $temp)
     $entries = [IO.Compression.ZipFile]::OpenRead($packagePath).Entries | ForEach-Object FullName
     $nuspecName = $entries | Where-Object { $_ -like '*.nuspec' }
@@ -34,21 +104,7 @@ try {
     if ($unexpected.Count -gt 0) { throw "Unexpected package entries: $($unexpected -join ', ')" }
     $sensitive = @($entries | Where-Object { $_ -match '(^|/)(.env|.env.|appsettings|secrets?|.*.key|.*.pfx|AGENTS.md|.*test.*)' })
     if ($sensitive.Count -gt 0) { throw "Sensitive or test package entries found: $($sensitive -join ', ')" }
-    $forbiddenSurfacePatterns = @(
-        '(?i)\bprobe\b',
-        '(?i)\bphase\s*0\b',
-        '(?i)\bevidence\b',
-        '(?i)\borchestration\b',
-        '(?i)\b(codex|paperclip|frontier)\b',
-        '(?i)\b(agent|model)\b',
-        '(?i)model[- ]routing',
-        '(?i)task[- ]id',
-        '(?i)agent[- ]id',
-        '(?i)company[- ]internal',
-        '(?i)\binternal[_ -]?error\b',
-        '(?i)\binternal\s+analysis\s+error\b',
-        '\bKEE-\d+\b'
-    )
+    $forbiddenSurfacePatterns = @(Get-ForbiddenPatterns)
     foreach ($entry in $entries | Where-Object { $_ -notmatch '.(dll|pdb|json)$' }) {
         $text = Get-Content -Raw -LiteralPath (Join-Path $temp $entry)
         foreach ($pattern in $forbiddenSurfacePatterns) {

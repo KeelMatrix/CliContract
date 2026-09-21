@@ -1,9 +1,9 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$probe = Join-Path $root 'src/KeelMatrix.CliContract.Probe/KeelMatrix.CliContract.Probe.csproj'
-$fixture = Join-Path $root 'fixtures/opencli/phase0.json'
-$reordered = Join-Path $root 'fixtures/opencli/phase0-reordered.json'
-$temp = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-phase0-' + [Guid]::NewGuid().ToString('N'))
+$normalizerProject = Join-Path $root 'src/KeelMatrix.CliContract.Harness/KeelMatrix.CliContract.Harness.csproj'
+$fixture = Join-Path $root 'fixtures/opencli/example-cli.json'
+$reordered = Join-Path $root 'fixtures/opencli/example-cli-reordered.json'
+$temp = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-example-cli-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp | Out-Null
 try {
     function Invoke-Normalization {
@@ -12,7 +12,7 @@ try {
             [string] $OutputPath
         )
 
-        $output = & dotnet run --project $probe -c Release --no-restore -- normalize opencli $InputPath $OutputPath 2>&1
+        $output = & dotnet run --project $normalizerProject -c Release --no-restore -- normalize opencli $InputPath $OutputPath 2>&1
         $exitCode = $LASTEXITCODE
         $output | Out-Host
         if ($exitCode -ne 0) {

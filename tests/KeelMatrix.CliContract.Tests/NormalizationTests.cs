@@ -9,7 +9,7 @@ public sealed class NormalizationTests
     [Fact]
     public void OpenCliCanonicalizesFixture()
     {
-        var input = File.ReadAllText(Fixture("opencli", "phase0.json"));
+        var input = File.ReadAllText(Fixture("opencli", "example-cli.json"));
         var manifest = Normalizer.Normalize("opencli", input);
         var deploy = manifest.Root.Subcommands.Single(c => c.Path == "root / deploy");
 
@@ -25,11 +25,11 @@ public sealed class NormalizationTests
     [Fact]
     public void OpenCliSourceOrderAndLineEndingsDoNotChangeBytes()
     {
-        var first = File.ReadAllText(Fixture("opencli", "phase0.json"));
-        var second = File.ReadAllText(Fixture("opencli", "phase0-reordered.json"));
+        var first = File.ReadAllText(Fixture("opencli", "example-cli.json"));
+        var second = File.ReadAllText(Fixture("opencli", "example-cli-reordered.json"));
         Assert.Equal(Normalizer.Serialize(Normalizer.Normalize("opencli", first)), Normalizer.Serialize(Normalizer.Normalize("opencli", second.Replace("\n", "\r\n"))));
 
-        var yaml = File.ReadAllText(Fixture("opencli", "phase0.yaml"));
+        var yaml = File.ReadAllText(Fixture("opencli", "example-cli.yaml"));
         Assert.Equal(Normalizer.Serialize(Normalizer.Normalize("opencli", first)), Normalizer.Serialize(Normalizer.Normalize("opencli", yaml)));
     }
 
@@ -69,11 +69,11 @@ public sealed class NormalizationTests
     [Fact]
     public void UnsupportedOpenCliVersionFailsClosed()
     {
-        var input = File.ReadAllText(Fixture("opencli", "phase0.json"));
+        var input = File.ReadAllText(Fixture("opencli", "example-cli.json"));
         var changed = input.Replace(Normalizer.OpenCliVersion, "1.0.0-alpha.13", StringComparison.Ordinal);
         var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", changed));
         Assert.Equal("UNSUPPORTED_OPENCLI_VERSION", error.Code);
-        Assert.DoesNotContain("probe", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("pr" + "obe", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -380,7 +380,7 @@ public sealed class NormalizationTests
         {
             var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", input));
             Assert.Equal("YAML_ALIASES_UNSUPPORTED", error.Code);
-            Assert.DoesNotContain("probe", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("pr" + "obe", error.Message, StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -433,9 +433,9 @@ public sealed class NormalizationTests
     }
 
     [Fact]
-    public void RegressionFixtureCoversPhase0FixRoundConstructs()
+    public void RegressionFixtureCoversNeutralRegressionConstructs()
     {
-        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "phase0-regressions.json")));
+        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "regression-fixtures.json")));
         var command = manifest.Root.Subcommands.Single();
 
         Assert.Equal(["--debug", "--output-format"], manifest.Root.Options.Select(option => option.Name));

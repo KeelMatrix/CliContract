@@ -4,7 +4,7 @@ obj/
 artifacts/
 .vs/
 
-## Probe output
+## Canonical output
 *.canonical.json
 *.sha256
 TestResults/

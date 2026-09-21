@@ -2,8 +2,8 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-    <AssemblyName>KeelMatrix.CliContract.Probe</AssemblyName>
-    <RootNamespace>KeelMatrix.CliContract.Probe</RootNamespace>
+    <AssemblyName>KeelMatrix.CliContract.Harness</AssemblyName>
+    <RootNamespace>KeelMatrix.CliContract.Harness</RootNamespace>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>

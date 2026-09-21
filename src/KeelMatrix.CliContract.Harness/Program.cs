@@ -2,7 +2,7 @@ using KeelMatrix.CliContract.Core;
 
 if (args.Length != 4 || !string.Equals(args[0], "normalize", StringComparison.OrdinalIgnoreCase))
 {
-    Console.Error.WriteLine("Probe usage: normalize opencli <input> <output>");
+    Console.Error.WriteLine("Normalization harness usage: normalize opencli <input> <output>");
     return 2;
 }
 
@@ -38,6 +38,6 @@ catch (NormalizationException exception)
 }
 catch (Exception)
 {
-    Console.Error.WriteLine("INTERNAL_ERROR: The probe could not complete.");
+    Console.Error.WriteLine("UNEXPECTED_ERROR: The normalization harness could not complete.");
     return 4;
 }

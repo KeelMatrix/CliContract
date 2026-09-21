@@ -25,7 +25,7 @@ Assert-NativeSuccess 'Determinism verification'
 Assert-NativeSuccess 'No-execution source scan'
 & pwsh -NoProfile -File ./scripts/test-no-execution.ps1
 Assert-NativeSuccess 'No-execution harness'
-& pwsh -NoProfile -File ./scripts/scan-user-facing-surface.ps1
+& pwsh -NoProfile -File ./scripts/scan-user-facing-surface.ps1 -SelfTest
 Assert-NativeSuccess 'User-facing wording scan'
  $audit = dotnet list KeelMatrix.CliContract.sln package --vulnerable --include-transitive --configfile NuGet.config 2>&1
  $audit | Out-Host
@@ -40,7 +40,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $symbolEntries = [IO.Compression.ZipFile]::OpenRead($symbols).Entries | ForEach-Object FullName
 if (-not ($symbolEntries | Where-Object { $_ -like '*.pdb' })) { throw 'Symbol package contains no PDB entries.' }
 Write-Output "SYMBOL_PACKAGE=PASS entries=$(@($symbolEntries).Count)"
-& pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath $package
+& pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath $package -SelfTest
 Assert-NativeSuccess 'Package inspection'
 & pwsh -NoProfile -File ./scripts/package-consumer-smoke.ps1 -PackagePath $package
 Assert-NativeSuccess 'Package consumer smoke'

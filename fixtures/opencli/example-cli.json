@@ -1,18 +1,18 @@
 {
   "opencliVersion": "1.0.0-alpha.14",
   "info": {
-    "title": "Phase 0 CLI",
+    "title": "Example CLI",
     "summary": "A bounded fixture",
     "description": "Unicode-ready description: Проверка 🚀",
-    "binary": "phase0",
+    "binary": "demo",
     "version": "1.0.0"
   },
   "commands": {
-    "phase0 {command} [flags]": {
+    "demo {command} [flags]": {
       "kind": "group",
       "description": "Top-level command group"
     },
-    "phase0 deploy <environment> [flags]": {
+    "demo deploy <environment> [flags]": {
       "summary": "Deploy 🚀",
       "description": "Deploy to an environment.",
       "aliases": ["ship"],
@@ -45,11 +45,11 @@
         }
       ]
     },
-    "phase0 empty [flags]": {
+    "demo empty [flags]": {
       "kind": "group",
       "summary": "Empty subcommands are valid"
     },
-    "phase0 empty child [flags]": {
+    "demo empty child [flags]": {
       "kind": "action",
       "args": [],
       "flags": []
