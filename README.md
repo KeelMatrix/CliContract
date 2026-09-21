@@ -12,10 +12,12 @@ dotnet tool install --global KeelMatrix.CliContract
 
 ```bash
 clicontract snapshot ./opencli.yaml --output cli-contract.json
+git add cli-contract.json
+git commit -m "Record CLI contract baseline"
 clicontract check ./opencli.yaml --baseline cli-contract.json
 ```
 
-The default input mode is `auto`; use `--input opencli` to require OpenCLI. `auto` recognizes a single OpenCLI shape and fails on ambiguity. No target CLI is started, no help text is scraped, and no network request is made.
+Commit the baseline with the CLI description, then run `check` in CI. The default input mode is `auto`; use `--input opencli` to require OpenCLI. `auto` recognizes a single OpenCLI shape and fails on ambiguity. No target CLI is started, no help text is scraped, and no network request is made.
 
 ```bash
 clicontract diff ./old-opencli.yaml ./new-opencli.yaml --format json
