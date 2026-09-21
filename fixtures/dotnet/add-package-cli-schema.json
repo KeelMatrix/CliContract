@@ -1,0 +1,148 @@
+{
+  "name": "package",
+  "version": "10.0.401",
+  "description": "Add a NuGet package reference to the project.",
+  "hidden": false,
+  "arguments": {
+    "packageId": {
+      "description": "Package reference in the form of a package identifier like 'Newtonsoft.Json' or package identifier and version separated by '@' like 'Newtonsoft.Json@13.0.3'.",
+      "order": 0,
+      "hidden": false,
+      "valueType": "Microsoft.DotNet.Cli.PackageIdentityWithRange",
+      "hasDefaultValue": false,
+      "arity": {
+        "minimum": 1,
+        "maximum": 1
+      }
+    }
+  },
+  "options": {
+    "--file": {
+      "description": "The file-based app to operate on.",
+      "hidden": false,
+      "valueType": "System.String",
+      "hasDefaultValue": false,
+      "arity": {
+        "minimum": 1,
+        "maximum": 1
+      },
+      "required": false,
+      "recursive": true
+    },
+    "--framework": {
+      "description": "Add the reference only when targeting a specific framework.",
+      "hidden": false,
+      "aliases": [
+        "-f"
+      ],
+      "helpName": "FRAMEWORK",
+      "valueType": "System.String",
+      "hasDefaultValue": false,
+      "arity": {
+        "minimum": 1,
+        "maximum": 1
+      },
+      "required": false,
+      "recursive": false
+    },
+    "--interactive": {
+      "description": "Allows the command to stop and wait for user input or action (for example to complete authentication).",
+      "hidden": false,
+      "valueType": "System.Boolean",
+      "hasDefaultValue": true,
+      "defaultValue": false,
+      "arity": {
+        "minimum": 0,
+        "maximum": 0
+      },
+      "required": false,
+      "recursive": false
+    },
+    "--no-restore": {
+      "description": "Add the reference without performing restore preview and compatibility check.",
+      "hidden": false,
+      "aliases": [
+        "-n"
+      ],
+      "valueType": "System.Boolean",
+      "hasDefaultValue": true,
+      "defaultValue": false,
+      "arity": {
+        "minimum": 0,
+        "maximum": 0
+      },
+      "required": false,
+      "recursive": false
+    },
+    "--package-directory": {
+      "description": "The directory to restore packages to.",
+      "hidden": false,
+      "helpName": "PACKAGE_DIR",
+      "valueType": "System.String",
+      "hasDefaultValue": false,
+      "arity": {
+        "minimum": 1,
+        "maximum": 1
+      },
+      "required": false,
+      "recursive": false
+    },
+    "--prerelease": {
+      "description": "Allows prerelease packages to be installed.",
+      "hidden": false,
+      "valueType": "System.Boolean",
+      "hasDefaultValue": true,
+      "defaultValue": false,
+      "arity": {
+        "minimum": 0,
+        "maximum": 0
+      },
+      "required": false,
+      "recursive": false
+    },
+    "--project": {
+      "description": "The project file to operate on. If a file is not specified, the command will search the current directory for one.",
+      "hidden": false,
+      "valueType": "System.String",
+      "hasDefaultValue": false,
+      "arity": {
+        "minimum": 1,
+        "maximum": 1
+      },
+      "required": false,
+      "recursive": true
+    },
+    "--source": {
+      "description": "The NuGet package source to use during the restore.",
+      "hidden": false,
+      "aliases": [
+        "-s"
+      ],
+      "helpName": "SOURCE",
+      "valueType": "System.String",
+      "hasDefaultValue": false,
+      "arity": {
+        "minimum": 1,
+        "maximum": 1
+      },
+      "required": false,
+      "recursive": false
+    },
+    "--version": {
+      "description": "The version of the package to add.",
+      "hidden": false,
+      "aliases": [
+        "-v"
+      ],
+      "helpName": "VERSION",
+      "valueType": "System.String",
+      "hasDefaultValue": false,
+      "arity": {
+        "minimum": 1,
+        "maximum": 1
+      },
+      "required": false,
+      "recursive": false
+    }
+  }
+}

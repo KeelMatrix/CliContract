@@ -1,0 +1,15 @@
+## Build output
+bin/
+obj/
+artifacts/
+.vs/
+
+## Probe output
+*.canonical.json
+*.sha256
+TestResults/
+
+## Local tooling
+.idea/
+*.user
+*.suo

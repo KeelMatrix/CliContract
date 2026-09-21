@@ -1,0 +1,43 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{8FEBFC7A-DD68-4283-B596-67A346CAF475}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeelMatrix.CliContract.Core", "src\KeelMatrix.CliContract.Core\KeelMatrix.CliContract.Core.csproj", "{DE8EEE5E-BDAF-461B-957E-B8157370B056}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{5C374197-94C5-4A82-A853-08216AFA4747}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeelMatrix.CliContract.Tests", "tests\KeelMatrix.CliContract.Tests\KeelMatrix.CliContract.Tests.csproj", "{96F2ACC0-5E33-4A8F-93D9-E5295BD80BBE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeelMatrix.CliContract.Probe", "src\KeelMatrix.CliContract.Probe\KeelMatrix.CliContract.Probe.csproj", "{45FE3C5C-0158-45C5-9426-01B98D6FA80A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DE8EEE5E-BDAF-461B-957E-B8157370B056}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DE8EEE5E-BDAF-461B-957E-B8157370B056}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DE8EEE5E-BDAF-461B-957E-B8157370B056}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DE8EEE5E-BDAF-461B-957E-B8157370B056}.Release|Any CPU.Build.0 = Release|Any CPU
+		{96F2ACC0-5E33-4A8F-93D9-E5295BD80BBE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{96F2ACC0-5E33-4A8F-93D9-E5295BD80BBE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{96F2ACC0-5E33-4A8F-93D9-E5295BD80BBE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{96F2ACC0-5E33-4A8F-93D9-E5295BD80BBE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{45FE3C5C-0158-45C5-9426-01B98D6FA80A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45FE3C5C-0158-45C5-9426-01B98D6FA80A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45FE3C5C-0158-45C5-9426-01B98D6FA80A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45FE3C5C-0158-45C5-9426-01B98D6FA80A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{DE8EEE5E-BDAF-461B-957E-B8157370B056} = {8FEBFC7A-DD68-4283-B596-67A346CAF475}
+		{96F2ACC0-5E33-4A8F-93D9-E5295BD80BBE} = {5C374197-94C5-4A82-A853-08216AFA4747}
+		{45FE3C5C-0158-45C5-9426-01B98D6FA80A} = {8FEBFC7A-DD68-4283-B596-67A346CAF475}
+	EndGlobalSection
+EndGlobal

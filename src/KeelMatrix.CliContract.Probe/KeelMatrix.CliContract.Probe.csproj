@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>KeelMatrix.CliContract.Probe</AssemblyName>
+    <RootNamespace>KeelMatrix.CliContract.Probe</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\KeelMatrix.CliContract.Core\KeelMatrix.CliContract.Core.csproj" />
+  </ItemGroup>
+</Project>

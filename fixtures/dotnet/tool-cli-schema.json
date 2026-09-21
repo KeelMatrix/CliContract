@@ -1,0 +1,1149 @@
+{
+  "name": "tool",
+  "version": "10.0.401",
+  "description": "Install or work with tools that extend the .NET experience.",
+  "hidden": false,
+  "subcommands": {
+    "execute": {
+      "description": "Executes a tool from source without permanently installing it.",
+      "hidden": false,
+      "aliases": [
+        "exec"
+      ],
+      "arguments": {
+        "packageId": {
+          "description": "Package reference in the form of a package identifier like 'dotnetsay' or package identifier and version separated by '@' like 'dotnetsay@2.1.7'.",
+          "order": 0,
+          "hidden": false,
+          "valueType": "Microsoft.DotNet.Cli.PackageIdentityWithRange",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          }
+        },
+        "commandArguments": {
+          "description": "Arguments forwarded to the tool",
+          "order": 1,
+          "hidden": false,
+          "valueType": "System.Collections.Generic.IEnumerable<System.String>",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 0
+          }
+        }
+      },
+      "options": {
+        "--add-source": {
+          "description": "Add an additional NuGet package source to use during installation.",
+          "hidden": false,
+          "helpName": "ADDSOURCE",
+          "valueType": "System.String[]",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--allow-roll-forward": {
+          "description": "Allow a .NET tool to roll forward to newer versions of the .NET runtime if the runtime it targets isn't installed.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--configfile": {
+          "description": "The NuGet configuration file to use.",
+          "hidden": false,
+          "helpName": "FILE",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--disable-parallel": {
+          "description": "Prevent restoring multiple projects in parallel.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--ignore-failed-sources": {
+          "description": "Treat package source failures as warnings.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--interactive": {
+          "description": "Allows the command to stop and wait for user input or action (for example to complete authentication).",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--no-cache": {
+          "description": "Do not cache packages and http requests.",
+          "hidden": true,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--no-http-cache": {
+          "description": "Do not cache packages and http requests.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--prerelease": {
+          "description": "Include pre-release packages.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--source": {
+          "description": "Replace all NuGet package sources to use during installation with these.",
+          "hidden": false,
+          "helpName": "SOURCE",
+          "valueType": "System.String[]",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--verbosity": {
+          "description": "Set the MSBuild verbosity level. Allowed values are q[uiet], m[inimal], n[ormal], d[etailed], and diag[nostic].",
+          "hidden": false,
+          "aliases": [
+            "-v"
+          ],
+          "helpName": "LEVEL",
+          "valueType": "Microsoft.DotNet.Cli.Utils.VerbosityOptions",
+          "hasDefaultValue": true,
+          "defaultValue": "normal",
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--version": {
+          "description": "The version of the tool package to install.",
+          "hidden": false,
+          "helpName": "VERSION",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--yes": {
+          "description": "Accept all confirmation prompts using \"yes.\"",
+          "hidden": true,
+          "aliases": [
+            "-y"
+          ],
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        }
+      }
+    },
+    "install": {
+      "description": "Install global or local tool. Local tools are added to manifest and restored.",
+      "hidden": false,
+      "arguments": {
+        "packageId": {
+          "description": "Package reference in the form of a package identifier like 'dotnetsay' or package identifier and version separated by '@' like 'dotnetsay@2.1.7'.",
+          "order": 0,
+          "hidden": false,
+          "valueType": "Microsoft.DotNet.Cli.PackageIdentityWithRange",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          }
+        }
+      },
+      "options": {
+        "--add-source": {
+          "description": "Add an additional NuGet package source to use during installation.",
+          "hidden": false,
+          "helpName": "ADDSOURCE",
+          "valueType": "System.String[]",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--allow-downgrade": {
+          "description": "Allow package downgrade when installing a .NET tool package.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--allow-roll-forward": {
+          "description": "Allow a .NET tool to roll forward to newer versions of the .NET runtime if the runtime it targets isn't installed.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--arch": {
+          "description": "The target architecture.",
+          "hidden": false,
+          "aliases": [
+            "-a"
+          ],
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--configfile": {
+          "description": "The NuGet configuration file to use.",
+          "hidden": false,
+          "helpName": "FILE",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--create-manifest-if-needed": {
+          "description": "Create a tool manifest if one isn't found during tool installation. For information on how manifests are located, see https://aka.ms/dotnet/tools/create-manifest-if-needed",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": true,
+          "arity": {
+            "minimum": 0,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--disable-parallel": {
+          "description": "Prevent restoring multiple projects in parallel.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--framework": {
+          "description": "The target framework to install the tool for.",
+          "hidden": false,
+          "helpName": "FRAMEWORK",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--global": {
+          "description": "Install the tool for the current user.",
+          "hidden": false,
+          "aliases": [
+            "-g"
+          ],
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--ignore-failed-sources": {
+          "description": "Treat package source failures as warnings.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--interactive": {
+          "description": "Allows the command to stop and wait for user input or action (for example to complete authentication).",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--local": {
+          "description": "Install the tool and add to the local tool manifest (default).",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--no-cache": {
+          "description": "Do not cache packages and http requests.",
+          "hidden": true,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--no-http-cache": {
+          "description": "Do not cache packages and http requests.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--prerelease": {
+          "description": "Include pre-release packages.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--source": {
+          "description": "Replace all NuGet package sources to use during installation with these.",
+          "hidden": false,
+          "helpName": "SOURCE",
+          "valueType": "System.String[]",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--tool-manifest": {
+          "description": "Path to the manifest file.",
+          "hidden": false,
+          "helpName": "PATH",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--tool-path": {
+          "description": "The directory where the tool will be installed. The directory will be created if it does not exist.",
+          "hidden": false,
+          "helpName": "PATH",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--verbosity": {
+          "description": "Set the MSBuild verbosity level. Allowed values are q[uiet], m[inimal], n[ormal], d[etailed], and diag[nostic].",
+          "hidden": false,
+          "aliases": [
+            "-v"
+          ],
+          "helpName": "LEVEL",
+          "valueType": "Microsoft.DotNet.Cli.Utils.VerbosityOptions",
+          "hasDefaultValue": true,
+          "defaultValue": "normal",
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--version": {
+          "description": "The version of the tool package to install.",
+          "hidden": false,
+          "helpName": "VERSION",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        }
+      }
+    },
+    "list": {
+      "description": "List tools installed globally or locally.",
+      "hidden": false,
+      "arguments": {
+        "packageId": {
+          "description": "The NuGet Package Id of the tool to list",
+          "order": 0,
+          "hidden": false,
+          "helpName": "PACKAGE_ID",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "options": {
+        "--format": {
+          "description": "The output format for the list of tools.",
+          "hidden": false,
+          "valueType": "Microsoft.DotNet.Cli.Commands.Tool.List.ToolListOutputFormat",
+          "hasDefaultValue": true,
+          "defaultValue": 0,
+          "arity": {
+            "minimum": 0,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--global": {
+          "description": "List tools installed for the current user.",
+          "hidden": false,
+          "aliases": [
+            "-g"
+          ],
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--local": {
+          "description": "List the tools installed in the local tool manifest.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--tool-path": {
+          "description": "The directory containing the tools to list.",
+          "hidden": false,
+          "helpName": "PATH",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        }
+      }
+    },
+    "restore": {
+      "description": "Restore tools defined in the local tool manifest.",
+      "hidden": false,
+      "options": {
+        "--add-source": {
+          "description": "Add an additional NuGet package source to use during installation.",
+          "hidden": false,
+          "helpName": "ADDSOURCE",
+          "valueType": "System.String[]",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--configfile": {
+          "description": "The NuGet configuration file to use.",
+          "hidden": false,
+          "helpName": "FILE",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--disable-parallel": {
+          "description": "Prevent restoring multiple projects in parallel.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--ignore-failed-sources": {
+          "description": "Treat package source failures as warnings.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--interactive": {
+          "description": "Allows the command to stop and wait for user input or action (for example to complete authentication).",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--no-cache": {
+          "description": "Do not cache packages and http requests.",
+          "hidden": true,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--no-http-cache": {
+          "description": "Do not cache packages and http requests.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--tool-manifest": {
+          "description": "Path to the manifest file.",
+          "hidden": false,
+          "helpName": "PATH",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--verbosity": {
+          "description": "Set the MSBuild verbosity level. Allowed values are q[uiet], m[inimal], n[ormal], d[etailed], and diag[nostic].",
+          "hidden": false,
+          "aliases": [
+            "-v"
+          ],
+          "helpName": "LEVEL",
+          "valueType": "Microsoft.DotNet.Cli.Utils.VerbosityOptions",
+          "hasDefaultValue": true,
+          "defaultValue": "normal",
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        }
+      }
+    },
+    "run": {
+      "description": "Run a local tool. Note that this command cannot be used to run a global tool. ",
+      "hidden": false,
+      "arguments": {
+        "commandName": {
+          "description": "The command name of the tool to run.",
+          "order": 0,
+          "hidden": false,
+          "helpName": "COMMAND_NAME",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          }
+        },
+        "toolArguments": {
+          "description": "Arguments forwarded to the tool",
+          "order": 1,
+          "hidden": false,
+          "valueType": "System.Collections.Generic.IEnumerable<System.String>",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 0
+          }
+        }
+      },
+      "options": {
+        "--allow-roll-forward": {
+          "description": "Allow a .NET tool to roll forward to newer versions of the .NET runtime if the runtime it targets isn't installed.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        }
+      }
+    },
+    "search": {
+      "description": "Search dotnet tools in nuget.org",
+      "hidden": false,
+      "arguments": {
+        "searchTerm": {
+          "description": "Search term from package id or package description. Require at least one character.",
+          "order": 0,
+          "hidden": false,
+          "helpName": "SEARCH_TERM",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          }
+        }
+      },
+      "options": {
+        "--detail": {
+          "description": "Show detail result of the query.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--prerelease": {
+          "description": "Include pre-release packages.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--skip": {
+          "description": "The number of results to skip, for pagination.",
+          "hidden": false,
+          "helpName": "Skip",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--take": {
+          "description": "The number of results to return, for pagination.",
+          "hidden": false,
+          "helpName": "Take",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        }
+      }
+    },
+    "uninstall": {
+      "description": "Uninstall a global tool or local tool.",
+      "hidden": false,
+      "arguments": {
+        "packageId": {
+          "description": "Package reference",
+          "order": 0,
+          "hidden": false,
+          "helpName": "PACKAGE_ID",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          }
+        }
+      },
+      "options": {
+        "--global": {
+          "description": "Uninstall the tool from the current user's tools directory.",
+          "hidden": false,
+          "aliases": [
+            "-g"
+          ],
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--local": {
+          "description": "Uninstall the tool and remove it from the local tool manifest.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--tool-manifest": {
+          "description": "Path to the manifest file.",
+          "hidden": false,
+          "helpName": "PATH",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--tool-path": {
+          "description": "The directory containing the tool to uninstall.",
+          "hidden": false,
+          "helpName": "PATH",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        }
+      }
+    },
+    "update": {
+      "description": "Update a global or local tool.",
+      "hidden": false,
+      "arguments": {
+        "packageId": {
+          "description": "Package reference in the form of a package identifier like 'dotnetsay' or package identifier and version separated by '@' like 'dotnetsay@2.1.7'.",
+          "order": 0,
+          "hidden": false,
+          "valueType": "System.Nullable<Microsoft.DotNet.Cli.PackageIdentityWithRange>",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "options": {
+        "--add-source": {
+          "description": "Add an additional NuGet package source to use during installation.",
+          "hidden": false,
+          "helpName": "ADDSOURCE",
+          "valueType": "System.String[]",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--all": {
+          "description": "Update all tools.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--allow-downgrade": {
+          "description": "Allow package downgrade when installing a .NET tool package.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--configfile": {
+          "description": "The NuGet configuration file to use.",
+          "hidden": false,
+          "helpName": "FILE",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--disable-parallel": {
+          "description": "Prevent restoring multiple projects in parallel.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--framework": {
+          "description": "The target framework to install the tool for.",
+          "hidden": false,
+          "helpName": "FRAMEWORK",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--global": {
+          "description": "Install the tool for the current user.",
+          "hidden": false,
+          "aliases": [
+            "-g"
+          ],
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--ignore-failed-sources": {
+          "description": "Treat package source failures as warnings.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--interactive": {
+          "description": "Allows the command to stop and wait for user input or action (for example to complete authentication).",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--local": {
+          "description": "Install the tool and add to the local tool manifest (default).",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--no-cache": {
+          "description": "Do not cache packages and http requests.",
+          "hidden": true,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--no-http-cache": {
+          "description": "Do not cache packages and http requests.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--prerelease": {
+          "description": "Include pre-release packages.",
+          "hidden": false,
+          "valueType": "System.Boolean",
+          "hasDefaultValue": true,
+          "defaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 0
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--source": {
+          "description": "Replace all NuGet package sources to use during installation with these.",
+          "hidden": false,
+          "helpName": "SOURCE",
+          "valueType": "System.String[]",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--tool-manifest": {
+          "description": "Path to the manifest file.",
+          "hidden": false,
+          "helpName": "PATH",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 0,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--tool-path": {
+          "description": "The directory where the tool will be installed. The directory will be created if it does not exist.",
+          "hidden": false,
+          "helpName": "PATH",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--verbosity": {
+          "description": "Set the MSBuild verbosity level. Allowed values are q[uiet], m[inimal], n[ormal], d[etailed], and diag[nostic].",
+          "hidden": false,
+          "aliases": [
+            "-v"
+          ],
+          "helpName": "LEVEL",
+          "valueType": "Microsoft.DotNet.Cli.Utils.VerbosityOptions",
+          "hasDefaultValue": true,
+          "defaultValue": "normal",
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        },
+        "--version": {
+          "description": "The version of the tool package to install.",
+          "hidden": false,
+          "helpName": "VERSION",
+          "valueType": "System.String",
+          "hasDefaultValue": false,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "required": false,
+          "recursive": false
+        }
+      }
+    }
+  }
+}

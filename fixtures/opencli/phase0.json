@@ -1,0 +1,58 @@
+{
+  "opencliVersion": "1.0.0-alpha.14",
+  "info": {
+    "title": "Phase 0 CLI",
+    "summary": "A bounded fixture",
+    "description": "Unicode-ready description: Проверка 🚀",
+    "binary": "phase0",
+    "version": "1.0.0"
+  },
+  "commands": {
+    "phase0 {command} [flags]": {
+      "kind": "group",
+      "description": "Top-level command group"
+    },
+    "phase0 deploy <environment> [flags]": {
+      "summary": "Deploy 🚀",
+      "description": "Deploy to an environment.",
+      "aliases": ["ship"],
+      "args": [
+        {
+          "name": "environment",
+          "type": "string",
+          "required": true,
+          "summary": "Deployment target"
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "required": false,
+          "variadic": true,
+          "minItems": 0,
+          "maxItems": 3,
+          "description": "Optional tags"
+        }
+      ],
+      "flags": [
+        {
+          "name": "region",
+          "aliases": ["-r"],
+          "type": "string",
+          "required": false,
+          "choices": [{"value": "us"}, {"value": "eu"}],
+          "default": "us",
+          "description": "Deployment region"
+        }
+      ]
+    },
+    "phase0 empty [flags]": {
+      "kind": "group",
+      "summary": "Empty subcommands are valid"
+    },
+    "phase0 empty child [flags]": {
+      "kind": "action",
+      "args": [],
+      "flags": []
+    }
+  }
+}
