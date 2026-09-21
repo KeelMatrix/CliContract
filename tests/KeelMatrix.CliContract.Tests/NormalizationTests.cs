@@ -448,6 +448,30 @@ public sealed class NormalizationTests
     }
 
     [Fact]
+    public void OpenCliNestedCommandPathCollisionsFailClosed()
+    {
+        var input = OpenCliDocument("""
+        {"commands":{"tool run <first>":{},"tool run <second>":{}}}
+        """);
+
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", input));
+
+        Assert.Equal("OPENCLI_DUPLICATE_COMMAND_PATH", error.Code);
+    }
+
+    [Fact]
+    public void OpenCliRootCommandPathCollisionsFailClosed()
+    {
+        var input = OpenCliDocument("""
+        {"commands":{"tool":{},"tool <arg>":{}}}
+        """);
+
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", input));
+
+        Assert.Equal("OPENCLI_DUPLICATE_COMMAND_PATH", error.Code);
+    }
+
+    [Fact]
     public void OpenCliArgumentRequiredDefaultMatchesExplicitFalse()
     {
         var omitted = OpenCliDocument("""

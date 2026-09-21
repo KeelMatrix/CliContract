@@ -57,6 +57,30 @@ public sealed class CanonicalCommand
     public CanonicalCommand[] Subcommands { get; init; } = [];
 }
 
+internal static class CanonicalCommandValidation
+{
+    public static string? FindDuplicatePath(CanonicalCommand root)
+    {
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Stack<CanonicalCommand>([root]);
+        while (pending.Count > 0)
+        {
+            var command = pending.Pop();
+            if (!paths.Add(command.Path))
+            {
+                return command.Path;
+            }
+
+            foreach (var subcommand in command.Subcommands)
+            {
+                pending.Push(subcommand);
+            }
+        }
+
+        return null;
+    }
+}
+
 public abstract class CanonicalParameter
 {
     public required string Name { get; init; }

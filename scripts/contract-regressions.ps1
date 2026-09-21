@@ -34,11 +34,13 @@ try {
     $duplicate = '{"opencliVersion":"1.0.0-alpha.14","opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"}}'
     $source = Join-Path $temp 'source.json'
     $duplicatePath = Join-Path $temp 'duplicate.json'
+    $baselinePath = Join-Path $temp 'baseline.canonical.json'
     Write-Utf8 $source $valid
     Write-Utf8 $duplicatePath $duplicate
 
     Assert-Case 'duplicate-opencli' (Invoke-Tool @('validate', $duplicatePath, '--input', 'opencli', '--no-telemetry')) 3 'DUPLICATE_JSON_KEY'
     Assert-Case 'duplicate-auto' (Invoke-Tool @('validate', $duplicatePath, '--input', 'auto', '--no-telemetry')) 3 'DUPLICATE_JSON_KEY'
+    Assert-Case 'valid-baseline' (Invoke-Tool @('snapshot', $source, '--input', 'opencli', '--output', $baselinePath, '--no-telemetry')) 0 'SNAPSHOT'
 
     $badInputs = @{
         'bad-type' = $valid.Replace('"type":"string"', '"type":["string"]')
@@ -59,6 +61,20 @@ try {
         $path = Join-Path $temp ($case.Name + '.json')
         Write-Utf8 $path $case.Value
         Assert-Case $case.Name (Invoke-Tool @('validate', $path, '--input', 'opencli', '--no-telemetry')) 3 'OPENCLI_DUPLICATE_PARAMETER'
+    }
+
+    $duplicateNestedCommandPath = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run <first>":{},"tool run <second>":{}}}'
+    $duplicateRootCommandPath = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{},"tool <arg>":{}}}'
+    foreach ($case in @(
+        @{ Name = 'duplicate-command-path-nested'; Value = $duplicateNestedCommandPath },
+        @{ Name = 'duplicate-command-path-root'; Value = $duplicateRootCommandPath }
+    )) {
+        $path = Join-Path $temp ($case.Name + '.json')
+        Write-Utf8 $path $case.Value
+        Assert-Case ("$($case.Name)-validate") (Invoke-Tool @('validate', $path, '--input', 'opencli', '--no-telemetry')) 3 'OPENCLI_DUPLICATE_COMMAND_PATH'
+        Assert-Case ("$($case.Name)-snapshot") (Invoke-Tool @('snapshot', $path, '--input', 'opencli', '--output', (Join-Path $temp ($case.Name + '.canonical.json')), '--no-telemetry')) 3 'OPENCLI_DUPLICATE_COMMAND_PATH'
+        Assert-Case ("$($case.Name)-check") (Invoke-Tool @('check', $path, '--baseline', $baselinePath, '--input', 'opencli', '--no-telemetry')) 3 'OPENCLI_DUPLICATE_COMMAND_PATH'
+        Assert-Case ("$($case.Name)-diff-self") (Invoke-Tool @('diff', $path, $path, '--input', 'opencli', '--no-telemetry')) 3 'OPENCLI_DUPLICATE_COMMAND_PATH'
     }
 
     $oldArguments = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run <first> <second>":{"args":[{"name":"first"},{"name":"second"}]}}}'

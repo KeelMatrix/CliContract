@@ -79,6 +79,54 @@ public sealed class CompatibilityTests
         Assert.Equal("OPENCLI_DUPLICATE_PARAMETER", error.Code);
     }
 
+    [Theory]
+    [InlineData("root / run", "root / run")]
+    [InlineData("root", "root")]
+    public void CompatibilityAnalyzerRejectsDuplicateCanonicalCommandPaths(string firstPath, string secondPath)
+    {
+        var manifest = new CanonicalManifest
+        {
+            Adapter = "opencli",
+            SourceVersion = Normalizer.OpenCliVersion,
+            Root = new CanonicalCommand
+            {
+                Path = "root",
+                Subcommands =
+                [
+                    new CanonicalCommand { Path = firstPath },
+                    new CanonicalCommand { Path = secondPath }
+                ]
+            }
+        };
+
+        var error = Assert.Throws<CompatibilityException>(() => CompatibilityAnalyzer.Compare(manifest, manifest));
+
+        Assert.Equal("OPENCLI_DUPLICATE_COMMAND_PATH", error.Code);
+    }
+
+    [Fact]
+    public void CanonicalManifestReaderRejectsDuplicateCommandPaths()
+    {
+        var manifest = new CanonicalManifest
+        {
+            Adapter = "opencli",
+            SourceVersion = Normalizer.OpenCliVersion,
+            Root = new CanonicalCommand
+            {
+                Path = "root",
+                Subcommands =
+                [
+                    new CanonicalCommand { Path = "root / run" },
+                    new CanonicalCommand { Path = "root / run" }
+                ]
+            }
+        };
+
+        var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(Normalizer.Serialize(manifest)));
+
+        Assert.Equal("OPENCLI_DUPLICATE_COMMAND_PATH", error.Code);
+    }
+
     [Fact]
     public void DomainNarrowingIsBreakingButWideningIsNot()
     {

@@ -71,13 +71,21 @@ public static class CanonicalManifestReader
             throw new NormalizationException("UNSUPPORTED_MANIFEST_SOURCE", "The canonical manifest source format is not supported.");
         }
 
+        var root = ParseCommand(RequireObject(value["Root"], "INVALID_BASELINE"), limits);
+        if (CanonicalCommandValidation.FindDuplicatePath(root) is not null)
+        {
+            throw new NormalizationException(
+                "OPENCLI_DUPLICATE_COMMAND_PATH",
+                "The canonical command tree contains duplicate command paths.");
+        }
+
         return new CanonicalManifest
         {
             SchemaVersion = schemaVersion,
             Adapter = adapter,
             SourceVersion = sourceVersion,
             Info = value.ContainsKey("Info") ? ParseInfo(value["Info"], limits) : new(),
-            Root = ParseCommand(RequireObject(value["Root"], "INVALID_BASELINE"), limits)
+            Root = root
         };
     }
 

@@ -40,11 +40,12 @@ Each finding has a stable code, category, logical command path, and bounded mess
 | --- | ---: | --- |
 | `OPENCLI_REMOTE_REFERENCE` | `3` | Remote schema reference or include is unsupported; no network resolution is attempted |
 | `OPENCLI_DUPLICATE_PARAMETER` | `3` | An argument or option collection contains duplicate normalized names |
+| `OPENCLI_DUPLICATE_COMMAND_PATH` | `3` | Different OpenCLI command keys normalize to the same canonical command path |
 | `UNEXPECTED_ERROR` | `4` | Unexpected tool failure |
 
 ## Semantics
 
-The analyzer compares commands by logical path, options by normalized long name, and arguments by name. Source declaration order does not affect command, option, alias, or choice collections. Argument declaration order remains in the canonical manifest because positional order is part of the contract; reordering the same positional arguments produces breaking finding `KMCLI109`.
+The analyzer compares commands by logical path, options by normalized long name, and arguments by name. Source declaration order does not affect command, option, alias, or choice collections. Argument declaration order remains in the canonical manifest because positional order is part of the contract; reordering the same positional arguments produces breaking finding `KMCLI109`. Different command keys that normalize to the same logical path are rejected with `OPENCLI_DUPLICATE_COMMAND_PATH` rather than being merged or dropped.
 
 Breaking rules are command/option/argument removal, callable alias removal, optional-to-required changes, arity narrowing, required type narrowing, and allowed-value domain narrowing. Adding an optional command/option/argument or alias is informational. Adding a required parameter is breaking. Default changes are warnings. Summary/description changes are informational by default. Deprecation/status changes are warnings only when represented by the supported format.
 

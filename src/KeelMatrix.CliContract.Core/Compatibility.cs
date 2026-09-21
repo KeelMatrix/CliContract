@@ -38,6 +38,16 @@ public static class CompatibilityAnalyzer
             throw new CompatibilityException("BASELINE_VERSION_MISMATCH", "The baseline and current descriptions use different supported input versions.");
         }
 
+        var baselineDuplicate = CanonicalCommandValidation.FindDuplicatePath(baseline.Root);
+        var currentDuplicate = CanonicalCommandValidation.FindDuplicatePath(current.Root);
+        if (baselineDuplicate is not null || currentDuplicate is not null)
+        {
+            var duplicate = baselineDuplicate ?? currentDuplicate;
+            throw new CompatibilityException(
+                "OPENCLI_DUPLICATE_COMMAND_PATH",
+                $"The canonical command tree contains duplicate command path '{duplicate}'.");
+        }
+
         var findings = new List<CompatibilityFinding>();
         CompareCommand(baseline.Root, current.Root, findings);
         return new CompatibilityResult(findings);
@@ -67,8 +77,8 @@ public static class CompatibilityAnalyzer
         var currentArguments = ToUniqueMap(current.Arguments, "argument", current.Path);
         CompareParameters(baselineArguments, currentArguments, baseline.Path, "argument", findings);
 
-        var baselineCommands = baseline.Subcommands.ToDictionary(command => command.Path, StringComparer.Ordinal);
-        var currentCommands = current.Subcommands.ToDictionary(command => command.Path, StringComparer.Ordinal);
+        var baselineCommands = ToUniqueCommandMap(baseline.Subcommands);
+        var currentCommands = ToUniqueCommandMap(current.Subcommands);
         foreach (var removed in baselineCommands.Keys.Except(currentCommands.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
         {
             findings.Add(new CompatibilityFinding("KMCLI103", "breaking", removed, "Removed command."));
@@ -99,6 +109,22 @@ public static class CompatibilityAnalyzer
                 throw new CompatibilityException(
                     "OPENCLI_DUPLICATE_PARAMETER",
                     $"The canonical {kind} collection at {commandPath} contains duplicate normalized names.");
+            }
+        }
+
+        return result;
+    }
+
+    private static Dictionary<string, CanonicalCommand> ToUniqueCommandMap(IEnumerable<CanonicalCommand> commands)
+    {
+        var result = new Dictionary<string, CanonicalCommand>(StringComparer.Ordinal);
+        foreach (var command in commands)
+        {
+            if (!result.TryAdd(command.Path, command))
+            {
+                throw new CompatibilityException(
+                    "OPENCLI_DUPLICATE_COMMAND_PATH",
+                    $"The canonical command collection contains duplicate command path '{command.Path}'.");
             }
         }
 

@@ -910,6 +910,8 @@ public static class Normalizer
             normalized.Add(NormalizeOpenCliCommand(property.Key, RequireObject(property.Value, "OPENCLI_COMMAND"), limits));
         }
 
+        EnsureUniqueCommandPaths(normalized);
+
         var globalNode = OptionalProperty(root, "global", "OPENCLI_GLOBAL");
         var global = globalNode is null ? null : RequireObject(globalNode, "OPENCLI_GLOBAL");
         var globalOptions = global is null
@@ -1128,6 +1130,20 @@ public static class Normalizer
         }
 
         return tokens.Length == 1 ? "root" : "root / " + string.Join(" / ", tokens.Skip(1));
+    }
+
+    private static void EnsureUniqueCommandPaths(IEnumerable<CanonicalCommand> commands)
+    {
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var command in commands)
+        {
+            if (!paths.Add(command.Path))
+            {
+                throw new NormalizationException(
+                    "OPENCLI_DUPLICATE_COMMAND_PATH",
+                    "OpenCLI command keys normalize to duplicate canonical command paths.");
+            }
+        }
     }
 
     private static JsonNode? OptionalProperty(JsonObject objectNode, string property, string code)
