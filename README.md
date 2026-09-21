@@ -63,6 +63,8 @@ clicontract check ./opencli.yaml --baseline ./cli-contract.json --format json
 ## Troubleshooting
 
 - `MALFORMED_JSON` or `MALFORMED_YAML`: fix the source syntax; the tool never prints the whole input.
+- `INPUT_TOO_LARGE`: reduce the input below the configured size limit.
+- `DEPTH_LIMIT`: reduce the input nesting below the configured depth limit.
 - `INVALID_UTF8`: save the source as strict UTF-8 without a malformed byte sequence.
 - `UNSUPPORTED_OPENCLI_VERSION`: update the source to the pinned OpenCLI version or wait for a tool version that supports it.
 - `AMBIGUOUS_INPUT`: pass `--input opencli` after removing competing schema markers.

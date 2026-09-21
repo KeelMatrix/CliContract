@@ -9,6 +9,7 @@ return CliApplication.Run(args);
 internal static class CliApplication
 {
     private const string Version = "0.1.0";
+    private static readonly int MaxInputBytes = new NormalizationLimits().MaxInputBytes;
     private static readonly JsonSerializerOptions OutputJsonOptions = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public static int Run(string[] args)
@@ -173,28 +174,57 @@ internal static class CliApplication
             throw new InvocationException(code, "The requested input file does not exist.");
         }
 
-        byte[] bytes;
         try
         {
-            bytes = File.ReadAllBytes(path);
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan);
+            if (stream.Length > MaxInputBytes)
+            {
+                throw new InputTooLargeException();
+            }
+
+            var bytes = new byte[MaxInputBytes + 1];
+            var count = 0;
+            while (count < bytes.Length)
+            {
+                var read = stream.Read(bytes, count, bytes.Length - count);
+                if (read == 0) break;
+                count += read;
+            }
+
+            if (count > MaxInputBytes || stream.Length > MaxInputBytes || stream.Position < stream.Length)
+            {
+                throw new InputTooLargeException();
+            }
+
+            try
+            {
+                return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes, 0, count);
+            }
+            catch (DecoderFallbackException)
+            {
+                if (schemaInput)
+                {
+                    throw new NormalizationException("INVALID_UTF8", "The input file is not valid UTF-8.");
+                }
+
+                throw new InvocationException("INVALID_UTF8", "The ignore file is not valid UTF-8.");
+            }
+        }
+        catch (NormalizationException)
+        {
+            throw;
+        }
+        catch (InvocationException)
+        {
+            throw;
+        }
+        catch (InputTooLargeException)
+        {
+            throw new NormalizationException("INPUT_TOO_LARGE", "The input description exceeds the configured size limit in UTF-8 bytes.");
         }
         catch (Exception) when (code is "INPUT_NOT_FOUND" or "BASELINE_NOT_FOUND")
         {
             throw new InvocationException(code, "The requested input file could not be read.");
-        }
-
-        try
-        {
-            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
-        }
-        catch (DecoderFallbackException)
-        {
-            if (schemaInput)
-            {
-                throw new NormalizationException("INVALID_UTF8", "The input file is not valid UTF-8.");
-            }
-
-            throw new InvocationException("INVALID_UTF8", "The ignore file is not valid UTF-8.");
         }
     }
 
@@ -475,6 +505,7 @@ internal static class CliApplication
     private sealed record ToolError(string Code, string Message);
     private sealed record OutputEnvelope(ToolStatus Tool, IReadOnlyList<CompatibilityFinding> Findings, IReadOnlyList<ToolError> Errors);
     private sealed class InvocationException(string code, string message) : Exception(message) { public string Code { get; } = code; }
+    private sealed class InputTooLargeException : Exception;
     private enum InputKind { Auto, OpenCli }
     private enum OutputFormat { Text, Json }
     private enum FailOn { Breaking, Warning }

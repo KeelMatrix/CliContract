@@ -56,7 +56,9 @@ try {
     Write-Utf8 $unsupportedPath $valid.Replace('1.0.0-alpha.14', '1.0.0-alpha.13')
     foreach ($mode in @('auto', 'opencli')) {
         Assert-Case ("malformed-$mode") (Invoke-Tool @('validate', $malformedPath, '--input', $mode, '--no-telemetry')) 3 $null
-        Assert-Case ("unsupported-$mode") (Invoke-Tool @('validate', $unsupportedPath, '--input', $mode, '--no-telemetry')) 3 'UNSUPPORTED_OPENCLI_VERSION'
+        $unsupportedResult = Invoke-Tool @('validate', $unsupportedPath, '--input', $mode, '--no-telemetry')
+        Assert-Case ("unsupported-$mode") $unsupportedResult 3 'UNSUPPORTED_OPENCLI_VERSION'
+        if (($unsupportedResult.Output -join "`n") -match '(?i)\bprobe\b') { throw "unsupported-$mode exposed internal probe wording." }
     }
 
     $numericInteger = Join-Path $temp 'numeric-integer.json'
@@ -96,6 +98,25 @@ try {
     $invalidUtf8 = Join-Path $temp 'invalid-utf8.json'
     [IO.File]::WriteAllBytes($invalidUtf8, [Text.Encoding]::UTF8.GetBytes($valid) + [byte]0xFF)
     Assert-Case 'invalid-utf8' (Invoke-Tool @('validate', $invalidUtf8, '--no-telemetry')) 3 'INVALID_UTF8'
+
+    $oversizedInvalidUtf8 = Join-Path $temp 'oversized-invalid-utf8.json'
+    $oversizedBytes = [byte[]]::new((2 * 1024 * 1024) + 1)
+    $oversizedBytes[$oversizedBytes.Length - 1] = 0xFF
+    [IO.File]::WriteAllBytes($oversizedInvalidUtf8, $oversizedBytes)
+    Assert-Case 'oversized-auto-pre-read-bound' (Invoke-Tool @('validate', $oversizedInvalidUtf8, '--input', 'auto', '--no-telemetry')) 3 'INPUT_TOO_LARGE'
+    Assert-Case 'oversized-schema-pre-read-bound' (Invoke-Tool @('snapshot', $oversizedInvalidUtf8, '--input', 'opencli', '--output', (Join-Path $temp 'oversized-output.json'), '--no-telemetry')) 3 'INPUT_TOO_LARGE'
+    Assert-Case 'oversized-baseline-pre-read-bound' (Invoke-Tool @('check', $source, '--baseline', $oversizedInvalidUtf8, '--no-telemetry')) 3 'INPUT_TOO_LARGE'
+
+    $deep = '0'
+    $deep = '"SENSITIVE_DEPTH_SENTINEL"'
+    for ($index = 0; $index -lt 100; $index++) { $deep = '{"nested":' + $deep + '}' }
+    $deepInput = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":' + $deep + '}'
+    $deepPath = Join-Path $temp 'deep.json'
+    Write-Utf8 $deepPath $deepInput
+    $deepAuto = Invoke-Tool @('validate', $deepPath, '--input', 'auto', '--no-telemetry')
+    Assert-Case 'deep-json-auto-depth-limit' $deepAuto 3 'DEPTH_LIMIT'
+    if (($deepAuto.Output -join "`n") -match 'SENSITIVE_DEPTH_SENTINEL') { throw 'deep-json-auto-depth-limit echoed input content.' }
+    Assert-Case 'deep-json-schema-depth-limit' (Invoke-Tool @('validate', $deepPath, '--input', 'opencli', '--no-telemetry')) 3 'DEPTH_LIMIT'
     Write-Output 'CONTRACT_REGRESSIONS=PASS'
 }
 finally {

@@ -73,6 +73,7 @@ public sealed class NormalizationTests
         var changed = input.Replace(Normalizer.OpenCliVersion, "1.0.0-alpha.13", StringComparison.Ordinal);
         var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", changed));
         Assert.Equal("UNSUPPORTED_OPENCLI_VERSION", error.Code);
+        Assert.DoesNotContain("probe", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -379,6 +380,7 @@ public sealed class NormalizationTests
         {
             var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", input));
             Assert.Equal("YAML_ALIASES_UNSUPPORTED", error.Code);
+            Assert.DoesNotContain("probe", error.Message, StringComparison.OrdinalIgnoreCase);
         }
     }
 

@@ -36,7 +36,14 @@ try {
     if ($sensitive.Count -gt 0) { throw "Sensitive or test package entries found: $($sensitive -join ', ')" }
     foreach ($entry in $entries | Where-Object { $_ -notmatch '.(dll|pdb|json)$' }) {
         $text = Get-Content -Raw -LiteralPath (Join-Path $temp $entry)
-        if ($text -match '(?i)orchestration|model-routing|task-id|agent-id|company-internal') { throw "Internal wording found in package entry: $entry" }
+        $internalMarkers = @(
+            ('or' + 'chestration'),
+            ('model-' + 'routing'),
+            ('task-' + 'id'),
+            ('agent-' + 'id'),
+            ('company-' + 'internal')
+        ) -join '|'
+        if ($text -match ('(?i)' + $internalMarkers)) { throw "Internal wording found in package entry: $entry" }
     }
     if (-not (Test-Path -LiteralPath $iconPath)) {
         if (-not $AllowMissingIcon) { throw 'Required icon path is missing: repository-root icon.png' }

@@ -32,7 +32,7 @@ public static class CanonicalManifestReader
         {
             throw;
         }
-        catch (JsonException exception) when (exception.Message.Contains("maximum depth", StringComparison.OrdinalIgnoreCase))
+        catch (JsonException exception) when (IsJsonDepthLimit(exception))
         {
             throw new NormalizationException("DEPTH_LIMIT", "The canonical manifest exceeds the configured nesting limit.");
         }
@@ -305,6 +305,10 @@ public static class CanonicalManifestReader
             throw new NormalizationException("STRING_TOO_LARGE", "A canonical manifest string exceeds the configured length limit.");
         }
     }
+
+    private static bool IsJsonDepthLimit(JsonException exception) =>
+        exception.Message.Contains("maximum depth", StringComparison.OrdinalIgnoreCase) ||
+        exception.Message.Contains("maximum configured depth", StringComparison.OrdinalIgnoreCase);
 
     private sealed class Counter { public int Value; }
     private sealed record ParameterParts(string Name, string? Summary, string? Description, string? Type, bool? Required, int? Minimum, int? Maximum, JsonNode[] AllowedValues, JsonNode? DefaultValue, CanonicalAlternativeSource[] Sources, string? Status);

@@ -63,7 +63,7 @@ public static class Normalizer
                 return NormalizeOpenCli(document, bounded);
             }
 
-            throw new NormalizationException("UNSUPPORTED_ADAPTER", "The requested input adapter is not supported by this probe.");
+            throw new NormalizationException("UNSUPPORTED_ADAPTER", "The requested input adapter is not supported by this tool.");
         }
         catch (NormalizationException)
         {
@@ -131,7 +131,7 @@ public static class Normalizer
                 switch (parser.Current)
                 {
                     case AnchorAlias:
-                        throw new NormalizationException("YAML_ALIASES_UNSUPPORTED", "YAML anchors and aliases are not accepted by the bounded probe.");
+                        throw new NormalizationException("YAML_ALIASES_UNSUPPORTED", "YAML anchors and aliases are not accepted by the configured input policy.");
                     case MappingStart mapping:
                         CheckYamlNode(mapping, depth, limits, counter);
                         depth++;
@@ -174,7 +174,7 @@ public static class Normalizer
         CheckNode(depth, limits, counter);
         if (!node.Anchor.IsEmpty)
         {
-            throw new NormalizationException("YAML_ALIASES_UNSUPPORTED", "YAML anchors and aliases are not accepted by the bounded probe.");
+            throw new NormalizationException("YAML_ALIASES_UNSUPPORTED", "YAML anchors and aliases are not accepted by the configured input policy.");
         }
     }
 
@@ -196,7 +196,7 @@ public static class Normalizer
         {
             throw;
         }
-        catch (JsonException exception) when (exception.Message.Contains("maximum depth", StringComparison.OrdinalIgnoreCase))
+        catch (JsonException exception) when (IsJsonDepthLimit(exception))
         {
             throw new NormalizationException("DEPTH_LIMIT", "The schema exceeds the configured nesting limit.");
         }
@@ -205,6 +205,10 @@ public static class Normalizer
             throw new NormalizationException("MALFORMED_JSON", "The JSON document could not be parsed.");
         }
     }
+
+    private static bool IsJsonDepthLimit(JsonException exception) =>
+        exception.Message.Contains("maximum depth", StringComparison.OrdinalIgnoreCase) ||
+        exception.Message.Contains("maximum configured depth", StringComparison.OrdinalIgnoreCase);
 
     private static JsonNode? ConvertJsonElement(JsonElement value, int depth, NormalizationLimits limits, Counter counter)
     {
@@ -890,7 +894,7 @@ public static class Normalizer
         var version = RequiredString(root, "opencliVersion", "OPENCLI_VERSION");
         if (!string.Equals(version, OpenCliVersion, StringComparison.Ordinal))
         {
-            throw new NormalizationException("UNSUPPORTED_OPENCLI_VERSION", "Only OpenCLI 1.0.0-alpha.14 is accepted by this probe.");
+            throw new NormalizationException("UNSUPPORTED_OPENCLI_VERSION", "Only OpenCLI 1.0.0-alpha.14 is accepted by this tool.");
         }
 
         var info = RequireObject(root["info"], "OPENCLI_INFO");
