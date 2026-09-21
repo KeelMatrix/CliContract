@@ -21,7 +21,7 @@ Use `--format json` for CI consumers, `--fail-on warning` to gate warnings, and 
 
 ## Exit codes
 
-`0` means no gated finding, `1` means a gated finding, `2` means invalid invocation/configuration, `3` means invalid or unsupported input, and `4` means an internal analysis error. JSON output places compatibility findings and tool errors in separate arrays.
+`0` means no gated finding, `1` means a gated finding, `2` means invalid invocation/configuration, `3` means invalid or unsupported input, and `4` means an unexpected tool failure. JSON output places compatibility findings and tool errors in separate arrays.
 
 ## Privacy and limitations
 

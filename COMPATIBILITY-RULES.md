@@ -33,6 +33,12 @@ This document defines the v1 change-classification contract for KeelMatrix CliCo
 
 Each finding has a stable code, category, logical command path, and bounded message. Paths use forms such as `root / deploy / --region`; source filesystem paths are not diagnostic paths.
 
+## Stable tool diagnostics
+
+| Code | Exit code | Meaning |
+| --- | ---: | --- |
+| `UNEXPECTED_ERROR` | `4` | Unexpected tool failure |
+
 ## Semantics
 
 The analyzer compares commands by logical path, options by normalized long name, and arguments by name. Source declaration order does not affect command, option, alias, or choice collections. Argument declaration order remains in the canonical manifest because positional order is part of the contract; reordering positional arguments is represented by the manifest and should be reviewed as a contract change.

@@ -25,6 +25,8 @@ Assert-NativeSuccess 'Determinism verification'
 Assert-NativeSuccess 'No-execution source scan'
 & pwsh -NoProfile -File ./scripts/test-no-execution.ps1
 Assert-NativeSuccess 'No-execution harness'
+& pwsh -NoProfile -File ./scripts/scan-user-facing-surface.ps1
+Assert-NativeSuccess 'User-facing wording scan'
  $audit = dotnet list KeelMatrix.CliContract.sln package --vulnerable --include-transitive --configfile NuGet.config 2>&1
  $audit | Out-Host
  if (($audit -join "`n") -match '(?im)^\s*[>]?\s*.*Package.*\s+has the following vulnerable packages|(?im)^\s*>\s+.*\s+(Critical|High|Moderate|Low)\s+') { throw 'Dependency vulnerability audit reported a vulnerable package.' }

@@ -1,6 +1,6 @@
 # Canonical Manifest
 
-CliContract writes canonical manifest schema version `1`. The manifest is a KeelMatrix-owned representation and is not an OpenCLI object-model dump.
+CliContract writes canonical manifest schema version `1`. The manifest is a KeelMatrix-owned representation and is not an OpenCLI structure dump.
 
 ## Top-level shape
 

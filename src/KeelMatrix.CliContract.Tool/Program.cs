@@ -45,7 +45,7 @@ internal static class CliApplication
         }
         catch (Exception)
         {
-            return ReportError("INTERNAL_ERROR", "The analysis could not complete.", 4, RequestedFormat(args));
+            return ReportError("UNEXPECTED_ERROR", "An unexpected tool failure occurred.", 4, RequestedFormat(args));
         }
     }
 
@@ -525,5 +525,12 @@ internal static class CliApplication
       --fail-on breaking|warning Failure threshold (default: breaking)
       --ignore <file>            Explicit JSON suppression file
       --no-telemetry             Disable optional telemetry; CI/development suppress automatically
+
+    Exit codes:
+      0  No gated compatibility finding
+      1  Gated compatibility finding reported
+      2  Invalid invocation or configuration
+      3  Invalid or unsupported input schema or baseline
+      4  Unexpected tool failure
     """;
 }

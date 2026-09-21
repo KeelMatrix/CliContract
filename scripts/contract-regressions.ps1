@@ -91,6 +91,9 @@ try {
     $defaultTelemetryOptOut = Invoke-Tool @('diff', $optional, $required, '--format', 'text')
     Assert-Case 'shared-telemetry-optout' $defaultTelemetryOptOut 1 'KMCLI105'
 
+    $help = Invoke-Tool @('--help')
+    Assert-Case 'help-exit-codes' $help 0 '4  Unexpected tool failure'
+
     Assert-Case 'duplicate-format' (Invoke-Tool @('validate', $source, '--format', 'text', '--format', 'json', '--no-telemetry')) 2 'DUPLICATE_OPTION'
     Assert-Case 'duplicate-fail-on' (Invoke-Tool @('validate', $source, '--fail-on', 'breaking', '--fail-on', 'warning', '--no-telemetry')) 2 'DUPLICATE_OPTION'
     Assert-Case 'duplicate-output' (Invoke-Tool @('snapshot', $source, '--output', (Join-Path $temp 'one.json'), '--output', (Join-Path $temp 'two.json'), '--no-telemetry')) 2 'DUPLICATE_OPTION'

@@ -38,7 +38,7 @@ The stable diagnostic catalog and classification contract are in [`COMPATIBILITY
 | `1` | A gated compatibility finding was reported |
 | `2` | Invalid invocation or configuration |
 | `3` | Invalid or unsupported input schema or baseline |
-| `4` | Internal analysis error |
+| `4` | Unexpected tool failure |
 
 JSON output always separates `findings` from `errors`. A parser or adapter error cannot be represented as a compatible result.
 

@@ -34,16 +34,26 @@ try {
     if ($unexpected.Count -gt 0) { throw "Unexpected package entries: $($unexpected -join ', ')" }
     $sensitive = @($entries | Where-Object { $_ -match '(^|/)(.env|.env.|appsettings|secrets?|.*.key|.*.pfx|AGENTS.md|.*test.*)' })
     if ($sensitive.Count -gt 0) { throw "Sensitive or test package entries found: $($sensitive -join ', ')" }
+    $forbiddenSurfacePatterns = @(
+        '(?i)\bprobe\b',
+        '(?i)\bphase\s*0\b',
+        '(?i)\bevidence\b',
+        '(?i)\borchestration\b',
+        '(?i)\b(codex|paperclip|frontier)\b',
+        '(?i)\b(agent|model)\b',
+        '(?i)model[- ]routing',
+        '(?i)task[- ]id',
+        '(?i)agent[- ]id',
+        '(?i)company[- ]internal',
+        '(?i)\binternal[_ -]?error\b',
+        '(?i)\binternal\s+analysis\s+error\b',
+        '\bKEE-\d+\b'
+    )
     foreach ($entry in $entries | Where-Object { $_ -notmatch '.(dll|pdb|json)$' }) {
         $text = Get-Content -Raw -LiteralPath (Join-Path $temp $entry)
-        $internalMarkers = @(
-            ('or' + 'chestration'),
-            ('model-' + 'routing'),
-            ('task-' + 'id'),
-            ('agent-' + 'id'),
-            ('company-' + 'internal')
-        ) -join '|'
-        if ($text -match ('(?i)' + $internalMarkers)) { throw "Internal wording found in package entry: $entry" }
+        foreach ($pattern in $forbiddenSurfacePatterns) {
+            if ($text -match $pattern) { throw "Forbidden user-facing wording found in package entry: $entry" }
+        }
     }
     if (-not (Test-Path -LiteralPath $iconPath)) {
         if (-not $AllowMissingIcon) { throw 'Required icon path is missing: repository-root icon.png' }
