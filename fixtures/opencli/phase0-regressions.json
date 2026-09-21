@@ -1,0 +1,56 @@
+{
+  "opencliVersion": "1.0.0-alpha.14",
+  "info": {
+    "title": "Phase 0 Regression CLI",
+    "binary": "regression",
+    "version": "1.0.0"
+  },
+  "global": {
+    "flags": [
+      {
+        "name": "debug",
+        "type": "boolean",
+        "summary": "Enable debug output"
+      },
+      {
+        "name": "output-format",
+        "type": "string",
+        "default": "text",
+        "choices": [{"value": "text"}, {"value": "json"}],
+        "alternativeSources": [
+          {"type": "$ENV", "property": "REGRESSION_OUTPUT_FORMAT"},
+          {"type": "$FILE", "property": "$.output.format"}
+        ]
+      }
+    ]
+  },
+  "commands": {
+    "regression inspect <environment> <region> [flags]": {
+      "args": [
+        {"name": "environment", "type": "string", "required": true},
+        {"name": "region", "type": "string"}
+      ],
+      "flags": [
+        {
+          "name": "choice",
+          "type": "string",
+          "choices": [
+            {"value": "text"},
+            {"value": 7},
+            {"value": 7.5},
+            {"value": true}
+          ]
+        },
+        {
+          "name": "retries",
+          "type": "integer",
+          "default": 3,
+          "alternativeSources": [
+            {"type": "$ENV", "property": "REGRESSION_RETRIES"},
+            {"type": "$FILE", "property": "$.retryCount"}
+          ]
+        }
+      ]
+    }
+  }
+}

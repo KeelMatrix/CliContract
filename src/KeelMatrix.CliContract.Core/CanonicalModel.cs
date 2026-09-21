@@ -31,9 +31,16 @@ public abstract class CanonicalParameter
     public bool? Required { get; init; }
     public int? ArityMinimum { get; init; }
     public int? ArityMaximum { get; init; }
-    public string[] AllowedValues { get; init; } = [];
+    public JsonNode[] AllowedValues { get; init; } = [];
     public JsonNode? DefaultValue { get; init; }
+    public CanonicalAlternativeSource[] AlternativeSources { get; init; } = [];
     public string? Status { get; init; }
+}
+
+public sealed class CanonicalAlternativeSource
+{
+    public required string Type { get; init; }
+    public required string Property { get; init; }
 }
 
 public sealed class CanonicalArgument : CanonicalParameter

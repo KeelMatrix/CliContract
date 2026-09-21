@@ -3,7 +3,7 @@
     "phase0 empty child [flags]": {"flags": [], "args": [], "kind": "action"},
     "phase0 deploy <environment> [flags]": {
       "flags": [{"description": "Deployment region", "default": "us", "choices": [{"value": "eu"}, {"value": "us"}], "required": false, "type": "string", "aliases": ["-r"], "name": "region"}],
-      "args": [{"description": "Optional tags", "maxItems": 3, "minItems": 0, "variadic": true, "required": false, "type": "string", "name": "tag"}, {"summary": "Deployment target", "required": true, "type": "string", "name": "environment"}],
+      "args": [{"summary": "Deployment target", "required": true, "type": "string", "name": "environment"}, {"description": "Optional tags", "maxItems": 3, "minItems": 0, "variadic": true, "required": false, "type": "string", "name": "tag"}],
       "description": "Deploy to an environment.", "aliases": ["ship"], "summary": "Deploy 🚀"
     },
     "phase0 {command} [flags]": {"description": "Top-level command group", "kind": "group"},

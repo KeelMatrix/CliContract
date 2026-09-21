@@ -12,7 +12,9 @@ This document records the probe boundary. It is not a product README and does no
 
 ## Fixture policy
 
-`fixtures/opencli/phase0.json` is an authored JSON equivalent of the official alpha.14 constructs because the probe uses a small expanded corpus to cover nested commands, aliases, positional arguments, required/optional values, arity, choices, defaults, Unicode text, empty subcommands, and order variation. The upstream official example is linked above and its exact revision is recorded in the push report. The two JSON fixtures differ only in source property/element order.
+`fixtures/opencli/phase0.json` is an authored JSON corpus covering nested commands, aliases, positional arguments, required/optional values, arity, choices, defaults, Unicode text, empty subcommands, and source-order variation. `fixtures/opencli/phase0-regressions.json` additionally covers root global flags, scalar choice values, declaration-ordered positional arguments, alternative default sources, and omitted versus explicit defaulted fields. The positional argument arrays intentionally retain their declared order; only source ordering that is not semantically meaningful is varied in the reordered fixture.
+
+The pinned upstream alpha.14 examples are included as `fixtures/opencli/petstore-cli.ocs.json` and `fixtures/opencli/globalflags-cli.ocs.yaml`. The upstream repository revision `683d0ca92fc37ccc2626e64db0a8c32f3c4063c0` is MIT licensed (`Copyright (c) 2026 bcdxn`), so these fixtures are included with source and license attribution here.
 
 `fixtures/dotnet/*.json` includes raw SDK output captures and a small synthetic-minimal fixture preserving the observed shape for deterministic unit coverage. The synthetic fixture is not evidence of a general application contract.
 
@@ -23,24 +25,26 @@ This document records the probe boundary. It is not a product README and does no
 | command removed | command map key | `subcommands` map key | command logical path | `phase0` canonical command paths; SDK captures contain nested keys | OpenCLI yes; .NET yes for names |
 | option removed | `flags[].name` | `options` map key | `CanonicalOption.Name` | deploy/region fixtures | OpenCLI yes; .NET yes |
 | argument removed | `args[].name` | `arguments` map key | `CanonicalArgument.Name` | deploy fixture and SDK captures | OpenCLI yes; .NET yes |
-| callable alias removed | `commands[].aliases` | not represented | `CanonicalCommand.Aliases` | deploy alias `ship` | OpenCLI yes; .NET no |
+| callable alias removed | `commands[].aliases` | observed `subcommands[].aliases` | `CanonicalCommand.Aliases` | deploy alias `ship`; SDK `execute` alias `exec` | OpenCLI yes; .NET not advertised |
 | optional -> required | `required` | option `required`; argument `arity.minimum` | `Required` plus arity | deploy region and synthetic format | OpenCLI yes; .NET options yes, arguments are contract-derived from arity |
 | accepted arity narrowed | `variadic`, `minItems`, `maxItems`, `required` | `arity.minimum`, `arity.maximum` | `ArityMinimum`, `ArityMaximum` | tag and synthetic format | yes for represented arity |
-| required type/domain narrowed | `type`, `choices` | `valueType`; no structured choices | `Type`, `AllowedValues` | region choices and SDK `valueType` | OpenCLI yes; .NET type yes, domain no |
+| required type/domain narrowed | `type`, `choices` | `valueType`; no structured choices | `Type`, scalar `AllowedValues` | region choices and SDK `valueType` | OpenCLI yes; .NET type yes, domain no |
 | command added | command map key | `subcommands` map key | command logical path | nested fixture/captures | yes for names |
 | optional option added | flag item with `required:false` | option `required:false` | option name + required | region fixture and SDK options | OpenCLI yes; .NET yes |
 | alias added | `aliases` | `aliases` on options only | sorted alias arrays | region `-r`, SDK `-f` | OpenCLI yes; .NET option aliases yes, callable aliases no |
-| default-value change | `default` | `hasDefaultValue`, `defaultValue` | `DefaultValue` | region default and SDK defaults | yes when present |
+| default-value change | `default` | `hasDefaultValue`, `defaultValue` | `DefaultValue` plus ordered `AlternativeSources` | region/default-source fixtures and SDK defaults | yes when present |
 | description/help change | `summary`, `description` | `description` | summary/description | Unicode and SDK descriptions | yes |
 | deprecation/status change | not represented by alpha.14 fields | not represented | `Status` remains null | raw schemas contain no deprecation/status field | no; not advertised as a represented rule |
 
 ## Verdict
 
-**PARTIAL PASS.** OpenCLI alpha.14 passes the represented v1 compatibility attributes and deterministic normalization. The .NET CLI-schema probe is not advertised: the observed SDK output has no format version, no callable-command alias field, no structured allowed-value/domain field, and the flag is documented and observed as .NET SDK CLI introspection rather than a stable general application export. The proposed v1 `--input` kinds are `auto|opencli`; `dotnet` is not advertised.
+**PARTIAL PASS.** OpenCLI alpha.14 passes the represented v1 compatibility attributes and deterministic normalization. The .NET CLI-schema probe is not advertised because the observed SDK output has no explicit format version, no structured allowed-value/domain field, and the flag is documented and observed as .NET SDK CLI introspection rather than a stable general application export. The raw capture also contains a callable alias at `fixtures/dotnet/tool-cli-schema.json:7-12` (`subcommands.execute.aliases: ["exec"]`), so callable-alias absence is not a valid reason for the decision. The proposed v1 `--input` kinds are `auto|opencli`; `dotnet` is not advertised.
 
 ## Determinism and safety
 
-The exact commands and output hashes are appended before push. The test suite compares the original and reordered/CRLF OpenCLI fixtures. The no-execution check is `pwsh ./scripts/check-no-execution.ps1`; it scans only the core source for process-start, network, dynamic-load, and activation APIs. This proves the checked source path has no such references; it does not prove host-level behavior outside the repository or future code not covered by the scan.
+The exact commands and output hashes are appended before push. The test suite compares the original and reordered/CRLF OpenCLI fixtures, while preserving positional argument declaration order as contract data. Adapter failures are bounded as documented `NormalizationException` errors and do not escape as raw process failures. The no-execution check is `pwsh ./scripts/check-no-execution.ps1`; it scans every tracked source/config file with a source extension across the repository. `pwsh ./scripts/test-no-execution.ps1` proves an explicit forbidden-reference fixture is rejected. These checks prove only the files scanned by the command and do not prove host-level behavior or untracked/future files outside that set.
+
+The probe reports normalization failures as `CODE: message` with exit code `3`; unexpected adapter failures are mapped to the documented `NORMALIZATION_ERROR` code. Probe infrastructure failures use `INTERNAL_ERROR` and exit code `4`, while missing input remains an invocation error with exit code `2`.
 
 ## Raw freshness and collision checks
 
@@ -132,7 +136,7 @@ Exact command:
 pwsh -NoProfile -File ./scripts/verify-determinism.ps1
 ~~~
 
-Output: four normalizations succeeded and PASS: repeated, reordered, and CRLF inputs produced identical canonical bytes. The canonical output hash was 7AD19BE6A025928CE82F7AD6AC1DDC0D09263681550811191F27CC4D49D1E505 for the original, repeated, reordered, and CRLF-output cases; the CRLF input itself had the distinct hash A2472297C769FD4818BE7FD742FB2F9FA7E8EC662708EED158D8CD4BB4F6EF85. The final run duration was 7432 ms on Windows. No Linux container or second OS was available, so cross-OS byte identity remains unverified.
+Output: four normalizations succeeded and PASS: repeated, semantically reordered, and CRLF inputs produced identical canonical bytes. The canonical output hash was 9CEDDD29443CFB9D995B6412AF3A42031E2B2CC6369D1543D1A6B649DC8AFD05 for the original, repeated, reordered, and CRLF-output cases; the CRLF input itself had the distinct hash 7D0127E74605CC35AE5D9F734C426DDB248F8D6AD714B0C2416BFC75794A9A7B. The final combined determinism/no-execution/fixture-check command completed in 11.2 seconds on Windows. No Linux container or second OS was available, so cross-OS byte identity remains unverified.
 
 ## No-execution/no-network proof
 
@@ -140,9 +144,8 @@ Exact command and output:
 
 ~~~
 pwsh -NoProfile -File ./scripts/check-no-execution.ps1
-PASS: Core normalization source has no process-start, network, dynamic-load, or activation reference.
+PASS: scanned 9 tracked source/config file(s) plus 0 explicit file(s); no process-start, network, dynamic-load, or activation reference found. This proves only the scanned files, not runtime behavior or untracked/future files.
 EXIT=0
-DURATION_MS=521
 ~~~
 
-The scan covers all .cs files in src/KeelMatrix.CliContract.Core and checks for process-start, network, dynamic-load, and activation API names. It does not prove behavior outside the scanned source or future files not included by the script.
+The check now enumerates every tracked source/config file with a recognized source extension across the repository, including probe, tests, future source directories, project configuration, and solution files. It does not prove runtime behavior, dependencies, or untracked/future files outside the scanned set. The fixture regression command is `pwsh -NoProfile -File ./scripts/test-no-execution.ps1`; it fails closed when `fixtures/no-execution/forbidden-reference.txt` is passed as an explicit scan input.

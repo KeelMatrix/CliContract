@@ -6,12 +6,30 @@ $reordered = Join-Path $root 'fixtures/opencli/phase0-reordered.json'
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-phase0-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp | Out-Null
 try {
-    dotnet run --project $probe -c Release --no-restore -- normalize opencli $fixture (Join-Path $temp 'first.json') | Out-Host
-    dotnet run --project $probe -c Release --no-restore -- normalize opencli $fixture (Join-Path $temp 'second.json') | Out-Host
-    dotnet run --project $probe -c Release --no-restore -- normalize opencli $reordered (Join-Path $temp 'reordered.json') | Out-Host
+    function Invoke-Normalization {
+        param(
+            [string] $InputPath,
+            [string] $OutputPath
+        )
+
+        $output = & dotnet run --project $probe -c Release --no-restore -- normalize opencli $InputPath $OutputPath 2>&1
+        $exitCode = $LASTEXITCODE
+        $output | Out-Host
+        if ($exitCode -ne 0) {
+            throw "Normalization failed for $InputPath with native exit code $exitCode."
+        }
+
+        if (-not (Test-Path -LiteralPath $OutputPath) -or (Get-Item -LiteralPath $OutputPath).Length -eq 0) {
+            throw "Normalization produced no output for $InputPath."
+        }
+    }
+
+    Invoke-Normalization $fixture (Join-Path $temp 'first.json')
+    Invoke-Normalization $fixture (Join-Path $temp 'second.json')
+    Invoke-Normalization $reordered (Join-Path $temp 'reordered.json')
     $crlf = Join-Path $temp 'crlf.json'
     [IO.File]::WriteAllText($crlf, ([IO.File]::ReadAllText($fixture)).Replace("`n", "`r`n"))
-    dotnet run --project $probe -c Release --no-restore -- normalize opencli $crlf (Join-Path $temp 'crlf-output.json') | Out-Host
+    Invoke-Normalization $crlf (Join-Path $temp 'crlf-output.json')
     $hashes = Get-FileHash (Join-Path $temp '*.json') -Algorithm SHA256
     $hashes | Format-Table -AutoSize
     $firstHash = ($hashes | Where-Object Path -like '*first.json').Hash

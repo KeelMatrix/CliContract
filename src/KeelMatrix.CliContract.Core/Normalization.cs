@@ -32,18 +32,29 @@ public static class Normalizer
 
     public static CanonicalManifest Normalize(string adapter, string input, NormalizationLimits? limits = null)
     {
-        var bounded = limits ?? new NormalizationLimits();
-        if (input.Length > bounded.MaxInputBytes)
+        try
         {
-            throw new NormalizationException("INPUT_TOO_LARGE", "The input description exceeds the configured size limit.");
-        }
+            var bounded = limits ?? new NormalizationLimits();
+            if (input.Length > bounded.MaxInputBytes)
+            {
+                throw new NormalizationException("INPUT_TOO_LARGE", "The input description exceeds the configured size limit.");
+            }
 
-        return adapter.ToLowerInvariant() switch
+            return adapter.ToLowerInvariant() switch
+            {
+                "opencli" => NormalizeOpenCli(ParseOpenCliDocument(input, bounded), bounded),
+                "dotnet" => NormalizeDotnet(ParseJson(input, bounded, "DOTNET_JSON"), bounded),
+                _ => throw new NormalizationException("UNSUPPORTED_ADAPTER", "The requested input adapter is not supported by this probe.")
+            };
+        }
+        catch (NormalizationException)
         {
-            "opencli" => NormalizeOpenCli(ParseOpenCliDocument(input, bounded), bounded),
-            "dotnet" => NormalizeDotnet(ParseJson(input, bounded, "DOTNET_JSON"), bounded),
-            _ => throw new NormalizationException("UNSUPPORTED_ADAPTER", "The requested input adapter is not supported by this probe.")
-        };
+            throw;
+        }
+        catch (Exception)
+        {
+            throw new NormalizationException("NORMALIZATION_ERROR", "The input description could not be normalized.");
+        }
     }
 
     public static string Serialize(CanonicalManifest manifest)
@@ -232,6 +243,12 @@ public static class Normalizer
             normalized.Add(NormalizeOpenCliCommand(property.Key, RequireObject(property.Value, "OPENCLI_COMMAND"), limits));
         }
 
+        var global = root["global"] is null ? null : RequireObject(root["global"], "OPENCLI_GLOBAL");
+        var globalOptions = global is null
+            ? Array.Empty<CanonicalOption>()
+            : ReadOpenCliParameters(global["flags"], true, limits).Cast<CanonicalOption>().ToArray();
+        var rootCommand = normalized.FirstOrDefault(c => c.Path == "root");
+
         return new CanonicalManifest
         {
             Adapter = "opencli",
@@ -240,10 +257,10 @@ public static class Normalizer
             {
                 Path = "root",
                 Subcommands = normalized.Where(c => c.Path != "root").OrderBy(c => c.Path, StringComparer.Ordinal).ToArray(),
-                Arguments = normalized.Where(c => c.Path == "root").SelectMany(c => c.Arguments).OrderBy(a => a.Name, StringComparer.Ordinal).ToArray(),
-                Options = normalized.Where(c => c.Path == "root").SelectMany(c => c.Options).OrderBy(a => a.Name, StringComparer.Ordinal).ToArray(),
-                Summary = normalized.FirstOrDefault(c => c.Path == "root")?.Summary,
-                Description = normalized.FirstOrDefault(c => c.Path == "root")?.Description
+                Arguments = rootCommand?.Arguments ?? [],
+                Options = globalOptions.Concat(rootCommand?.Options ?? []).OrderBy(a => a.Name, StringComparer.Ordinal).ToArray(),
+                Summary = rootCommand?.Summary,
+                Description = rootCommand?.Description
             }
         };
     }
@@ -252,7 +269,7 @@ public static class Normalizer
     {
         var path = ParseOpenCliPath(key);
         var aliases = Strings(value["aliases"], limits).OrderBy(x => x, StringComparer.Ordinal).ToArray();
-        var arguments = ReadOpenCliParameters(value["args"], false, limits).Cast<CanonicalArgument>().OrderBy(x => x.Name, StringComparer.Ordinal).ToArray();
+        var arguments = ReadOpenCliParameters(value["args"], false, limits).Cast<CanonicalArgument>().ToArray();
         var options = ReadOpenCliParameters(value["flags"], true, limits).Cast<CanonicalOption>().OrderBy(x => x.Name, StringComparer.Ordinal).ToArray();
         return new CanonicalCommand
         {
@@ -283,14 +300,13 @@ public static class Normalizer
         {
             var parameter = RequireObject(item, "OPENCLI_PARAMETER");
             var name = RequiredString(parameter, "name", "OPENCLI_PARAMETER");
-            var required = OptionalBoolean(parameter, "required");
+            var required = OptionalBoolean(parameter, "required") ?? false;
             var variadic = OptionalBoolean(parameter, "variadic") ?? false;
             var minimum = variadic ? OptionalInt(parameter, "minItems") ?? (required == true ? 1 : 0) : required == true ? 1 : 0;
             var maximum = variadic ? OptionalInt(parameter, "maxItems") : 1;
-            var choices = parameter["choices"] is JsonArray choicesArray
-                ? choicesArray.Select(choice => choice is JsonObject obj ? RequiredString(obj, "value", "OPENCLI_CHOICE") : BoundedString(choice?.ToString() ?? string.Empty, limits)).OrderBy(x => x, StringComparer.Ordinal).ToArray()
-                : [];
-            var type = parameter["type"]?.ToString();
+            var choices = ReadChoices(parameter["choices"], limits);
+            var type = OptionalString(parameter, "type", limits);
+            var alternativeSources = ReadAlternativeSources(parameter["alternativeSources"], limits);
             var common = new ParameterValues(
                 name,
                 OptionalString(parameter, "summary", limits),
@@ -301,6 +317,7 @@ public static class Normalizer
                 maximum,
                 choices,
                 parameter["default"]?.DeepClone(),
+                alternativeSources,
                 null);
             if (option)
             {
@@ -316,6 +333,7 @@ public static class Normalizer
                     ArityMaximum = common.Maximum,
                     AllowedValues = common.AllowedValues,
                     DefaultValue = common.DefaultValue,
+                    AlternativeSources = common.AlternativeSources,
                     Status = common.Status
                 };
             }
@@ -332,6 +350,7 @@ public static class Normalizer
                     ArityMaximum = common.Maximum,
                     AllowedValues = common.AllowedValues,
                     DefaultValue = common.DefaultValue,
+                    AlternativeSources = common.AlternativeSources,
                     Status = common.Status
                 };
             }
@@ -396,6 +415,7 @@ public static class Normalizer
                 maximum,
                 [],
                 OptionalBoolean(value, "hasDefaultValue") == true ? value["defaultValue"]?.DeepClone() : null,
+                [],
                 null);
             if (option)
             {
@@ -411,6 +431,7 @@ public static class Normalizer
                     ArityMaximum = common.Maximum,
                     AllowedValues = common.AllowedValues,
                     DefaultValue = common.DefaultValue,
+                    AlternativeSources = common.AlternativeSources,
                     Status = common.Status
                 };
             }
@@ -427,6 +448,7 @@ public static class Normalizer
                     ArityMaximum = common.Maximum,
                     AllowedValues = common.AllowedValues,
                     DefaultValue = common.DefaultValue,
+                    AlternativeSources = common.AlternativeSources,
                     Status = common.Status
                 };
             }
@@ -453,16 +475,37 @@ public static class Normalizer
         return node as JsonObject ?? throw new NormalizationException(code, "The input schema has an object where an object was required.");
     }
 
-    private static string RequiredString(JsonObject objectNode, string property, string code)
+    private static string RequiredString(JsonObject objectNode, string property, string code, NormalizationLimits? limits = null)
     {
-        return objectNode[property]?.GetValue<string>() is { } value && value.Length > 0
-            ? value
-            : throw new NormalizationException(code, $"The required '{property}' field is missing or invalid.");
+        var node = objectNode[property];
+        if (node is not JsonValue || node.GetValueKind() != JsonValueKind.String)
+        {
+            throw new NormalizationException(code, $"The required '{property}' field is missing or invalid.");
+        }
+
+        var value = node.GetValue<string>();
+        if (value.Length == 0)
+        {
+            throw new NormalizationException(code, $"The required '{property}' field is missing or invalid.");
+        }
+
+        return limits is null ? value : BoundedString(value, limits);
     }
 
     private static string? OptionalString(JsonObject objectNode, string property, NormalizationLimits limits)
     {
-        return objectNode[property] is null ? null : BoundedString(objectNode[property]!.GetValue<string>(), limits);
+        if (objectNode[property] is null)
+        {
+            return null;
+        }
+
+        var node = objectNode[property]!;
+        if (node is not JsonValue || node.GetValueKind() != JsonValueKind.String)
+        {
+            throw new NormalizationException("INVALID_STRING", $"The '{property}' field must be a string.");
+        }
+
+        return BoundedString(node.GetValue<string>(), limits);
     }
 
     private static string BoundedString(string value, NormalizationLimits limits)
@@ -486,18 +529,120 @@ public static class Normalizer
         if (node is null) return [];
         var array = node as JsonArray ?? throw new NormalizationException("COLLECTION_TYPE", "The aliases field must be an array.");
         if (array.Count > limits.MaxCollectionItems) throw new NormalizationException("COLLECTION_TOO_LARGE", "An alias collection exceeds the configured item limit.");
-        return array.Select(item => BoundedString(item?.GetValue<string>() ?? string.Empty, limits)).ToArray();
+        return array.Select(item =>
+        {
+            if (item is not JsonValue || item.GetValueKind() != JsonValueKind.String)
+            {
+                throw new NormalizationException("INVALID_STRING", "The aliases field must contain only strings.");
+            }
+
+            return BoundedString(item.GetValue<string>(), limits);
+        }).ToArray();
     }
 
     private static bool? OptionalBoolean(JsonObject objectNode, string property)
     {
-        return objectNode[property]?.GetValue<bool>();
+        if (objectNode[property] is null)
+        {
+            return null;
+        }
+
+        var node = objectNode[property]!;
+        if (node is not JsonValue || (node.GetValueKind() != JsonValueKind.True && node.GetValueKind() != JsonValueKind.False))
+        {
+            throw new NormalizationException("INVALID_BOOLEAN", $"The '{property}' field must be a boolean.");
+        }
+
+        return node.GetValue<bool>();
     }
 
     private static int? OptionalInt(JsonObject objectNode, string property)
     {
         if (objectNode[property] is null || objectNode[property]!.GetValueKind() == JsonValueKind.Null) return null;
-        return objectNode[property]!.GetValue<int>();
+        var node = objectNode[property]!;
+        if (node is not JsonValue jsonValue || node.GetValueKind() != JsonValueKind.Number || !jsonValue.TryGetValue<int>(out var value))
+        {
+            throw new NormalizationException("INVALID_INTEGER", $"The '{property}' field must be an integer.");
+        }
+
+        return value;
+    }
+
+    private static JsonNode[] ReadChoices(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is null)
+        {
+            return [];
+        }
+
+        var array = node as JsonArray ?? throw new NormalizationException("OPENCLI_CHOICES", "The choices field must be an array.");
+        if (array.Count > limits.MaxCollectionItems)
+        {
+            throw new NormalizationException("COLLECTION_TOO_LARGE", "A choice collection exceeds the configured item limit.");
+        }
+
+        return array.Select(item =>
+            RequiredScalar(RequireObject(item, "OPENCLI_CHOICE"), "value", "OPENCLI_CHOICE", limits))
+            .OrderBy(ScalarSortKey, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static CanonicalAlternativeSource[] ReadAlternativeSources(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is null)
+        {
+            return [];
+        }
+
+        var array = node as JsonArray ?? throw new NormalizationException("OPENCLI_DEFAULT_SOURCES", "The alternativeSources field must be an array.");
+        if (array.Count > limits.MaxCollectionItems)
+        {
+            throw new NormalizationException("COLLECTION_TOO_LARGE", "A default-source collection exceeds the configured item limit.");
+        }
+
+        return array.Select(item =>
+        {
+            var source = RequireObject(item, "OPENCLI_DEFAULT_SOURCE");
+            var type = RequiredString(source, "type", "OPENCLI_DEFAULT_SOURCE", limits);
+            if (type is not "$ENV" and not "$FILE")
+            {
+                throw new NormalizationException("OPENCLI_DEFAULT_SOURCE", "The alternative source type must be $ENV or $FILE.");
+            }
+
+            return new CanonicalAlternativeSource
+            {
+                Type = type,
+                Property = RequiredString(source, "property", "OPENCLI_DEFAULT_SOURCE", limits)
+            };
+        }).ToArray();
+    }
+
+    private static JsonNode RequiredScalar(JsonObject objectNode, string property, string code, NormalizationLimits limits)
+    {
+        var node = objectNode[property];
+        if (node is not JsonValue || node.GetValueKind() is not (JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new NormalizationException(code, $"The required '{property}' field must be a string, number, or boolean.");
+        }
+
+        if (node.GetValueKind() == JsonValueKind.String)
+        {
+            _ = BoundedString(node.GetValue<string>(), limits);
+        }
+
+        return node.DeepClone();
+    }
+
+    private static string ScalarSortKey(JsonNode node)
+    {
+        return node.GetValueKind() switch
+        {
+            JsonValueKind.String => "0:string:" + node.GetValue<string>(),
+            JsonValueKind.Number => "1:number:" + node.ToJsonString(),
+            JsonValueKind.False => "2:boolean:0",
+            JsonValueKind.True => "2:boolean:1",
+            _ => throw new NormalizationException("OPENCLI_CHOICE", "A choice value must be a scalar.")
+        };
     }
 
     private static void CheckNode(int depth, NormalizationLimits limits, Counter counter)
@@ -507,5 +652,5 @@ public static class Normalizer
     }
 
     private sealed class Counter { public int Value; }
-    private sealed record ParameterValues(string Name, string? Summary, string? Description, string? Type, bool? Required, int? Minimum, int? Maximum, string[] AllowedValues, JsonNode? DefaultValue, string? Status);
+    private sealed record ParameterValues(string Name, string? Summary, string? Description, string? Type, bool? Required, int? Minimum, int? Maximum, JsonNode[] AllowedValues, JsonNode? DefaultValue, CanonicalAlternativeSource[] AlternativeSources, string? Status);
 }
