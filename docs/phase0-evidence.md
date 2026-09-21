@@ -295,3 +295,35 @@ EXIT=0
 ~~~
 
 The check now enumerates every tracked source/config file with a recognized source extension across the repository, including probe, tests, future source directories, project configuration, and solution files. It does not prove runtime behavior, dependencies, or untracked/future files outside the scanned set. The fixture regression command is `pwsh -NoProfile -File ./scripts/test-no-execution.ps1`; it fails closed when `fixtures/no-execution/forbidden-reference.txt` is passed as an explicit scan input.
+
+## Final local gate evidence
+
+The final local gate was run after the diagnostic fixes with the following commands and raw result summaries:
+
+~~~
+dotnet restore KeelMatrix.CliContract.sln --nologo
+EXIT=0 DURATION_MS=1244
+
+dotnet build KeelMatrix.CliContract.sln -c Release --no-restore --nologo
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+EXIT=0 DURATION_MS=1388
+
+dotnet test KeelMatrix.CliContract.sln -c Release --no-build --nologo
+Passed!  - Failed:     0, Passed:    30, Skipped:     0, Total:    30, EXIT=0
+DURATION_MS=1964
+
+pwsh -NoProfile -File ./scripts/verify-determinism.ps1
+PASS: repeated, reordered, and CRLF inputs produced identical canonical bytes.
+EXIT=0 DURATION_MS=6533
+
+pwsh -NoProfile -File ./scripts/check-no-execution.ps1
+PASS: scanned 9 tracked source/config file(s) plus 0 explicit file(s); no process-start, network, dynamic-load, or activation reference found.
+EXIT=0 DURATION_MS=630
+
+pwsh -NoProfile -File ./scripts/test-no-execution.ps1
+PASS: the no-execution check rejected the forbidden-reference fixture.
+PASS: the no-execution check failed closed for clean archives with and without an explicit file.
+EXIT=0 DURATION_MS=3440
+~~~
