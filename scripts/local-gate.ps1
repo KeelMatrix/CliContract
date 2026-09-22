@@ -27,6 +27,8 @@ Assert-NativeSuccess 'No-execution source scan'
 Assert-NativeSuccess 'No-execution harness'
 & pwsh -NoProfile -File ./scripts/scan-user-facing-surface.ps1 -SelfTest
 Assert-NativeSuccess 'User-facing wording scan'
+& pwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -SelfTest
+Assert-NativeSuccess 'Release contract self-test'
  $audit = dotnet list KeelMatrix.CliContract.sln package --vulnerable --include-transitive --configfile NuGet.config 2>&1
  $audit | Out-Host
  if (($audit -join "`n") -match '(?im)^\s*[>]?\s*.*Package.*\s+has the following vulnerable packages|(?im)^\s*>\s+.*\s+(Critical|High|Moderate|Low)\s+') { throw 'Dependency vulnerability audit reported a vulnerable package.' }
@@ -42,6 +44,8 @@ if (-not ($symbolEntries | Where-Object { $_ -like '*.pdb' })) { throw 'Symbol p
 Write-Output "SYMBOL_PACKAGE=PASS entries=$(@($symbolEntries).Count)"
 & pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath $package -SelfTest
 Assert-NativeSuccess 'Package inspection'
+& pwsh -NoProfile -File ./scripts/verify-release-artifacts.ps1 -ArtifactDirectory $packageDir -Version '0.1.0'
+Assert-NativeSuccess 'Release artifact allowlist'
 & pwsh -NoProfile -File ./scripts/package-consumer-smoke.ps1 -PackagePath $package
 Assert-NativeSuccess 'Package consumer smoke'
 $elapsed = (Get-Date) - $started

@@ -1,0 +1,57 @@
+name: Publish package
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CI: 'true'
+      KEELMATRIX_NO_TELEMETRY: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-dotnet@v4.3.1
+        with:
+          dotnet-version-file: global.json
+      - name: Verify tag
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') { throw "Unsupported release tag: $tag" }
+          "RELEASE_VERSION=$($tag.Substring(1))" >> $env:GITHUB_ENV
+      - name: Verify release contract
+        shell: pwsh
+        run: ./scripts/verify-release-contract.ps1 -Version $env:RELEASE_VERSION -Tag $env:GITHUB_REF_NAME
+      - name: Build package and run checks
+        shell: pwsh
+        run: ./scripts/local-gate.ps1
+      - name: Verify release artifacts
+        shell: pwsh
+        run: ./scripts/verify-release-artifacts.ps1 -ArtifactDirectory ./artifacts/packages -Version $env:RELEASE_VERSION
+      - name: NuGet login
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: dmitriyzen
+      - name: Publish package
+        shell: pwsh
+        run: |
+          $package = "./artifacts/packages/KeelMatrix.CliContract.$($env:RELEASE_VERSION).nupkg"
+          $symbols = "./artifacts/packages/KeelMatrix.CliContract.$($env:RELEASE_VERSION).snupkg"
+          dotnet nuget push $package --api-key '${{ steps.login.outputs.NUGET_API_KEY }}' --source https://api.nuget.org/v3/index.json --no-symbols
+          dotnet nuget push $symbols --api-key '${{ steps.login.outputs.NUGET_API_KEY }}' --source https://api.nuget.org/v3/index.json
