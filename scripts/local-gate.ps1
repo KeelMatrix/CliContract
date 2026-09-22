@@ -25,6 +25,8 @@ Assert-NativeSuccess 'Determinism verification'
 Assert-NativeSuccess 'No-execution source scan'
 & pwsh -NoProfile -File ./scripts/test-no-execution.ps1
 Assert-NativeSuccess 'No-execution harness'
+& pwsh -NoProfile -File ./scripts/verify-workflow-safety.ps1 -SelfTest
+Assert-NativeSuccess 'Workflow safety regressions'
 & pwsh -NoProfile -File ./scripts/scan-user-facing-surface.ps1 -SelfTest
 Assert-NativeSuccess 'User-facing wording scan'
 & pwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -SelfTest

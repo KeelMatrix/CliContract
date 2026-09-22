@@ -30,10 +30,10 @@ jobs:
           global-json-file: global.json
       - name: Verify tag
         shell: pwsh
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
-          $tag = '${{ github.ref_name }}'
-          if ($tag -notmatch '^v\d+\.\d+\.\d+$') { throw "Unsupported release tag: $tag" }
-          "RELEASE_VERSION=$($tag.Substring(1))" >> $env:GITHUB_ENV
+          ./scripts/verify-release-tag.ps1 -Tag $env:TAG_NAME -OutputEnvironmentFile $env:GITHUB_ENV
       - name: Verify release contract
         shell: pwsh
         run: ./scripts/verify-release-contract.ps1 -Version $env:RELEASE_VERSION -Tag $env:GITHUB_REF_NAME
@@ -50,8 +50,10 @@ jobs:
           user: dmitriyzen
       - name: Publish package
         shell: pwsh
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: |
           $package = "./artifacts/packages/KeelMatrix.CliContract.$($env:RELEASE_VERSION).nupkg"
           $symbols = "./artifacts/packages/KeelMatrix.CliContract.$($env:RELEASE_VERSION).snupkg"
-          dotnet nuget push $package --api-key '${{ steps.login.outputs.NUGET_API_KEY }}' --source https://api.nuget.org/v3/index.json --no-symbols
-          dotnet nuget push $symbols --api-key '${{ steps.login.outputs.NUGET_API_KEY }}' --source https://api.nuget.org/v3/index.json
+          dotnet nuget push $package --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --no-symbols
+          dotnet nuget push $symbols --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json
