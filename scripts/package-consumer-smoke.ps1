@@ -11,7 +11,8 @@ Copy-Item -LiteralPath (Resolve-Path -LiteralPath $PackagePath) -Destination $fe
 $oldLocation = Get-Location
 try {
     $version = '0.1.0'
-    $tool = Join-Path $toolPath 'clicontract.exe'
+    $toolName = if ($IsWindows) { 'clicontract.exe' } else { 'clicontract' }
+    $tool = Join-Path $toolPath $toolName
     $install = & dotnet tool install --tool-path $toolPath --add-source $feed --ignore-failed-sources --no-cache --version $version KeelMatrix.CliContract 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Packed tool installation failed: $($install -join ' ')" }
     if (-not (Test-Path -LiteralPath $tool)) { throw 'Installed tool command was not produced.' }
