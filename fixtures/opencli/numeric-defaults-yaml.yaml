@@ -27,6 +27,21 @@ commands:
       - name: exponent
         type: number
         default: !!float 1e3
+      - name: trailing-dot-explicit
+        type: number
+        default: !!float 5.e2
+      - name: trailing-dot-implicit
+        type: number
+        default: 5.e2
+      - name: trailing-dot-signed
+        type: number
+        default: +5.e+2
+      - name: trailing-dot-negative
+        type: number
+        default: !!float -5.e+2
+      - name: trailing-dot-negative-exponent
+        type: number
+        default: -5.e-2
       - name: fraction
         type: number
         default: !!float 0.123456789012345678901234567890

@@ -45,6 +45,7 @@ Each finding has a stable code, category, logical command path, and bounded mess
 | `OPENCLI_REMOTE_REFERENCE` | `3` | Remote schema reference or include is unsupported; no network resolution is attempted |
 | `OPENCLI_DUPLICATE_PARAMETER` | `3` | An argument or option collection contains duplicate normalized names |
 | `OPENCLI_DUPLICATE_COMMAND_PATH` | `3` | Different OpenCLI command keys normalize to the same canonical command path |
+| `OPENCLI_NUMBER` | `3` | An explicitly numeric scalar is not a supported finite canonical JSON number |
 | `UNEXPECTED_ERROR` | `4` | Unexpected tool failure |
 
 ## Semantics
@@ -60,6 +61,8 @@ Type/domain widening does not produce a breaking finding. A changed represented 
 The adapter requires `opencliVersion: 1.0.0-alpha.14`, required `info.title`, `info.binary`, and `info.version`, and validates all recognized in-contract fields plus the pinned schema's required structure. The binary is invocation identity: every command key must begin with `info.binary`, and a binary rename is breaking. Command `kind` is preserved as runnable state; omitted kind is normalized as an action, and action-to-group is breaking. Informational `info` and install metadata are preserved in `CanonicalManifest.Info`; binary is compatibility semantics. Global file-source configuration is preserved in `CanonicalManifest.GlobalConfig` by stable format key; object member order is not represented. Argument `passthrough` is normalized with a default of false and is compatibility semantics because it controls how accepted forms after `--` are interpreted. Other schema-declared fields outside the compatibility contract remain accepted, validated, and ignored, including examples, hidden fields, exit-code metadata, and choice descriptions. `x-*` extensions are accepted and ignored. Unknown non-extension fields on the root, command, argument, flag, choice, and other recognized schema objects fail closed. Invalid recognized values fail closed.
 
 The adapter supports nested commands, root/global flags, aliases, positional arguments, requiredness, represented arity, scalar choices, scalar defaults, `$ENV`/`$FILE` alternative sources, summaries, descriptions, and bounded Unicode text. It does not claim support for deprecation/status because alpha.14 does not represent that contract field.
+
+Finite JSON numbers and recognized YAML integer/float spellings are compared by exact numeric value. Recognized YAML floats include trailing-dot exponent mantissas such as `5.e2` and signed/exponent-sign variants. YAML `.inf` and `.nan` spellings are outside the JSON-number boundary: explicit `!!float` forms fail with `OPENCLI_NUMBER` and exit code `3`, while untagged forms remain strings.
 
 ## Failure and privacy behavior
 

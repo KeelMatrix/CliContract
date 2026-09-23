@@ -81,6 +81,45 @@ public sealed class NormalizationTests
         Assert.Equal("0.12345678901234567890123456789", yaml.Root.Options.Single(option => option.Name == "--fraction").DefaultValue!.ToJsonString());
     }
 
+    [Theory]
+    [InlineData("!!float 5.e2", "500")]
+    [InlineData("5.e2", "500")]
+    [InlineData("!!float +5.e+2", "500")]
+    [InlineData("+5.e+2", "500")]
+    [InlineData("!!float -5.e+2", "-500")]
+    [InlineData("-5.e-2", "-0.05")]
+    public void TrailingDotYamlFloatsMatchEquivalentJsonNumbers(string yamlScalar, string jsonScalar)
+    {
+        var json = Normalizer.Normalize("opencli", OpenCliDocument("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"number\",\"default\":" + jsonScalar + "}]}}}"));
+        var yaml = Normalizer.Normalize("opencli", NumericYamlDocument(yamlScalar));
+
+        Assert.Equal(Normalizer.Serialize(json), Normalizer.Serialize(yaml));
+        Assert.Empty(CompatibilityAnalyzer.Compare(json, yaml).Findings);
+    }
+
+    [Fact]
+    public void TrailingDotYamlFloatsKeepDistinctRepresentedValues()
+    {
+        var fiveHundred = Normalizer.Normalize("opencli", NumericYamlDocument("5.e2"));
+        var fiveThousand = Normalizer.Normalize("opencli", NumericYamlDocument("5.e3"));
+
+        Assert.NotEqual(Normalizer.Serialize(fiveHundred), Normalizer.Serialize(fiveThousand));
+        Assert.Contains(CompatibilityAnalyzer.Compare(fiveHundred, fiveThousand).Findings, finding => finding.Code == "KMCLI201");
+    }
+
+    [Theory]
+    [InlineData(".inf")]
+    [InlineData("-.Inf")]
+    [InlineData(".nan")]
+    public void ExplicitNonFiniteYamlFloatsRemainOutsideTheJsonNumberBoundary(string yamlScalar)
+    {
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", NumericYamlDocument($"!!float {yamlScalar}")));
+        var implicitManifest = Normalizer.Normalize("opencli", NumericYamlDocument(yamlScalar));
+
+        Assert.Equal("OPENCLI_NUMBER", error.Code);
+        Assert.Equal($"\"{yamlScalar}\"", implicitManifest.Root.Options.Single().DefaultValue!.ToJsonString());
+    }
+
     [Fact]
     public void ExplicitYamlStringTagRemainsDistinctFromNumericValue()
     {
@@ -700,6 +739,17 @@ public sealed class NormalizationTests
         };
         return document.ToJsonString();
     }
+
+    private static string NumericYamlDocument(string scalar) => $$"""
+        opencliVersion: 1.0.0-alpha.14
+        info: {title: Tool, binary: tool, version: '1'}
+        commands:
+          tool:
+            flags:
+              - name: value
+                type: number
+                default: {{scalar}}
+        """;
 
     private static string OpenCliDocumentWithNestedObjectDepth(int nestedObjectDepth)
     {

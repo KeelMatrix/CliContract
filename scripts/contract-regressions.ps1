@@ -178,7 +178,7 @@ try {
     $jsonNumericHash = (Get-FileHash -LiteralPath $jsonNumericManifest -Algorithm SHA256).Hash
     if ($yamlNumericHash -ne $jsonNumericHash) { throw 'Equivalent JSON/YAML numeric values produced different canonical bytes.' }
     Assert-Case 'yaml-json-numeric-diff' (Invoke-Tool @('diff', $yamlNumeric, $jsonNumeric, '--fail-on', 'warning', '--no-telemetry')) 0 'COMPATIBLE'
-    Write-Output "CASE=yaml-json-numeric-canonical-bytes sha256=$yamlNumericHash"
+    Write-Output "CASE=yaml-json-numeric-canonical-bytes trailing-dot-exponents=true sha256=$yamlNumericHash"
 
     $configOld = Join-Path $root 'fixtures/opencli/global-config-order-a.json'
     $configNew = Join-Path $root 'fixtures/opencli/global-config-order-b.json'
@@ -212,7 +212,7 @@ try {
     $help = Invoke-Tool @('--help')
     Assert-Case 'help-exit-codes' $help 0 '4  Unexpected tool failure'
     $helpText = $help.Output -join "`n"
-    if ($helpText -notmatch 'Argument passthrough' -or $helpText -notmatch 'exact numeric value') { throw 'Help output does not describe the canonical compatibility semantics.' }
+    if ($helpText -notmatch 'Argument passthrough' -or $helpText -notmatch 'exact numeric value' -or $helpText -notmatch 'trailing-dot exponent mantissas' -or $helpText -notmatch 'YAML \.inf and \.nan') { throw 'Help output does not describe the canonical compatibility semantics.' }
     Write-Output 'CASE=help-canonicalization-contract exit=pass'
 
     Assert-Case 'duplicate-format' (Invoke-Tool @('validate', $source, '--format', 'text', '--format', 'json', '--no-telemetry')) 2 'DUPLICATE_OPTION'

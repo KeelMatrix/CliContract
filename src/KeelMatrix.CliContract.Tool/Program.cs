@@ -554,7 +554,9 @@ internal static class CliApplication
       --no-telemetry             Disable optional telemetry; CI/development suppress automatically
 
     Canonicalization:
-      JSON and recognized YAML numeric values are compared by exact numeric value.
+      Finite JSON and recognized YAML numbers are compared by exact numeric value,
+      including trailing-dot exponent mantissas such as 5.e2.
+      YAML .inf and .nan are outside that boundary: tagged forms error; untagged forms are strings.
       Argument passthrough and keyed global config formats are compatibility semantics.
 
     Exit codes:

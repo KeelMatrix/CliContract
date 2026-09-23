@@ -313,16 +313,22 @@ public static class Normalizer
         }
 
         var normalized = RemoveYamlSeparators(raw);
-        var unsigned = normalized.TrimStart('+', '-');
-        if (unsigned.StartsWith('.'))
+        var signLength = normalized[0] is '+' or '-' ? 1 : 0;
+        var exponentOffset = normalized[signLength..].IndexOfAny(['e', 'E']);
+        var exponentIndex = exponentOffset < 0 ? normalized.Length : signLength + exponentOffset;
+        var sign = normalized[..signLength];
+        var mantissa = normalized[signLength..exponentIndex];
+        var exponent = normalized[exponentIndex..];
+        if (mantissa.StartsWith('.'))
         {
-            normalized = (normalized.StartsWith('-') ? "-0" : "0") + normalized.TrimStart('-', '+');
+            mantissa = "0" + mantissa;
         }
-        else if (unsigned.EndsWith('.'))
+        else if (mantissa.EndsWith('.'))
         {
-            normalized += "0";
+            mantissa += "0";
         }
 
+        normalized = sign + mantissa + exponent;
         return CanonicalizeNumber(normalized.TrimStart('+'));
     }
 

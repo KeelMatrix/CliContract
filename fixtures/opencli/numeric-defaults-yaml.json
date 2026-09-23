@@ -11,6 +11,11 @@
         { "name": "grouped", "type": "number", "default": 1000 },
         { "name": "decimal", "type": "number", "default": 1 },
         { "name": "exponent", "type": "number", "default": 1000 },
+        { "name": "trailing-dot-explicit", "type": "number", "default": 500 },
+        { "name": "trailing-dot-implicit", "type": "number", "default": 500 },
+        { "name": "trailing-dot-signed", "type": "number", "default": 500 },
+        { "name": "trailing-dot-negative", "type": "number", "default": -500 },
+        { "name": "trailing-dot-negative-exponent", "type": "number", "default": -0.05 },
         { "name": "fraction", "type": "number", "default": 0.123456789012345678901234567890 },
         { "name": "negative-zero", "type": "number", "default": 0 }
       ]
