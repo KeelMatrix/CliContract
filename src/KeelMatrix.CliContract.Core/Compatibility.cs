@@ -49,13 +49,50 @@ public static class CompatibilityAnalyzer
         }
 
         var findings = new List<CompatibilityFinding>();
+        CompareInvocationIdentity(baseline, current, findings);
+        CompareGlobalConfig(baseline.GlobalConfig, current.GlobalConfig, findings);
         CompareCommand(baseline.Root, current.Root, findings);
         return new CompatibilityResult(findings);
     }
 
+    private static void CompareInvocationIdentity(CanonicalManifest baseline, CanonicalManifest current, List<CompatibilityFinding> findings)
+    {
+        if (!string.Equals(baseline.Info.Binary, current.Info.Binary, StringComparison.Ordinal))
+        {
+            findings.Add(new CompatibilityFinding("KMCLI110", "breaking", "root", "CLI binary invocation name changed."));
+        }
+    }
+
+    private static void CompareGlobalConfig(CanonicalGlobalConfig? baseline, CanonicalGlobalConfig? current, List<CompatibilityFinding> findings)
+    {
+        var oldSources = baseline?.FileSources ?? [];
+        var newSources = current?.FileSources ?? [];
+        var oldByFormat = oldSources.ToDictionary(source => source.Format, StringComparer.Ordinal);
+        var newByFormat = newSources.ToDictionary(source => source.Format, StringComparer.Ordinal);
+        if (oldByFormat.Count != newByFormat.Count || oldByFormat.Any(pair => !newByFormat.TryGetValue(pair.Key, out var currentSource) || !string.Equals(pair.Value.Path, currentSource.Path, StringComparison.Ordinal)))
+        {
+            findings.Add(new CompatibilityFinding("KMCLI204", "warning", "root", "Represented global file-source configuration changed."));
+        }
+    }
+
+    private static string SourceKey(CanonicalFileSource source) => source.Format + "=" + source.Path;
+
+    private static string SourceKey(CanonicalAlternativeSource source) => source.Type + "=" + source.Property;
+
     private static void CompareCommand(CanonicalCommand baseline, CanonicalCommand current, List<CompatibilityFinding> findings)
     {
         CompareAliases(baseline.Aliases, current.Aliases, baseline.Path, "callable alias", "KMCLI104", "KMCLI004", findings);
+        var baselineKind = baseline.Kind ?? "action";
+        var currentKind = current.Kind ?? "action";
+        if (!string.Equals(baselineKind, currentKind, StringComparison.Ordinal))
+        {
+            var isCallableSurfaceRemoved = baselineKind == "action" && currentKind == "group";
+            findings.Add(new CompatibilityFinding(
+                "KMCLI111",
+                isCallableSurfaceRemoved ? "breaking" : "info",
+                baseline.Path,
+                isCallableSurfaceRemoved ? "Callable command became a non-runnable group." : "Command runnable kind changed."));
+        }
         CompareText(baseline.Summary, current.Summary, baseline.Path, "summary", findings);
         CompareText(baseline.Description, current.Description, baseline.Path, "description", findings);
         CompareStatus(baseline.Status, current.Status, baseline.Path, findings);
@@ -66,11 +103,9 @@ public static class CompatibilityAnalyzer
 
         var baselineArgumentNames = baseline.Arguments.Select(argument => argument.Name).ToArray();
         var currentArgumentNames = current.Arguments.Select(argument => argument.Name).ToArray();
-        if (baselineArgumentNames.Length == currentArgumentNames.Length &&
-            !baselineArgumentNames.SequenceEqual(currentArgumentNames, StringComparer.Ordinal) &&
-            baselineArgumentNames.Order(StringComparer.Ordinal).SequenceEqual(currentArgumentNames.Order(StringComparer.Ordinal), StringComparer.Ordinal))
+        if (HasPositionalSlotShift(baselineArgumentNames, currentArgumentNames))
         {
-            findings.Add(new CompatibilityFinding("KMCLI109", "breaking", baseline.Path, "Positional argument order changed."));
+            findings.Add(new CompatibilityFinding("KMCLI109", "breaking", baseline.Path, "Positional argument slot changed."));
         }
 
         var baselineArguments = ToUniqueMap(baseline.Arguments, "argument", baseline.Path);
@@ -93,6 +128,29 @@ public static class CompatibilityAnalyzer
         {
             CompareCommand(baselineCommands[path], currentCommands[path], findings);
         }
+    }
+
+    private static bool HasPositionalSlotShift(IReadOnlyList<string> baseline, IReadOnlyList<string> current)
+    {
+        for (var index = 0; index < baseline.Count; index++)
+        {
+            var currentIndex = -1;
+            for (var candidate = 0; candidate < current.Count; candidate++)
+            {
+                if (string.Equals(current[candidate], baseline[index], StringComparison.Ordinal))
+                {
+                    currentIndex = candidate;
+                    break;
+                }
+            }
+
+            if (currentIndex >= 0 && currentIndex != index)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static Dictionary<string, TParameter> ToUniqueMap<TParameter>(
@@ -177,9 +235,25 @@ public static class CompatibilityAnalyzer
                 findings.Add(new CompatibilityFinding("KMCLI105", "breaking", path, $"{Capitalize(kind)} changed from optional to required."));
             }
 
+            if (oldValue is CanonicalArgument oldArgument && newValue is CanonicalArgument newArgument && oldArgument.Passthrough != newArgument.Passthrough)
+            {
+                findings.Add(new CompatibilityFinding(
+                    "KMCLI112",
+                    oldArgument.Passthrough ? "breaking" : "info",
+                    path,
+                    oldArgument.Passthrough
+                        ? "Argument no longer accepts post-- forms as passthrough."
+                        : "Argument accepts post-- forms as passthrough."));
+            }
+
             if (IsArityNarrowed(oldValue, newValue))
             {
                 findings.Add(new CompatibilityFinding("KMCLI106", "breaking", path, $"Accepted {kind} arity narrowed."));
+            }
+
+            if (!oldValue.AlternativeSources.Select(SourceKey).SequenceEqual(newValue.AlternativeSources.Select(SourceKey), StringComparer.Ordinal))
+            {
+                findings.Add(new CompatibilityFinding("KMCLI204", "warning", path, "Represented default-source resolution changed."));
             }
 
             var domain = CompareDomain(oldValue, newValue);
@@ -262,7 +336,8 @@ public static class CompatibilityAnalyzer
         var oldValues = baseline.AllowedValues.Select(value => value.ToJsonString()).ToHashSet(StringComparer.Ordinal);
         var newValues = current.AllowedValues.Select(value => value.ToJsonString()).ToHashSet(StringComparer.Ordinal);
         var valuesChanged = !oldValues.SetEquals(newValues);
-        var valuesNarrowed = valuesChanged && newValues.Count > 0 && (oldValues.Count == 0 || newValues.IsSubsetOf(oldValues));
+        var valuesRemoved = oldValues.Count > 0 && newValues.Count > 0 && !oldValues.IsSubsetOf(newValues);
+        var valuesNarrowed = valuesChanged && newValues.Count > 0 && (oldValues.Count == 0 || valuesRemoved || newValues.IsSubsetOf(oldValues));
 
         if (typeNarrowed || valuesNarrowed)
         {

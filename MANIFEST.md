@@ -10,11 +10,12 @@ CliContract writes canonical manifest schema version `1`. The manifest is a Keel
   "Adapter": "opencli",
   "SourceVersion": "1.0.0-alpha.14",
   "Info": { "Title": "Example CLI", "Summary": null, "Description": null, "Binary": "example", "Version": "1.0.0", "License": null, "Contact": null, "Install": [] },
+  "GlobalConfig": null,
   "Root": { "Path": "root", "Aliases": [], "Arguments": [], "Options": [], "Subcommands": [] }
 }
 ```
 
-`Info` preserves the validated informational metadata from the source, including scalar URL values in `Contact.Url`, `License.Url`, and `Install[].Url`. URLs remain data and are never fetched. Commands contain `Path`, sorted `Aliases`, optional `Summary`, `Description`, and `Status`, plus `Arguments`, `Options`, and `Subcommands`. Parameters contain `Name`, optional `Summary`, `Description`, `Type`, `Required`, `ArityMinimum`, `ArityMaximum`, scalar `AllowedValues`, scalar `DefaultValue`, ordered `AlternativeSources`, and optional `Status`. Options additionally contain sorted `Aliases`.
+`Info` preserves the validated metadata from the source, including scalar URL values in `Contact.Url`, `License.Url`, and `Install[].Url`. `Info.Binary` is invocation identity and is compared as breaking when renamed. URLs remain data and are never fetched. `GlobalConfig.FileSources` contains the supported `json`, `toml`, and `yaml` file-source paths sorted by format; the source object's member order is not represented. Commands contain `Path`, `Kind` (`action` or `group`), sorted `Aliases`, optional `Summary`, `Description`, and `Status`, plus `Arguments`, `Options`, and `Subcommands`. Parameters contain `Name`, optional `Summary`, `Description`, `Type`, `Required`, `ArityMinimum`, `ArityMaximum`, scalar `AllowedValues`, scalar `DefaultValue`, ordered `AlternativeSources`, and optional `Status`. Arguments additionally contain `Passthrough`, which defaults to false. Options additionally contain sorted `Aliases`.
 
 The current serializer includes null optional values so null and omission have one stable representation. Unknown manifest fields and versions are rejected. The only accepted `Adapter` is `opencli` with `SourceVersion` `1.0.0-alpha.14`.
 
@@ -28,7 +29,7 @@ The current serializer includes null optional values so null and omission have o
 - Omitted OpenCLI booleans use their documented defaults; null/default/alternative-source distinctions are preserved according to the supported adapter contract.
 - JSON escaping and indentation are produced by the stable .NET JSON serializer; no machine path or source-document metadata is retained.
 - Size, node, depth, string, and collection bounds apply while parsing.
-- Numeric scalars use lexical invariant canonicalization with plain notation for ordinary magnitudes and scientific notation for extreme magnitudes; equivalent values such as `7` and `7.0`, `0.00001` and `1e-5`, and negative zero spellings produce identical bytes without floating-point range loss.
+- Numeric scalars use exact invariant canonicalization with plain notation for ordinary magnitudes and scientific notation for extreme magnitudes; JSON numbers and recognized YAML integer/float values are reduced by numeric value without floating-point conversion. This includes decimal, exponent, underscore-separated, hexadecimal, octal, binary, and negative-zero spellings; equivalent values such as `7` and `7.0`, `0.00001` and `1e-5`, and negative zero spellings produce identical bytes without floating-point range loss. Explicit YAML string tags remain strings.
 
 Semantically equivalent OpenCLI JSON/YAML documents therefore produce byte-identical manifests across Windows, Linux, and macOS when run with the same tool version.
 

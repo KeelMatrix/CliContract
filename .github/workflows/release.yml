@@ -55,5 +55,4 @@ jobs:
         run: |
           $package = "./artifacts/packages/KeelMatrix.CliContract.$($env:RELEASE_VERSION).nupkg"
           $symbols = "./artifacts/packages/KeelMatrix.CliContract.$($env:RELEASE_VERSION).snupkg"
-          dotnet nuget push $package --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --no-symbols
-          dotnet nuget push $symbols --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json
+          ./scripts/publish-package.ps1 -Package $package -Symbols $symbols

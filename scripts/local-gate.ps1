@@ -29,6 +29,8 @@ Assert-NativeSuccess 'No-execution harness'
 Assert-NativeSuccess 'Workflow safety regressions'
 & pwsh -NoProfile -File ./scripts/scan-user-facing-surface.ps1 -SelfTest
 Assert-NativeSuccess 'User-facing wording scan'
+& pwsh -NoProfile -File ./scripts/scan-history-wording.ps1
+Assert-NativeSuccess 'Reachable history wording scan'
 & pwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -SelfTest
 Assert-NativeSuccess 'Release contract self-test'
  $audit = dotnet list KeelMatrix.CliContract.sln package --vulnerable --include-transitive --configfile NuGet.config 2>&1
@@ -41,13 +43,10 @@ $package = Join-Path $packageDir 'KeelMatrix.CliContract.0.1.0.nupkg'
 $symbols = Join-Path $packageDir 'KeelMatrix.CliContract.0.1.0.snupkg'
 if (-not (Test-Path -LiteralPath $symbols)) { throw 'Expected symbol package was not produced.' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$symbolEntries = [IO.Compression.ZipFile]::OpenRead($symbols).Entries | ForEach-Object FullName
-if (-not ($symbolEntries | Where-Object { $_ -like '*.pdb' })) { throw 'Symbol package contains no PDB entries.' }
-Write-Output "SYMBOL_PACKAGE=PASS entries=$(@($symbolEntries).Count)"
+& pwsh -NoProfile -File ./scripts/verify-release-artifacts.ps1 -ArtifactDirectory $packageDir -Version '0.1.0' -SelfTest
+Assert-NativeSuccess 'Release artifact allowlist'
 & pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath $package -SelfTest
 Assert-NativeSuccess 'Package inspection'
-& pwsh -NoProfile -File ./scripts/verify-release-artifacts.ps1 -ArtifactDirectory $packageDir -Version '0.1.0'
-Assert-NativeSuccess 'Release artifact allowlist'
 & pwsh -NoProfile -File ./scripts/package-consumer-smoke.ps1 -PackagePath $package
 Assert-NativeSuccess 'Package consumer smoke'
 $elapsed = (Get-Date) - $started

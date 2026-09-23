@@ -54,6 +54,70 @@ public sealed class NormalizationTests
         var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "valid-argument-passthrough.json")));
 
         Assert.Equal("rest", manifest.Root.Subcommands.Single().Arguments.Single().Name);
+        Assert.True(manifest.Root.Subcommands.Single().Arguments.Single().Passthrough);
+        var roundTrip = CanonicalManifestReader.Read(Normalizer.Serialize(manifest));
+        Assert.True(roundTrip.Root.Subcommands.Single().Arguments.Single().Passthrough);
+    }
+
+    [Fact]
+    public void ArgumentPassthroughDefaultsToFalseAndExplicitFalseIsStable()
+    {
+        var omitted = Normalizer.Normalize("opencli", OpenCliDocument("{\"commands\":{\"tool run <rest>\":{\"args\":[{\"name\":\"rest\"}]}}}"));
+        var explicitFalse = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "valid-argument-passthrough-false.json")));
+
+        Assert.False(omitted.Root.Subcommands.Single().Arguments.Single().Passthrough);
+        Assert.Equal(Normalizer.Serialize(omitted), Normalizer.Serialize(explicitFalse));
+    }
+
+    [Fact]
+    public void TaggedYamlNumericValuesMatchJsonWithoutFloatingPointConversion()
+    {
+        var json = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "numeric-defaults-yaml.json")));
+        var yaml = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "numeric-defaults-yaml.yaml")));
+
+        Assert.Equal(Normalizer.Serialize(json), Normalizer.Serialize(yaml));
+        Assert.Empty(CompatibilityAnalyzer.Compare(json, yaml).Findings);
+        Assert.Equal("16", yaml.Root.Options.Single(option => option.Name == "--hex").DefaultValue!.ToJsonString());
+        Assert.Equal("0.12345678901234567890123456789", yaml.Root.Options.Single(option => option.Name == "--fraction").DefaultValue!.ToJsonString());
+    }
+
+    [Fact]
+    public void ExplicitYamlStringTagRemainsDistinctFromNumericValue()
+    {
+        var numeric = OpenCliDocument("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"number\",\"default\":16}]}}}");
+        var yaml = """
+        opencliVersion: 1.0.0-alpha.14
+        info: {title: Tool, binary: tool, version: '1'}
+        commands:
+          tool:
+            flags:
+              - name: value
+                type: number
+                default: !!str 0x10
+        """;
+
+        var numericManifest = Normalizer.Normalize("opencli", numeric);
+        var stringManifest = Normalizer.Normalize("opencli", yaml);
+
+        Assert.Equal("16", numericManifest.Root.Options.Single().DefaultValue!.ToJsonString());
+        Assert.Equal("\"0x10\"", stringManifest.Root.Options.Single().DefaultValue!.ToJsonString());
+        Assert.Contains(CompatibilityAnalyzer.Compare(numericManifest, stringManifest).Findings, finding => finding.Code == "KMCLI201");
+    }
+
+    [Fact]
+    public void GlobalConfigKeyOrderDoesNotChangeCanonicalBytesOrCompatibility()
+    {
+        var jsonFirst = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "global-config-order-a.json")));
+        var jsonSecond = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "global-config-order-b.json")));
+        var yamlFirst = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "global-config-order-a.yaml")));
+        var yamlSecond = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "global-config-order-b.yaml")));
+
+        var canonical = Normalizer.Serialize(jsonFirst);
+        Assert.Equal(canonical, Normalizer.Serialize(jsonSecond));
+        Assert.Equal(canonical, Normalizer.Serialize(yamlFirst));
+        Assert.Equal(canonical, Normalizer.Serialize(yamlSecond));
+        Assert.Empty(CompatibilityAnalyzer.Compare(jsonFirst, jsonSecond).Findings);
+        Assert.Empty(CompatibilityAnalyzer.Compare(yamlFirst, yamlSecond).Findings);
     }
 
     [Fact]
@@ -89,7 +153,7 @@ public sealed class NormalizationTests
     [Fact]
     public void InputByteLimitUsesUtf8BytesAndAcceptsExactBoundary()
     {
-        var input = "{\"opencliVersion\":\"1.0.0-alpha.14\",\"info\":{\"title\":\"t\",\"binary\":\"b\",\"version\":\"1\"},\"commands\":{\"tool\":{\"description\":\"" + new string('é', 1_000) + "\"}}}";
+        var input = "{\"opencliVersion\":\"1.0.0-alpha.14\",\"info\":{\"title\":\"t\",\"binary\":\"tool\",\"version\":\"1\"},\"commands\":{\"tool\":{\"description\":\"" + new string('é', 1_000) + "\"}}}";
         var inputBytes = System.Text.Encoding.UTF8.GetByteCount(input);
 
         Normalizer.Normalize("opencli", input, new NormalizationLimits(MaxInputBytes: inputBytes));
@@ -337,6 +401,75 @@ public sealed class NormalizationTests
     }
 
     [Fact]
+    public void JsonAndYamlPreserveExactNumericDefaultsAcrossPrecisionAndMagnitude()
+    {
+        const string json = """
+        {
+          "commands": {
+            "tool": {
+              "flags": [
+                {"name":"large-a","type":"number","default":16777216.0},
+                {"name":"large-b","type":"number","default":16777217.0},
+                {"name":"fraction","type":"number","default":0.123456789012345678901234567890},
+                {"name":"small","type":"number","default":1e-300},
+                {"name":"huge","type":"number","default":1e300}
+              ]
+            }
+          }
+        }
+        """;
+        const string yaml = """
+        opencliVersion: 1.0.0-alpha.14
+        info:
+          title: Tool
+          binary: tool
+          version: '1'
+        commands:
+          tool:
+            flags:
+              - name: large-a
+                type: number
+                default: 16777216.0
+              - name: large-b
+                type: number
+                default: 16777217.0
+              - name: fraction
+                type: number
+                default: 0.123456789012345678901234567890
+              - name: small
+                type: number
+                default: 1e-300
+              - name: huge
+                type: number
+                default: 1e300
+        """;
+
+        var jsonManifest = Normalizer.Normalize("opencli", OpenCliDocument(json));
+        var yamlManifest = Normalizer.Normalize("opencli", yaml);
+
+        Assert.Equal(Normalizer.Serialize(jsonManifest), Normalizer.Serialize(yamlManifest));
+        var defaults = yamlManifest.Root.Options.ToDictionary(option => option.Name, option => option.DefaultValue!.ToJsonString());
+        Assert.Equal("16777216", defaults["--large-a"]);
+        Assert.Equal("16777217", defaults["--large-b"]);
+        Assert.NotEqual(defaults["--large-a"], defaults["--large-b"]);
+        Assert.Equal("0.12345678901234567890123456789", defaults["--fraction"]);
+        Assert.Equal("1e-300", defaults["--small"]);
+        Assert.Equal("1e300", defaults["--huge"]);
+    }
+
+    [Fact]
+    public void CommandKeysMustUseInfoBinaryAndKindIsPreserved()
+    {
+        var mismatch = OpenCliDocument("{\"commands\":{\"other run\":{}}}");
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", mismatch));
+        Assert.Equal("OPENCLI_COMMAND_KEY", error.Code);
+
+        var document = OpenCliDocument("{\"commands\":{\"tool run\":{\"kind\":\"group\"}}}");
+        var command = Normalizer.Normalize("opencli", document).Root.Subcommands.Single();
+        Assert.Equal("group", command.Kind);
+    }
+
+    [Fact]
     public void OpenCliPreservesGlobalFlagsAtRoot()
     {
         var input = OpenCliDocument("""
@@ -524,6 +657,17 @@ public sealed class NormalizationTests
         var outputFormat = manifest.Root.Options.Single(option => option.Name == "--output-format");
         Assert.Equal(["$ENV", "$FILE"], outputFormat.AlternativeSources.Select(source => source.Type));
         Assert.Equal(["json", "text"], outputFormat.AllowedValues.Select(value => value.GetValue<string>()));
+    }
+
+    [Fact]
+    public void FixRound10FixturePreservesInvocationAndFileSourceContract()
+    {
+        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "fix-round10.yaml")));
+
+        Assert.Equal("tool", manifest.Info.Binary);
+        Assert.Equal(["json", "yaml"], manifest.GlobalConfig!.FileSources.Select(source => source.Format));
+        Assert.Equal("action", manifest.Root.Kind);
+        Assert.Equal("16777217", manifest.Root.Options.Single(option => option.Name == "--mode").DefaultValue!.ToJsonString());
     }
 
     [Fact]

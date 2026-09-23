@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
@@ -6,7 +5,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using YamlDotNet.Core;
 using YamlDotNet.Core.Events;
-using YamlDotNet.Serialization;
 
 namespace KeelMatrix.CliContract.Core;
 
@@ -88,16 +86,9 @@ public static class Normalizer
             return ParseJson(input, limits, "OPENCLI_JSON");
         }
 
-        RejectYamlAnchorsAndAliases(input, limits);
-
         try
         {
-            var yaml = new DeserializerBuilder()
-                .WithDuplicateKeyChecking()
-                .WithAttemptingUnquotedStringTypeDeserialization()
-                .Build()
-                .Deserialize<object>(input);
-            var json = ConvertYamlValue(yaml, 0, limits, new Counter());
+            var json = ParseYaml(input, limits);
             if (json is null)
             {
                 throw new NormalizationException("MALFORMED_YAML", "The YAML document is empty.");
@@ -119,55 +110,277 @@ public static class Normalizer
         }
     }
 
-    private static void RejectYamlAnchorsAndAliases(string input, NormalizationLimits limits)
+    private static JsonNode? ParseYaml(string input, NormalizationLimits limits)
+    {
+        var parser = new Parser(new StringReader(input));
+        if (!parser.MoveNext() || parser.Current is not StreamStart)
+        {
+            throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+        }
+
+        if (!parser.MoveNext() || parser.Current is not DocumentStart)
+        {
+            throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+        }
+
+        if (!parser.MoveNext() || parser.Current is DocumentEnd)
+        {
+            throw new NormalizationException("MALFORMED_YAML", "The YAML document is empty.");
+        }
+
+        var root = ReadYamlNode(parser, 0, limits, new Counter());
+        if (parser.Current is not DocumentEnd || !parser.MoveNext() || parser.Current is not StreamEnd)
+        {
+            throw new NormalizationException("MALFORMED_YAML", "Only one YAML document is accepted.");
+        }
+
+        return root;
+    }
+
+    private static JsonNode? ReadYamlNode(IParser parser, int depth, NormalizationLimits limits, Counter counter)
+    {
+        if (parser.Current is not ParsingEvent current)
+        {
+            throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+        }
+
+        if (current is AnchorAlias)
+        {
+            throw new NormalizationException("YAML_ALIASES_UNSUPPORTED", "YAML anchors and aliases are not accepted by the configured input policy.");
+        }
+
+        if (current is not NodeEvent node)
+        {
+            throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+        }
+
+        CheckYamlNode(node, depth, limits, counter);
+        switch (node)
+        {
+            case Scalar scalar:
+                var scalarValue = ConvertYamlScalar(scalar, limits);
+                if (!parser.MoveNext()) throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+                return scalarValue;
+            case MappingStart:
+                return ReadYamlMapping(parser, depth, limits, counter);
+            case SequenceStart:
+                return ReadYamlSequence(parser, depth, limits, counter);
+            default:
+                throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+        }
+    }
+
+    private static JsonObject ReadYamlMapping(IParser parser, int depth, NormalizationLimits limits, Counter counter)
+    {
+        var result = new JsonObject();
+        if (!parser.MoveNext()) throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+        while (parser.Current is not MappingEnd)
+        {
+            var keyNode = ReadYamlNode(parser, depth + 1, limits, counter);
+            var key = keyNode is JsonValue keyValue && keyValue.GetValueKind() == JsonValueKind.String
+                ? keyValue.GetValue<string>()
+                : keyNode?.ToJsonString() ?? string.Empty;
+            BoundedString(key, limits);
+            if (result.ContainsKey(key)) throw new NormalizationException("DUPLICATE_YAML_KEY", "The YAML document contains a duplicate key.");
+
+            var value = ReadYamlNode(parser, depth + 1, limits, counter);
+            result[key] = value;
+        }
+
+        if (!parser.MoveNext()) throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+        return result;
+    }
+
+    private static JsonArray ReadYamlSequence(IParser parser, int depth, NormalizationLimits limits, Counter counter)
+    {
+        var result = new JsonArray();
+        if (!parser.MoveNext()) throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+        while (parser.Current is not SequenceEnd)
+        {
+            if (result.Count >= limits.MaxCollectionItems) throw new NormalizationException("COLLECTION_TOO_LARGE", "A YAML sequence exceeds the configured item limit.");
+            result.Add(ReadYamlNode(parser, depth + 1, limits, counter));
+        }
+
+        if (!parser.MoveNext()) throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+        return result;
+    }
+
+    private static JsonNode? ConvertYamlScalar(Scalar scalar, NormalizationLimits limits)
+    {
+        var value = scalar.Value;
+        var tag = scalar.Tag.IsEmpty ? string.Empty : scalar.Tag.Value;
+        if (scalar.Tag.IsEmpty)
+        {
+            if (scalar.Style != ScalarStyle.Plain)
+            {
+                return BoundedString(JsonValue.Create(value), limits);
+            }
+
+            if (value is "~" or "null" or "Null" or "NULL") return null;
+            if (value is "true" or "True" or "TRUE") return JsonValue.Create(true);
+            if (value is "false" or "False" or "FALSE") return JsonValue.Create(false);
+
+            return TryCanonicalizeYamlNumber(value, out var number)
+                ? number
+                : BoundedString(JsonValue.Create(value), limits);
+        }
+
+        return tag switch
+        {
+            "tag:yaml.org,2002:str" => BoundedString(JsonValue.Create(value), limits),
+            "tag:yaml.org,2002:null" => null,
+            "tag:yaml.org,2002:bool" => ConvertYamlBoolean(value),
+            "tag:yaml.org,2002:int" => CanonicalizeYamlInteger(value),
+            "tag:yaml.org,2002:float" => CanonicalizeYamlFloat(value),
+            _ => throw new NormalizationException("YAML_TAG_UNSUPPORTED", "The YAML scalar tag is not supported.")
+        };
+    }
+
+    private static JsonValue ConvertYamlBoolean(string value) => value switch
+    {
+        "true" or "True" or "TRUE" => JsonValue.Create(true),
+        "false" or "False" or "FALSE" => JsonValue.Create(false),
+        _ => throw new NormalizationException("YAML_BOOLEAN", "A YAML boolean value is invalid.")
+    };
+
+    private static bool TryCanonicalizeYamlNumber(string value, out JsonValue number)
     {
         try
         {
-            var parser = new Parser(new StringReader(input));
-            var depth = 0;
-            var counter = new Counter();
-            while (parser.MoveNext())
+            if (LooksLikeYamlInteger(value))
             {
-                switch (parser.Current)
-                {
-                    case AnchorAlias:
-                        throw new NormalizationException("YAML_ALIASES_UNSUPPORTED", "YAML anchors and aliases are not accepted by the configured input policy.");
-                    case MappingStart mapping:
-                        CheckYamlNode(mapping, depth, limits, counter);
-                        depth++;
-                        break;
-                    case SequenceStart sequence:
-                        CheckYamlNode(sequence, depth, limits, counter);
-                        depth++;
-                        break;
-                    case Scalar scalar:
-                        CheckYamlNode(scalar, depth, limits, counter);
-                        break;
-                    case MappingEnd:
-                    case SequenceEnd:
-                        if (--depth < 0)
-                        {
-                            throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
-                        }
-
-                        break;
-                }
+                number = CanonicalizeYamlInteger(value);
+                return true;
             }
 
-            if (depth != 0)
+            if (LooksLikeYamlFloat(value))
             {
-                throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
+                number = CanonicalizeYamlFloat(value);
+                return true;
             }
         }
         catch (NormalizationException)
         {
-            throw;
+            // An untagged scalar that is not a supported finite number remains a string.
         }
-        catch (Exception)
-        {
-            throw new NormalizationException("MALFORMED_YAML", "The YAML document could not be parsed.");
-        }
+
+        number = null!;
+        return false;
     }
+
+    private static JsonValue CanonicalizeYamlInteger(string raw)
+    {
+        var normalized = RemoveYamlSeparators(raw);
+        var negative = normalized.StartsWith('-');
+        var unsigned = normalized.TrimStart('-', '+');
+        var numberBase = 10;
+        if (unsigned.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            numberBase = 16;
+            unsigned = unsigned[2..];
+        }
+        else if (unsigned.StartsWith("0o", StringComparison.OrdinalIgnoreCase))
+        {
+            numberBase = 8;
+            unsigned = unsigned[2..];
+        }
+        else if (unsigned.StartsWith("0b", StringComparison.OrdinalIgnoreCase))
+        {
+            numberBase = 2;
+            unsigned = unsigned[2..];
+        }
+
+        if (unsigned.Length == 0 || unsigned.Any(character => DigitValue(character) < 0 || DigitValue(character) >= numberBase))
+        {
+            throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is invalid.");
+        }
+
+        var value = BigInteger.Zero;
+        foreach (var character in unsigned)
+        {
+            value = value * numberBase + DigitValue(character);
+        }
+
+        if (negative) value = -value;
+        return JsonNode.Parse(value.ToString(CultureInfo.InvariantCulture))!.AsValue();
+    }
+
+    private static JsonValue CanonicalizeYamlFloat(string raw)
+    {
+        if (!LooksLikeYamlFloat(raw))
+        {
+            throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is invalid.");
+        }
+
+        var normalized = RemoveYamlSeparators(raw);
+        var unsigned = normalized.TrimStart('+', '-');
+        if (unsigned.StartsWith('.'))
+        {
+            normalized = (normalized.StartsWith('-') ? "-0" : "0") + normalized.TrimStart('-', '+');
+        }
+        else if (unsigned.EndsWith('.'))
+        {
+            normalized += "0";
+        }
+
+        return CanonicalizeNumber(normalized.TrimStart('+'));
+    }
+
+    private static bool LooksLikeYamlInteger(string raw)
+    {
+        var value = RemoveYamlSeparators(raw);
+        var unsigned = value.TrimStart('-', '+');
+        if (unsigned.Length == 0) return false;
+        if (unsigned.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) return unsigned.Length > 2 && unsigned[2..].All(character => DigitValue(character) is >= 0 and < 16);
+        if (unsigned.StartsWith("0o", StringComparison.OrdinalIgnoreCase)) return unsigned.Length > 2 && unsigned[2..].All(character => DigitValue(character) is >= 0 and < 8);
+        if (unsigned.StartsWith("0b", StringComparison.OrdinalIgnoreCase)) return unsigned.Length > 2 && unsigned[2..].All(character => DigitValue(character) is >= 0 and < 2);
+        return unsigned.All(char.IsDigit);
+    }
+
+    private static bool LooksLikeYamlFloat(string raw)
+    {
+        var value = raw.Trim();
+        var unsigned = value.TrimStart('-', '+');
+        if (unsigned.Equals(".inf", StringComparison.OrdinalIgnoreCase) || unsigned.Equals(".nan", StringComparison.OrdinalIgnoreCase)) return false;
+
+        var exponentIndex = unsigned.IndexOfAny(['e', 'E']);
+        var mantissa = exponentIndex >= 0 ? unsigned[..exponentIndex] : unsigned;
+        if (exponentIndex >= 0 && !IsYamlDecimalDigits(unsigned[(exponentIndex + 1)..].TrimStart('-', '+'))) return false;
+        if (mantissa.Contains('.'))
+        {
+            var parts = mantissa.Split('.', 2);
+            return (parts[0].Length > 0 && IsYamlDecimalDigits(parts[0]) || parts[1].Length > 0 && IsYamlDecimalDigits(parts[1])) &&
+                (parts[0].Length == 0 || IsYamlDecimalDigits(parts[0])) && (parts[1].Length == 0 || IsYamlDecimalDigits(parts[1]));
+        }
+
+        return exponentIndex >= 0 && IsYamlDecimalDigits(mantissa);
+    }
+
+    private static bool IsYamlDecimalDigits(string value) =>
+        value.Length > 0 && RemoveYamlSeparators(value).All(char.IsDigit);
+
+    private static string RemoveYamlSeparators(string value)
+    {
+        if (value.Length == 0 || value[0] == '_' || value[^1] == '_' || value.Contains("__", StringComparison.Ordinal))
+        {
+            throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is invalid.");
+        }
+
+        for (var index = 0; index < value.Length; index++)
+        {
+            if (value[index] == '_' && (index == 0 || index == value.Length - 1 || !char.IsLetterOrDigit(value[index - 1]) || !char.IsLetterOrDigit(value[index + 1])))
+            {
+                throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is invalid.");
+            }
+        }
+
+        return value.Replace("_", string.Empty, StringComparison.Ordinal);
+    }
+
+    private static int DigitValue(char character) =>
+        character is >= '0' and <= '9' ? character - '0' :
+        character is >= 'a' and <= 'f' ? character - 'a' + 10 :
+        character is >= 'A' and <= 'F' ? character - 'A' + 10 : -1;
 
     private static void CheckYamlNode(NodeEvent node, int depth, NormalizationLimits limits, Counter counter)
     {
@@ -264,61 +477,6 @@ public static class Normalizer
         }
 
         return result;
-    }
-
-    private static JsonNode? ConvertYamlValue(object? value, int depth, NormalizationLimits limits, Counter counter)
-    {
-        CheckNode(depth, limits, counter);
-        if (value is null)
-        {
-            return null;
-        }
-
-        if (value is IDictionary dictionary)
-        {
-            if (dictionary.Count > limits.MaxCollectionItems)
-            {
-                throw new NormalizationException("COLLECTION_TOO_LARGE", "A YAML mapping exceeds the configured item limit.");
-            }
-
-            var result = new JsonObject();
-            foreach (DictionaryEntry entry in dictionary)
-            {
-                var key = BoundedString(Convert.ToString(entry.Key, CultureInfo.InvariantCulture) ?? string.Empty, limits);
-                if (result.ContainsKey(key))
-                {
-                    throw new NormalizationException("DUPLICATE_YAML_KEY", "The YAML document contains a duplicate key.");
-                }
-
-                result[key] = ConvertYamlValue(entry.Value, depth + 1, limits, counter);
-            }
-
-            return result;
-        }
-
-        if (value is IEnumerable sequence and not string)
-        {
-            var result = new JsonArray();
-            var count = 0;
-            foreach (var item in sequence)
-            {
-                if (++count > limits.MaxCollectionItems)
-                {
-                    throw new NormalizationException("COLLECTION_TOO_LARGE", "A YAML sequence exceeds the configured item limit.");
-                }
-
-                result.Add(ConvertYamlValue(item, depth + 1, limits, counter));
-            }
-
-            return result;
-        }
-
-        return value switch
-        {
-            bool boolean => JsonValue.Create(boolean),
-            byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal => CanonicalizeNumber(Convert.ToString(value, CultureInfo.InvariantCulture)!),
-            _ => BoundedString(JsonValue.Create(Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty), limits)
-        };
     }
 
     internal static JsonNode CanonicalizeScalar(JsonNode node)
@@ -899,7 +1057,7 @@ public static class Normalizer
 
         var info = RequireObject(root["info"], "OPENCLI_INFO");
         _ = RequiredString(info, "title", "OPENCLI_INFO");
-        _ = RequiredString(info, "binary", "OPENCLI_INFO");
+        var binary = RequiredString(info, "binary", "OPENCLI_INFO", limits);
         _ = RequiredString(info, "version", "OPENCLI_INFO");
         var commandsNode = OptionalProperty(root, "commands", "OPENCLI_COMMANDS");
         var commands = commandsNode is null ? [] : RequireObject(commandsNode, "OPENCLI_COMMANDS");
@@ -907,7 +1065,7 @@ public static class Normalizer
         var normalized = new List<CanonicalCommand>();
         foreach (var property in commands.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
-            normalized.Add(NormalizeOpenCliCommand(property.Key, RequireObject(property.Value, "OPENCLI_COMMAND"), limits));
+            normalized.Add(NormalizeOpenCliCommand(property.Key, RequireObject(property.Value, "OPENCLI_COMMAND"), binary, limits));
         }
 
         EnsureUniqueCommandPaths(normalized);
@@ -932,13 +1090,33 @@ public static class Normalizer
             Root = new CanonicalCommand
             {
                 Path = "root",
+                Kind = rootCommand?.Kind,
                 Subcommands = normalized.Where(c => c.Path != "root").OrderBy(c => c.Path, StringComparer.Ordinal).ToArray(),
                 Arguments = rootCommand?.Arguments ?? [],
                 Options = rootOptions,
                 Aliases = rootCommand?.Aliases ?? [],
                 Summary = rootCommand?.Summary,
                 Description = rootCommand?.Description
-            }
+            },
+            GlobalConfig = global is not null && global.ContainsKey("config")
+                ? NormalizeGlobalConfig(RequireObject(global["config"], "OPENCLI_GLOBAL"), limits)
+                : null
+        };
+    }
+
+    private static CanonicalGlobalConfig NormalizeGlobalConfig(JsonObject config, NormalizationLimits limits)
+    {
+        return new CanonicalGlobalConfig
+        {
+            FileSources = config
+                .Where(property => property.Key is "json" or "toml" or "yaml")
+                .OrderBy(property => property.Key, StringComparer.Ordinal)
+                .Select(property => new CanonicalFileSource
+                {
+                    Format = property.Key,
+                    Path = BoundedString(property.Value?.GetValue<string>() ?? string.Empty, limits)
+                })
+                .ToArray()
         };
     }
 
@@ -996,15 +1174,16 @@ public static class Normalizer
         };
     }
 
-    private static CanonicalCommand NormalizeOpenCliCommand(string key, JsonObject value, NormalizationLimits limits)
+    private static CanonicalCommand NormalizeOpenCliCommand(string key, JsonObject value, string binary, NormalizationLimits limits)
     {
-        var path = ParseOpenCliPath(key);
+        var path = ParseOpenCliPath(key, binary);
         var aliases = Strings(OptionalProperty(value, "aliases", "COLLECTION_TYPE"), limits).OrderBy(x => x, StringComparer.Ordinal).ToArray();
         var arguments = ReadOpenCliParameters(OptionalProperty(value, "args", "OPENCLI_COLLECTION"), false, limits).Cast<CanonicalArgument>().ToArray();
         var options = ReadOpenCliParameters(OptionalProperty(value, "flags", "OPENCLI_COLLECTION"), true, limits).Cast<CanonicalOption>().OrderBy(x => x.Name, StringComparer.Ordinal).ToArray();
         return new CanonicalCommand
         {
             Path = path,
+            Kind = OptionalString(value, "kind", limits) ?? "action",
             Aliases = aliases,
             Summary = OptionalString(value, "summary", limits),
             Description = OptionalString(value, "description", limits),
@@ -1039,6 +1218,7 @@ public static class Normalizer
 
             var required = OptionalBoolean(parameter, "required") ?? false;
             var variadic = OptionalBoolean(parameter, "variadic") ?? false;
+            var passthrough = !option && (OptionalBoolean(parameter, "passthrough") ?? false);
             var minimum = variadic ? OptionalInt(parameter, "minItems") ?? (required == true ? 1 : 0) : required == true ? 1 : 0;
             var maximum = variadic ? OptionalInt(parameter, "maxItems") : 1;
             var choices = ReadChoices(OptionalProperty(parameter, "choices", "OPENCLI_CHOICES"), limits);
@@ -1065,6 +1245,7 @@ public static class Normalizer
                 choices,
                 option ? OptionalScalar(parameter, "default", limits) : null,
                 alternativeSources,
+                passthrough,
                 null);
             if (option)
             {
@@ -1098,6 +1279,7 @@ public static class Normalizer
                     AllowedValues = common.AllowedValues,
                     DefaultValue = common.DefaultValue,
                     AlternativeSources = common.AlternativeSources,
+                    Passthrough = common.Passthrough,
                     Status = common.Status
                 };
             }
@@ -1117,7 +1299,7 @@ public static class Normalizer
         }
     }
 
-    private static string ParseOpenCliPath(string key)
+    private static string ParseOpenCliPath(string key, string binary)
     {
         var tokens = key.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(token => !(token.StartsWith('<') && token.EndsWith('>')))
@@ -1127,6 +1309,11 @@ public static class Normalizer
         if (tokens.Length == 0)
         {
             throw new NormalizationException("OPENCLI_COMMAND_KEY", "An OpenCLI command key must contain a command name.");
+        }
+
+        if (!string.Equals(tokens[0], binary, StringComparison.Ordinal))
+        {
+            throw new NormalizationException("OPENCLI_COMMAND_KEY", "An OpenCLI command key must begin with info.binary.");
         }
 
         return tokens.Length == 1 ? "root" : "root / " + string.Join(" / ", tokens.Skip(1));
@@ -1354,5 +1541,5 @@ public static class Normalizer
     }
 
     private sealed class Counter { public int Value; }
-    private sealed record ParameterValues(string Name, string? Summary, string? Description, string? Type, bool? Required, int? Minimum, int? Maximum, JsonNode[] AllowedValues, JsonNode? DefaultValue, CanonicalAlternativeSource[] AlternativeSources, string? Status);
+    private sealed record ParameterValues(string Name, string? Summary, string? Description, string? Type, bool? Required, int? Minimum, int? Maximum, JsonNode[] AllowedValues, JsonNode? DefaultValue, CanonicalAlternativeSource[] AlternativeSources, bool Passthrough, string? Status);
 }

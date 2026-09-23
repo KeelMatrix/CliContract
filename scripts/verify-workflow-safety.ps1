@@ -123,6 +123,39 @@ function Assert-HostileTagRejected {
     Write-Output 'HOSTILE_TAG_SELF_TEST=PASS rejected_without_execution'
 }
 
+function Assert-PublishFailClosedSelfTest {
+    $selfTestRoot = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-publish-' + [Guid]::NewGuid().ToString('N'))
+    $stubPath = Join-Path $selfTestRoot 'nuget-stub.cmd'
+    $markerPath = Join-Path $selfTestRoot 'symbol-push.marker'
+    $publishScript = Join-Path $RepositoryRoot 'scripts/publish-package.ps1'
+    try {
+        New-Item -ItemType Directory -Path $selfTestRoot -Force | Out-Null
+        @"
+@echo off
+echo %~3 | findstr /i ".snupkg" >nul
+if not errorlevel 1 echo SYMBOL_PUSH_INVOKED > "$markerPath"
+exit /b 17
+"@ | Set-Content -LiteralPath $stubPath -Encoding ascii
+
+        $oldApiKey = $env:NUGET_API_KEY
+        try {
+            $env:NUGET_API_KEY = 'stub-key'
+            $output = @(& pwsh -NoProfile -File $publishScript -Package 'primary.nupkg' -Symbols 'symbols.snupkg' -NuGetExecutable $stubPath 2>&1)
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            $env:NUGET_API_KEY = $oldApiKey
+        }
+
+        if ($exitCode -eq 0) { throw 'A failed primary push was accepted.' }
+        if (Test-Path -LiteralPath $markerPath) { throw 'The symbol push was invoked after a failed primary push.' }
+        Write-Output 'PUBLISH_FAIL_CLOSED_SELF_TEST=PASS symbol_push_not_invoked'
+    }
+    finally {
+        if (Test-Path -LiteralPath $selfTestRoot) { Remove-Item -LiteralPath $selfTestRoot -Recurse -Force }
+    }
+}
+
 $workflowDirectory = Join-Path $RepositoryRoot '.github/workflows'
 if (-not (Test-Path -LiteralPath $workflowDirectory)) {
     throw "Workflow directory is missing: $workflowDirectory"
@@ -143,4 +176,7 @@ if ($violations.Count -gt 0) {
 
 Write-Output "WORKFLOW_SOURCE_BOUNDARIES=PASS files=$($workflowFiles.Count)"
 Assert-HostileTagRejected
-if ($SelfTest) { Assert-WorkflowScannerSelfTest }
+if ($SelfTest) {
+    Assert-WorkflowScannerSelfTest
+    Assert-PublishFailClosedSelfTest
+}

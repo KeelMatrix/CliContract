@@ -41,6 +41,24 @@ try {
     Assert-Case 'duplicate-opencli' (Invoke-Tool @('validate', $duplicatePath, '--input', 'opencli', '--no-telemetry')) 3 'DUPLICATE_JSON_KEY'
     Assert-Case 'duplicate-auto' (Invoke-Tool @('validate', $duplicatePath, '--input', 'auto', '--no-telemetry')) 3 'DUPLICATE_JSON_KEY'
     Assert-Case 'valid-baseline' (Invoke-Tool @('snapshot', $source, '--input', 'opencli', '--output', $baselinePath, '--no-telemetry')) 0 'SNAPSHOT'
+    Assert-Case 'validate-rejects-baseline' (Invoke-Tool @('validate', $source, '--baseline', (Join-Path $temp 'missing.json'), '--no-telemetry')) 2 'UNSUPPORTED_OPTION'
+    Assert-Case 'check-rejects-output' (Invoke-Tool @('check', $source, '--baseline', $baselinePath, '--output', (Join-Path $temp 'ignored.json'), '--no-telemetry')) 2 'UNSUPPORTED_OPTION'
+
+    $mixedDomain = $valid.Replace('"type":"string"', '"type":"string","choices":[{"value":"red"},{"value":"blue"}]').Replace('"region"', '"colour"')
+    $mixedDomainCurrent = $mixedDomain.Replace('[{"value":"red"},{"value":"blue"}]', '[{"value":"red"},{"value":"green"}]')
+    $mixedDomainPath = Join-Path $temp 'mixed-domain-old.json'
+    $mixedDomainCurrentPath = Join-Path $temp 'mixed-domain-new.json'
+    Write-Utf8 $mixedDomainPath $mixedDomain
+    Write-Utf8 $mixedDomainCurrentPath $mixedDomainCurrent
+    Assert-Case 'mixed-domain-removal' (Invoke-Tool @('diff', $mixedDomainPath, $mixedDomainCurrentPath, '--no-telemetry')) 1 'KMCLI107'
+
+    $sourceOld = $valid.Replace('"type":"string"', '"type":"string","alternativeSources":[{"type":"$ENV","property":"REGION"},{"type":"$FILE","property":"$.region"}]').Replace(',"commands":', ',"global":{"config":{"json":"old.json"}},"commands":')
+    $sourceNew = $sourceOld.Replace('"property":"REGION"', '"property":"NEW_REGION"').Replace('[{"type":"$ENV","property":"NEW_REGION"},{"type":"$FILE","property":"$.region"}]', '[{"type":"$FILE","property":"$.region"},{"type":"$ENV","property":"NEW_REGION"}]').Replace('"old.json"', '"new.json"')
+    $sourceOldPath = Join-Path $temp 'sources-old.json'
+    $sourceNewPath = Join-Path $temp 'sources-new.json'
+    Write-Utf8 $sourceOldPath $sourceOld
+    Write-Utf8 $sourceNewPath $sourceNew
+    Assert-Case 'default-source-change-warning' (Invoke-Tool @('diff', $sourceOldPath, $sourceNewPath, '--fail-on', 'warning', '--no-telemetry')) 1 'KMCLI204'
 
     $badInputs = @{
         'bad-type' = $valid.Replace('"type":"string"', '"type":["string"]')
@@ -84,6 +102,27 @@ try {
     Write-Utf8 $oldArgumentsPath $oldArguments
     Write-Utf8 $newArgumentsPath $newArguments
     Assert-Case 'positional-argument-order' (Invoke-Tool @('diff', $oldArgumentsPath, $newArgumentsPath, '--format', 'text', '--no-telemetry')) 1 'KMCLI109'
+    $prependedArguments = $oldArguments.Replace('<first> <second>', '<mode> <first> <second>').Replace('[{"name":"first"},{"name":"second"}]', '[{"name":"mode"},{"name":"first"},{"name":"second"}]')
+    $prependedPath = Join-Path $temp 'prepended-arguments.json'
+    Write-Utf8 $prependedPath $prependedArguments
+    Assert-Case 'prepended-optional-argument' (Invoke-Tool @('diff', $oldArgumentsPath, $prependedPath, '--no-telemetry')) 1 'KMCLI109'
+    $trailingArguments = $oldArguments.Replace('<first> <second>', '<first> <second> <mode>').Replace('[{"name":"first"},{"name":"second"}]', '[{"name":"first"},{"name":"second"},{"name":"mode"}]')
+    $trailingPath = Join-Path $temp 'trailing-arguments.json'
+    Write-Utf8 $trailingPath $trailingArguments
+    Assert-Case 'trailing-optional-argument' (Invoke-Tool @('diff', $oldArgumentsPath, $trailingPath, '--no-telemetry')) 0 'KMCLI003'
+
+    $action = $valid.Replace('"commands":{"tool"', '"commands":{"tool"').Replace('"flags"', '"kind":"action","flags"')
+    $group = $action.Replace('"kind":"action"', '"kind":"group"')
+    $actionPath = Join-Path $temp 'action.json'
+    $groupPath = Join-Path $temp 'group.json'
+    Write-Utf8 $actionPath $action
+    Write-Utf8 $groupPath $group
+    Assert-Case 'action-to-group' (Invoke-Tool @('diff', $actionPath, $groupPath, '--no-telemetry')) 1 'KMCLI111'
+
+    $binaryRename = $valid.Replace('"binary":"tool"', '"binary":"renamed"').Replace('"commands":{"tool"', '"commands":{"renamed"')
+    $binaryPath = Join-Path $temp 'binary-renamed.json'
+    Write-Utf8 $binaryPath $binaryRename
+    Assert-Case 'binary-rename' (Invoke-Tool @('diff', $source, $binaryPath, '--no-telemetry')) 1 'KMCLI110'
     foreach ($name in $badInputs.Keys) {
         $path = Join-Path $temp ($name + '.json')
         Write-Utf8 $path $badInputs[$name]
@@ -129,6 +168,30 @@ try {
     if ($integerHash -ne $decimalHash) { throw 'Equivalent numeric defaults produced different canonical bytes.' }
     Write-Output "CASE=numeric-canonical-bytes sha256=$integerHash"
 
+    $yamlNumeric = Join-Path $root 'fixtures/opencli/numeric-defaults-yaml.yaml'
+    $jsonNumeric = Join-Path $root 'fixtures/opencli/numeric-defaults-yaml.json'
+    $yamlNumericManifest = Join-Path $temp 'numeric-yaml.canonical.json'
+    $jsonNumericManifest = Join-Path $temp 'numeric-json.canonical.json'
+    Assert-Case 'yaml-numeric-snapshot' (Invoke-Tool @('snapshot', $yamlNumeric, '--input', 'opencli', '--output', $yamlNumericManifest, '--no-telemetry')) 0 'SNAPSHOT'
+    Assert-Case 'json-numeric-snapshot' (Invoke-Tool @('snapshot', $jsonNumeric, '--input', 'opencli', '--output', $jsonNumericManifest, '--no-telemetry')) 0 'SNAPSHOT'
+    $yamlNumericHash = (Get-FileHash -LiteralPath $yamlNumericManifest -Algorithm SHA256).Hash
+    $jsonNumericHash = (Get-FileHash -LiteralPath $jsonNumericManifest -Algorithm SHA256).Hash
+    if ($yamlNumericHash -ne $jsonNumericHash) { throw 'Equivalent JSON/YAML numeric values produced different canonical bytes.' }
+    Assert-Case 'yaml-json-numeric-diff' (Invoke-Tool @('diff', $yamlNumeric, $jsonNumeric, '--fail-on', 'warning', '--no-telemetry')) 0 'COMPATIBLE'
+    Write-Output "CASE=yaml-json-numeric-canonical-bytes sha256=$yamlNumericHash"
+
+    $configOld = Join-Path $root 'fixtures/opencli/global-config-order-a.json'
+    $configNew = Join-Path $root 'fixtures/opencli/global-config-order-b.json'
+    Assert-Case 'global-config-order-diff' (Invoke-Tool @('diff', $configOld, $configNew, '--fail-on', 'warning', '--no-telemetry')) 0 'COMPATIBLE'
+
+    $passthroughEnabled = Join-Path $root 'fixtures/opencli/valid-argument-passthrough.json'
+    $passthroughDisabled = Join-Path $root 'fixtures/opencli/valid-argument-passthrough-false.json'
+    $passthroughBaseline = Join-Path $temp 'passthrough.canonical.json'
+    Assert-Case 'passthrough-snapshot' (Invoke-Tool @('snapshot', $passthroughEnabled, '--input', 'opencli', '--output', $passthroughBaseline, '--no-telemetry')) 0 'SNAPSHOT'
+    Assert-Case 'passthrough-removal' (Invoke-Tool @('diff', $passthroughEnabled, $passthroughDisabled, '--fail-on', 'warning', '--no-telemetry')) 1 'KMCLI112'
+    Assert-Case 'passthrough-check-removal' (Invoke-Tool @('check', $passthroughDisabled, '--baseline', $passthroughBaseline, '--fail-on', 'warning', '--no-telemetry')) 1 'KMCLI112'
+    Assert-Case 'passthrough-addition' (Invoke-Tool @('diff', $passthroughDisabled, $passthroughEnabled, '--fail-on', 'warning', '--no-telemetry')) 0 'KMCLI112'
+
     $optional = Join-Path $temp 'optional.json'
     $required = Join-Path $temp 'required.json'
     Write-Utf8 $optional $valid
@@ -148,6 +211,9 @@ try {
 
     $help = Invoke-Tool @('--help')
     Assert-Case 'help-exit-codes' $help 0 '4  Unexpected tool failure'
+    $helpText = $help.Output -join "`n"
+    if ($helpText -notmatch 'Argument passthrough' -or $helpText -notmatch 'exact numeric value') { throw 'Help output does not describe the canonical compatibility semantics.' }
+    Write-Output 'CASE=help-canonicalization-contract exit=pass'
 
     Assert-Case 'duplicate-format' (Invoke-Tool @('validate', $source, '--format', 'text', '--format', 'json', '--no-telemetry')) 2 'DUPLICATE_OPTION'
     Assert-Case 'duplicate-fail-on' (Invoke-Tool @('validate', $source, '--fail-on', 'breaking', '--fail-on', 'warning', '--no-telemetry')) 2 'DUPLICATE_OPTION'

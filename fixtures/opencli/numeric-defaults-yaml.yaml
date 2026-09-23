@@ -1,0 +1,35 @@
+opencliVersion: 1.0.0-alpha.14
+info:
+  title: Numeric fixture
+  binary: tool
+  version: '1'
+commands:
+  tool:
+    flags:
+      - name: hex
+        type: number
+        default: !!int 0x10
+      - name: implicit-hex
+        type: number
+        default: 0x10
+      - name: octal
+        type: number
+        default: !!int 0o20
+      - name: binary
+        type: number
+        default: !!int 0b10000
+      - name: grouped
+        type: number
+        default: !!int 1_000
+      - name: decimal
+        type: number
+        default: !!float 1.0
+      - name: exponent
+        type: number
+        default: !!float 1e3
+      - name: fraction
+        type: number
+        default: !!float 0.123456789012345678901234567890
+      - name: negative-zero
+        type: number
+        default: !!float -0.0

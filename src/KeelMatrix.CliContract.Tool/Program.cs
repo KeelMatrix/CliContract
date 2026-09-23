@@ -439,7 +439,28 @@ internal static class CliApplication
         }
 
         if (command is not ("snapshot" or "check" or "diff" or "validate")) throw new InvocationException("UNKNOWN_COMMAND", "Use snapshot, check, diff, or validate.");
+        EnsureAllowedOptions(command, seenOptions);
         return new Invocation(command, positionals, inputKind, format, failOn, output, baseline, ignore, noTelemetry);
+    }
+
+    private static void EnsureAllowedOptions(string command, IReadOnlySet<string> seenOptions)
+    {
+        var allowed = command switch
+        {
+            "snapshot" => new HashSet<string>(["--input", "--format", "--output", "--no-telemetry"], StringComparer.Ordinal),
+            "validate" => new HashSet<string>(["--input", "--format", "--no-telemetry"], StringComparer.Ordinal),
+            "diff" => new HashSet<string>(["--input", "--format", "--fail-on", "--ignore", "--no-telemetry"], StringComparer.Ordinal),
+            "check" => new HashSet<string>(["--input", "--format", "--fail-on", "--baseline", "--ignore", "--no-telemetry"], StringComparer.Ordinal),
+            _ => throw new InvocationException("UNKNOWN_COMMAND", "Use snapshot, check, diff, or validate.")
+        };
+
+        foreach (var option in seenOptions)
+        {
+            if (!allowed.Contains(option))
+            {
+                throw new InvocationException("UNSUPPORTED_OPTION", $"Option '{option}' is not supported for '{command}'; remove it or use a command that consumes it.");
+            }
+        }
     }
 
     private static void EnsureSingleOption(HashSet<string> seenOptions, string option)
@@ -519,12 +540,22 @@ internal static class CliApplication
       clicontract diff <old> <new>
       clicontract validate <schema>
 
+    Command options:
+      snapshot   --input --format --output --no-telemetry
+      check      --input --format --baseline --fail-on --ignore --no-telemetry
+      diff       --input --format --fail-on --ignore --no-telemetry
+      validate   --input --format --no-telemetry
+
     Options:
       --input auto|opencli       Input format (default: auto)
       --format text|json         Output format (default: text)
       --fail-on breaking|warning Failure threshold (default: breaking)
       --ignore <file>            Explicit JSON suppression file
       --no-telemetry             Disable optional telemetry; CI/development suppress automatically
+
+    Canonicalization:
+      JSON and recognized YAML numeric values are compared by exact numeric value.
+      Argument passthrough and keyed global config formats are compatibility semantics.
 
     Exit codes:
       0  No gated compatibility finding

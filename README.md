@@ -32,7 +32,9 @@ clicontract validate ./opencli.yaml
 
 Breaking changes are gated by default. Use `--fail-on warning` when default or status changes should also fail CI. Description/help changes are informational. Suppressions are explicit JSON files passed with `--ignore`; they never suppress malformed or unsupported schemas.
 
-The stable diagnostic catalog and classification contract are in [`COMPATIBILITY-RULES.md`](COMPATIBILITY-RULES.md). The versioned canonical manifest is described in [`MANIFEST.md`](MANIFEST.md).
+The stable diagnostic catalog and classification contract are in [`COMPATIBILITY-RULES.md`](COMPATIBILITY-RULES.md). The versioned canonical manifest is described in [`MANIFEST.md`](MANIFEST.md). Binary invocation identity, action/group runnable state, positional slots, argument passthrough behavior, alternative default sources, and keyed global file-source configuration are part of that compatibility contract.
+
+Command-specific options are enforced: `snapshot` accepts `--input`, `--format`, `--output`, and `--no-telemetry`; `check` accepts `--input`, `--format`, `--baseline`, `--fail-on`, `--ignore`, and `--no-telemetry`; `diff` accepts `--input`, `--format`, `--fail-on`, `--ignore`, and `--no-telemetry`; `validate` accepts only `--input`, `--format`, and `--no-telemetry`. Unsupported combinations return exit code `2` with `UNSUPPORTED_OPTION`.
 
 ## Exit codes
 

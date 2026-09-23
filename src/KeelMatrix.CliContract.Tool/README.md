@@ -21,7 +21,7 @@ clicontract snapshot ./opencli.yaml --output cli-contract.json
 clicontract check ./opencli.yaml --baseline cli-contract.json
 ```
 
-Use `--format json` for CI consumers, `--fail-on warning` to gate warnings, and `--ignore rules.json` for explicit reviewed suppressions. See the [compatibility rules](https://github.com/KeelMatrix/CliContract/blob/main/COMPATIBILITY-RULES.md) and [manifest specification](https://github.com/KeelMatrix/CliContract/blob/main/MANIFEST.md).
+Use `--format json` for CI consumers, `--fail-on warning` to gate warnings, and `--ignore rules.json` for explicit reviewed suppressions. Binary names, action/group runnable state, positional slots, argument passthrough behavior, default-source precedence, and keyed global file-source configuration are compared as described in the [compatibility rules](https://github.com/KeelMatrix/CliContract/blob/main/COMPATIBILITY-RULES.md) and [manifest specification](https://github.com/KeelMatrix/CliContract/blob/main/MANIFEST.md). JSON and recognized YAML numeric scalars are canonicalized by exact numeric value. Unsupported command-option combinations return exit code `2` with `UNSUPPORTED_OPTION`; see `clicontract --help` for the per-command option matrix.
 
 ## Exit codes
 

@@ -46,6 +46,19 @@ public sealed class CompatibilityTests
     }
 
     [Fact]
+    public void PassthroughRemovalIsBreakingAndAdditionIsInformational()
+    {
+        var enabled = Normalize("{\"commands\":{\"tool run <rest>\":{\"args\":[{\"name\":\"rest\",\"passthrough\":true}]}}}");
+        var disabled = Normalize("{\"commands\":{\"tool run <rest>\":{\"args\":[{\"name\":\"rest\",\"passthrough\":false}]}}}");
+
+        var removed = CompatibilityAnalyzer.Compare(enabled, disabled).Findings;
+        var added = CompatibilityAnalyzer.Compare(disabled, enabled).Findings;
+
+        Assert.Contains(removed, finding => finding.Code == "KMCLI112" && finding.Category == "breaking");
+        Assert.Contains(added, finding => finding.Code == "KMCLI112" && finding.Category == "info");
+    }
+
+    [Fact]
     public void PositionalArgumentReorderingIsBreaking()
     {
         var baseline = Normalize("""{"commands":{"tool run <first> <second>":{"args":[{"name":"first"},{"name":"second"}]}}}""");
@@ -139,6 +152,61 @@ public sealed class CompatibilityTests
     }
 
     [Fact]
+    public void RemovingAChoiceRemainsBreakingWhenAnotherChoiceIsAdded()
+    {
+        var baseline = Normalize("""{"commands":{"tool":{"flags":[{"name":"colour","type":"string","choices":[{"value":"red"},{"value":"blue"}]}]}}}""");
+        var mixed = Normalize("""{"commands":{"tool":{"flags":[{"name":"colour","type":"string","choices":[{"value":"red"},{"value":"green"}]}]}}}""");
+        var disjoint = Normalize("""{"commands":{"tool":{"flags":[{"name":"colour","type":"string","choices":[{"value":"green"},{"value":"yellow"}]}]}}}""");
+
+        Assert.Contains(CompatibilityAnalyzer.Compare(baseline, mixed).Findings, finding => finding.Code == "KMCLI107" && finding.Category == "breaking");
+        Assert.Contains(CompatibilityAnalyzer.Compare(baseline, disjoint).Findings, finding => finding.Code == "KMCLI107" && finding.Category == "breaking");
+    }
+
+    [Fact]
+    public void PositionalInsertionBeforeOrBetweenExistingArgumentsIsBreakingButTrailingAdditionIsNot()
+    {
+        var baseline = Normalize("""{"commands":{"tool run <target>":{"args":[{"name":"target"}]}}}""");
+        var prepended = Normalize("""{"commands":{"tool run <mode> <target>":{"args":[{"name":"mode"},{"name":"target"}]}}}""");
+        var trailing = Normalize("""{"commands":{"tool run <target> <mode>":{"args":[{"name":"target"},{"name":"mode"}]}}}""");
+
+        Assert.Contains(CompatibilityAnalyzer.Compare(baseline, prepended).Findings, finding => finding.Code == "KMCLI109" && finding.Category == "breaking");
+        Assert.DoesNotContain(CompatibilityAnalyzer.Compare(baseline, trailing).Findings, finding => finding.Code == "KMCLI109");
+    }
+
+    [Fact]
+    public void BinaryRenameAndActionToGroupAreInvocationBreakingChanges()
+    {
+        var baseline = Normalize("""{"commands":{"tool run":{"kind":"action"}}}""");
+        var changed = NormalizeWithInfo("""{"commands":{"renamed run":{"kind":"group"}}}""", "renamed");
+
+        var findings = CompatibilityAnalyzer.Compare(baseline, changed).Findings;
+
+        Assert.Contains(findings, finding => finding.Code == "KMCLI110" && finding.Category == "breaking");
+        Assert.Contains(findings, finding => finding.Code == "KMCLI111" && finding.Category == "breaking");
+    }
+
+    [Fact]
+    public void DefaultSourcesAndGlobalFileConfigurationAreWarningsIncludingOrderChanges()
+    {
+        var baseline = NormalizeWithGlobal("""{"commands":{"tool":{"flags":[{"name":"format","type":"string","alternativeSources":[{"type":"$ENV","property":"FORMAT"},{"type":"$FILE","property":"$.format"}]}]}}}""", "FORMAT", "$.format", "config.json");
+        var changed = NormalizeWithGlobal("""{"commands":{"tool":{"flags":[{"name":"format","type":"string","alternativeSources":[{"type":"$FILE","property":"$.format"},{"type":"$ENV","property":"FORMAT_NEW"}]}]}}}""", "FORMAT_NEW", "$.format", "other.json");
+
+        var findings = CompatibilityAnalyzer.Compare(baseline, changed).Findings;
+
+        Assert.Contains(findings, finding => finding.Code == "KMCLI204" && finding.Category == "warning" && finding.Path == "root / --format");
+        Assert.Contains(findings, finding => finding.Code == "KMCLI204" && finding.Category == "warning" && finding.Path == "root");
+    }
+
+    [Fact]
+    public void DistinctLargeNumericDefaultsRemainACompatibilityChange()
+    {
+        var baseline = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"number","default":16777216.0}]}}}""");
+        var current = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"number","default":16777217.0}]}}}""");
+
+        Assert.Contains(CompatibilityAnalyzer.Compare(baseline, current).Findings, finding => finding.Code == "KMCLI201" && finding.Category == "warning");
+    }
+
+    [Fact]
     public void CanonicalManifestRoundTripsAndRejectsUnknownVersion()
     {
         var manifest = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string"}]}}}""");
@@ -173,9 +241,32 @@ public sealed class CompatibilityTests
 
     private static CanonicalManifest Normalize(string commands)
     {
+        return NormalizeWithInfo(commands, "tool");
+    }
+
+    private static CanonicalManifest NormalizeWithInfo(string commands, string binary)
+    {
+        var root = JsonNode.Parse(commands)!.AsObject();
+        root["opencliVersion"] = Normalizer.OpenCliVersion;
+        root["info"] = new JsonObject { ["title"] = "Tool", ["binary"] = binary, ["version"] = "1" };
+        return Normalizer.Normalize("opencli", root.ToJsonString());
+    }
+
+    private static CanonicalManifest NormalizeWithGlobal(string commands, string environmentProperty, string fileProperty, string configPath)
+    {
         var root = JsonNode.Parse(commands)!.AsObject();
         root["opencliVersion"] = Normalizer.OpenCliVersion;
         root["info"] = new JsonObject { ["title"] = "Tool", ["binary"] = "tool", ["version"] = "1" };
+        root["global"] = new JsonObject
+        {
+            ["config"] = new JsonObject { ["json"] = configPath },
+            ["flags"] = new JsonArray(new JsonObject
+            {
+                ["name"] = "global",
+                ["type"] = "string",
+                ["alternativeSources"] = new JsonArray(new JsonObject { ["type"] = "$ENV", ["property"] = environmentProperty }, new JsonObject { ["type"] = "$FILE", ["property"] = fileProperty })
+            })
+        };
         return Normalizer.Normalize("opencli", root.ToJsonString());
     }
 

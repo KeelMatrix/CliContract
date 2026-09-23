@@ -8,6 +8,7 @@ public sealed class CanonicalManifest
     public required string Adapter { get; init; }
     public required string SourceVersion { get; init; }
     public CanonicalInfo Info { get; init; } = new();
+    public CanonicalGlobalConfig? GlobalConfig { get; init; }
     public required CanonicalCommand Root { get; init; }
 }
 
@@ -21,6 +22,17 @@ public sealed class CanonicalInfo
     public CanonicalLicense? License { get; init; }
     public CanonicalContact? Contact { get; init; }
     public CanonicalInstall[] Install { get; init; } = [];
+}
+
+public sealed class CanonicalGlobalConfig
+{
+    public CanonicalFileSource[] FileSources { get; init; } = [];
+}
+
+public sealed class CanonicalFileSource
+{
+    public required string Format { get; init; }
+    public required string Path { get; init; }
 }
 
 public sealed class CanonicalLicense
@@ -48,6 +60,7 @@ public sealed class CanonicalInstall
 public sealed class CanonicalCommand
 {
     public required string Path { get; init; }
+    public string? Kind { get; init; }
     public string[] Aliases { get; init; } = [];
     public string? Summary { get; init; }
     public string? Description { get; init; }
@@ -104,6 +117,7 @@ public sealed class CanonicalAlternativeSource
 
 public sealed class CanonicalArgument : CanonicalParameter
 {
+    public bool Passthrough { get; init; }
 }
 
 public sealed class CanonicalOption : CanonicalParameter

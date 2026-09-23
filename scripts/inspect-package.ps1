@@ -57,6 +57,60 @@ function Add-ArchiveMarker {
     finally { $archive.Dispose() }
 }
 
+function Add-ArchiveEntry {
+    param(
+        [string] $ArchivePath,
+        [string] $EntryName,
+        [string] $Content = 'fixture'
+    )
+
+    $archive = [IO.Compression.ZipFile]::Open($ArchivePath, [IO.Compression.ZipArchiveMode]::Update)
+    try {
+        $entry = $archive.CreateEntry($EntryName)
+        $writer = [IO.StreamWriter]::new($entry.Open(), [Text.UTF8Encoding]::new($false))
+        try { $writer.Write($Content) }
+        finally { $writer.Dispose() }
+    }
+    finally { $archive.Dispose() }
+}
+
+function Assert-CorePropertiesEntry {
+    param(
+        [string] $ArchivePath,
+        [string[]] $Entries,
+        [string] $ExpectedPackageId = 'KeelMatrix.CliContract',
+        [string] $ExpectedVersion = '0.1.0'
+    )
+
+    $metadataEntries = @($Entries | Where-Object { $_ -match '^package/services/metadata/core-properties/[^/]+\.psmdcp$' })
+    if ($metadataEntries.Count -ne 1) {
+        throw "Package must contain exactly one core-properties metadata entry; found $($metadataEntries.Count)."
+    }
+
+    $archive = [IO.Compression.ZipFile]::OpenRead($ArchivePath)
+    try {
+        $entry = $archive.GetEntry($metadataEntries[0])
+        $reader = [IO.StreamReader]::new($entry.Open())
+        try { $content = $reader.ReadToEnd() }
+        finally { $reader.Dispose() }
+    }
+    finally { $archive.Dispose() }
+
+    try { [xml] $document = $content }
+    catch { throw 'Core-properties metadata is not valid XML.' }
+    if ($document.DocumentElement.LocalName -ne 'coreProperties' -or $document.DocumentElement.NamespaceURI -ne 'http://schemas.openxmlformats.org/package/2006/metadata/core-properties') {
+        throw 'Core-properties metadata has an unexpected XML root.'
+    }
+
+    $namespaces = [Xml.XmlNamespaceManager]::new($document.NameTable)
+    $namespaces.AddNamespace('cp', 'http://schemas.openxmlformats.org/package/2006/metadata/core-properties')
+    $namespaces.AddNamespace('dc', 'http://purl.org/dc/elements/1.1/')
+    $identifier = $document.SelectSingleNode('/cp:coreProperties/dc:identifier', $namespaces)
+    $version = $document.SelectSingleNode('/cp:coreProperties/cp:version', $namespaces)
+    if ($null -eq $identifier -or $identifier.InnerText -ne $ExpectedPackageId) { throw 'Core-properties metadata package identifier is incorrect.' }
+    if ($null -eq $version -or $version.InnerText -ne $ExpectedVersion) { throw 'Core-properties metadata package version is incorrect.' }
+}
+
 if ($SelfTest) {
     $selfTestRoot = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-package-' + [Guid]::NewGuid().ToString('N'))
     try {
@@ -71,6 +125,21 @@ if ($SelfTest) {
         }
         Write-Output "PACKAGE_NON_VACUITY_CHILD_EXIT=$childExit"
         Write-Output 'PACKAGE_NON_VACUITY=PASS'
+
+        foreach ($case in @(
+            @{ Name = 'unexpected-assembly'; Entry = 'tools/net8.0/any/Unexpected.dll' },
+            @{ Name = 'sensitive-local-json'; Entry = 'tools/net8.0/any/telemetry.local.json' },
+            @{ Name = 'extra-core-properties'; Entry = 'package/services/metadata/core-properties/unexpected.psmdcp' }
+        )) {
+            $casePackage = Join-Path $selfTestRoot ($case.Name + '.nupkg')
+            Copy-Item -LiteralPath $packagePath -Destination $casePackage
+            Add-ArchiveEntry -ArchivePath $casePackage -EntryName $case.Entry
+            $caseOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -RepositoryRoot $root 2>&1)
+            $caseExit = $LASTEXITCODE
+            if ($caseExit -eq 0) { throw "Package inspection accepted self-test case $($case.Name)." }
+            Write-Output "PACKAGE_NEGATIVE_SELF_TEST=$($case.Name) child_exit=$caseExit"
+        }
+        Write-Output 'PACKAGE_NEGATIVE_SELF_TEST=PASS'
     }
     finally {
         if (Test-Path -LiteralPath $selfTestRoot) { Remove-Item -LiteralPath $selfTestRoot -Recurse -Force }
@@ -82,6 +151,8 @@ New-Item -ItemType Directory -Path $temp | Out-Null
 try {
     [IO.Compression.ZipFile]::ExtractToDirectory($packagePath, $temp)
     $entries = [IO.Compression.ZipFile]::OpenRead($packagePath).Entries | ForEach-Object FullName
+    $metadataEntries = @($entries | Where-Object { $_ -match '^package/services/metadata/core-properties/[^/]+\.psmdcp$' })
+    Assert-CorePropertiesEntry -ArchivePath $packagePath -Entries $entries
     $nuspecName = $entries | Where-Object { $_ -like '*.nuspec' }
     if (@($nuspecName).Count -ne 1) { throw 'Package must contain exactly one nuspec.' }
     [xml]$nuspec = Get-Content -Raw (Join-Path $temp $nuspecName)
@@ -97,15 +168,35 @@ try {
         Write-Output 'ICON_GATE=UNVERIFIED package icon metadata and package-root icon are absent.'
     }
     if ($metadata.repository.url -ne 'https://github.com/KeelMatrix/CliContract') { throw 'Repository metadata is incorrect.' }
-    $required = @('README.md', 'KeelMatrix.CliContract.nuspec', 'tools/net8.0/any/KeelMatrix.CliContract.dll', 'tools/net8.0/any/KeelMatrix.CliContract.Core.dll', 'tools/net8.0/any/KeelMatrix.Telemetry.dll', 'tools/net8.0/any/YamlDotNet.dll')
+    $requiredToolPayload = @(
+        'tools/net8.0/any/DotnetToolSettings.xml',
+        'tools/net8.0/any/KeelMatrix.CliContract.dll',
+        'tools/net8.0/any/KeelMatrix.CliContract.runtimeconfig.json',
+        'tools/net8.0/any/KeelMatrix.CliContract.pdb',
+        'tools/net8.0/any/KeelMatrix.CliContract.deps.json',
+        'tools/net8.0/any/KeelMatrix.CliContract.Core.dll',
+        'tools/net8.0/any/KeelMatrix.CliContract.Core.pdb',
+        'tools/net8.0/any/KeelMatrix.CliContract.xml',
+        'tools/net8.0/any/KeelMatrix.Telemetry.dll',
+        'tools/net8.0/any/YamlDotNet.dll'
+    )
+    $required = @('README.md', 'KeelMatrix.CliContract.nuspec') + $requiredToolPayload
     foreach ($entry in $required) { if ($entries -notcontains $entry) { throw "Required package entry is missing: $entry" } }
     if ($entries -notcontains 'LICENSE') { throw 'The package must contain LICENSE.' }
-    $unexpected = @($entries | Where-Object { $_ -notmatch '^(_rels/[^/]+|\[Content_Types\].xml|package/services/metadata/core-properties/[^/]+.psmdcp|README.md|LICENSE|icon.png|[^/]+.nuspec|tools/net8.0/any/[^/]+)$' })
+    $allowedEntries = @('_rels/.rels', '[Content_Types].xml', 'README.md', 'LICENSE', 'icon.png', $nuspecName) + $requiredToolPayload + $metadataEntries
+    $unexpected = @($entries | Where-Object {
+        $_ -notin $allowedEntries
+    })
     if ($unexpected.Count -gt 0) { throw "Unexpected package entries: $($unexpected -join ', ')" }
-    $sensitive = @($entries | Where-Object { $_ -match '(^|/)(.env|.env.|appsettings|secrets?|.*.key|.*.pfx|AGENTS.md|.*test.*)' })
+    $sensitive = @($entries | Where-Object {
+        $_ -match '(?i)(^|/)(\.env(?:$|[._-])|appsettings(?:$|[._-])|telemetry(?:$|[._-])|secrets?(?:$|[._-])|.*(?:\.local|[-_.]secret|[-_.]config)\.(?:json|xml|yml|yaml|config)$|.*\.(?:key|pfx)$|AGENTS\.md|.*test.*)'
+    })
     if ($sensitive.Count -gt 0) { throw "Sensitive or test package entries found: $($sensitive -join ', ')" }
+    $pdbEntries = @($entries | Where-Object { $_ -match '\.pdb$' })
+    $expectedPdbEntries = @($requiredToolPayload | Where-Object { $_ -match '\.pdb$' })
+    if ((@($pdbEntries | Sort-Object) -join '|') -ne (@($expectedPdbEntries | Sort-Object) -join '|')) { throw "Unexpected or missing package symbol entries: $($pdbEntries -join ', ')" }
     $forbiddenSurfacePatterns = @(Get-ForbiddenPatterns)
-    foreach ($entry in $entries | Where-Object { $_ -notmatch '.(dll|pdb|json)$' }) {
+    foreach ($entry in $entries | Where-Object { $_ -notmatch '\.(dll|pdb)$' }) {
         $text = Get-Content -Raw -LiteralPath (Join-Path $temp $entry)
         foreach ($pattern in $forbiddenSurfacePatterns) {
             if ($text -match $pattern) { throw "Forbidden user-facing wording found in package entry: $entry" }

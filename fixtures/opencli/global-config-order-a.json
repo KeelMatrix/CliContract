@@ -1,0 +1,6 @@
+{
+  "opencliVersion": "1.0.0-alpha.14",
+  "info": { "title": "Config fixture", "binary": "tool", "version": "1" },
+  "global": { "config": { "json": "config.json", "yaml": "config.yaml", "toml": "config.toml" } },
+  "commands": { "tool": {} }
+}

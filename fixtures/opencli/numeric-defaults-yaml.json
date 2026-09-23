@@ -1,0 +1,19 @@
+{
+  "opencliVersion": "1.0.0-alpha.14",
+  "info": { "title": "Numeric fixture", "binary": "tool", "version": "1" },
+  "commands": {
+    "tool": {
+      "flags": [
+        { "name": "hex", "type": "number", "default": 16 },
+        { "name": "implicit-hex", "type": "number", "default": 16 },
+        { "name": "octal", "type": "number", "default": 16 },
+        { "name": "binary", "type": "number", "default": 16 },
+        { "name": "grouped", "type": "number", "default": 1000 },
+        { "name": "decimal", "type": "number", "default": 1 },
+        { "name": "exponent", "type": "number", "default": 1000 },
+        { "name": "fraction", "type": "number", "default": 0.123456789012345678901234567890 },
+        { "name": "negative-zero", "type": "number", "default": 0 }
+      ]
+    }
+  }
+}

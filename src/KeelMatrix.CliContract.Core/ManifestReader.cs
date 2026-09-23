@@ -57,7 +57,7 @@ public static class CanonicalManifestReader
 
     private static CanonicalManifest ParseManifest(JsonObject value, NormalizationLimits limits)
     {
-        EnsureProperties(value, ["SchemaVersion", "Adapter", "SourceVersion", "Info", "Root"], "manifest");
+        EnsureProperties(value, ["SchemaVersion", "Adapter", "SourceVersion", "Info", "GlobalConfig", "Root"], "manifest");
         var schemaVersion = RequiredInt(value, "SchemaVersion");
         if (schemaVersion != SupportedSchemaVersion)
         {
@@ -85,7 +85,29 @@ public static class CanonicalManifestReader
             Adapter = adapter,
             SourceVersion = sourceVersion,
             Info = value.ContainsKey("Info") ? ParseInfo(value["Info"], limits) : new(),
+            GlobalConfig = value.ContainsKey("GlobalConfig") && value["GlobalConfig"] is not null ? ParseGlobalConfig(value["GlobalConfig"], limits) : null,
             Root = root
+        };
+    }
+
+    private static CanonicalGlobalConfig ParseGlobalConfig(JsonNode? node, NormalizationLimits limits)
+    {
+        var value = RequireObject(node, "INVALID_BASELINE");
+        EnsureProperties(value, ["FileSources"], "global config");
+        var sources = value["FileSources"] as JsonArray ?? throw new NormalizationException("INVALID_BASELINE", "Canonical file sources must be an array.");
+        CheckCollection(sources.Count, limits);
+        return new CanonicalGlobalConfig
+        {
+            FileSources = sources.Select(item =>
+            {
+                var source = RequireObject(item, "INVALID_BASELINE");
+                EnsureProperties(source, ["Format", "Path"], "file source");
+                return new CanonicalFileSource
+                {
+                    Format = RequiredString(source, "Format", limits),
+                    Path = RequiredString(source, "Path", limits)
+                };
+            }).ToArray()
         };
     }
 
@@ -152,10 +174,17 @@ public static class CanonicalManifestReader
 
     private static CanonicalCommand ParseCommand(JsonObject value, NormalizationLimits limits)
     {
-        EnsureProperties(value, ["Path", "Aliases", "Summary", "Description", "Status", "Arguments", "Options", "Subcommands"], "command");
+        EnsureProperties(value, ["Path", "Kind", "Aliases", "Summary", "Description", "Status", "Arguments", "Options", "Subcommands"], "command");
+        var kind = ReadNullableString(value, "Kind", limits);
+        if (kind is not null and not ("action" or "group"))
+        {
+            throw new NormalizationException("INVALID_BASELINE", "A canonical command kind must be action or group.");
+        }
+
         return new CanonicalCommand
         {
             Path = RequiredString(value, "Path", limits),
+            Kind = kind,
             Aliases = ReadStrings(value["Aliases"], limits),
             Summary = ReadNullableString(value, "Summary", limits),
             Description = ReadNullableString(value, "Description", limits),
@@ -182,7 +211,7 @@ public static class CanonicalManifestReader
             var value = RequireObject(item, "INVALID_BASELINE");
             string[] properties = option
                 ? ["Name", "Aliases", "Summary", "Description", "Type", "Required", "ArityMinimum", "ArityMaximum", "AllowedValues", "DefaultValue", "AlternativeSources", "Status"]
-                : ["Name", "Summary", "Description", "Type", "Required", "ArityMinimum", "ArityMaximum", "AllowedValues", "DefaultValue", "AlternativeSources", "Status"];
+                : ["Name", "Summary", "Description", "Type", "Required", "ArityMinimum", "ArityMaximum", "AllowedValues", "DefaultValue", "AlternativeSources", "Passthrough", "Status"];
             EnsureProperties(value, properties, "parameter");
             var common = new ParameterParts(
                 RequiredString(value, "Name", limits),
@@ -195,6 +224,7 @@ public static class CanonicalManifestReader
                 ReadScalarArray(value["AllowedValues"], limits),
                 ReadNullableScalar(value, "DefaultValue"),
                 ReadSources(value["AlternativeSources"], limits),
+                option ? false : ReadNullableBool(value, "Passthrough") ?? false,
                 ReadNullableString(value, "Status", limits));
 
             if (option)
@@ -229,6 +259,7 @@ public static class CanonicalManifestReader
                     AllowedValues = common.AllowedValues,
                     DefaultValue = common.DefaultValue,
                     AlternativeSources = common.Sources,
+                    Passthrough = common.Passthrough,
                     Status = common.Status
                 };
             }
@@ -381,5 +412,5 @@ public static class CanonicalManifestReader
         exception.Message.Contains("maximum configured depth", StringComparison.OrdinalIgnoreCase);
 
     private sealed class Counter { public int Value; }
-    private sealed record ParameterParts(string Name, string? Summary, string? Description, string? Type, bool? Required, int? Minimum, int? Maximum, JsonNode[] AllowedValues, JsonNode? DefaultValue, CanonicalAlternativeSource[] Sources, string? Status);
+    private sealed record ParameterParts(string Name, string? Summary, string? Description, string? Type, bool? Required, int? Minimum, int? Maximum, JsonNode[] AllowedValues, JsonNode? DefaultValue, CanonicalAlternativeSource[] Sources, bool Passthrough, string? Status);
 }

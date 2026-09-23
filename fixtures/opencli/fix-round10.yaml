@@ -1,0 +1,28 @@
+opencliVersion: 1.0.0-alpha.14
+info:
+  title: Fix-round10 fixture
+  binary: tool
+  version: '1'
+global:
+  config:
+    json: ~/.config/tool/config.json
+    yaml: ~/.config/tool/config.yaml
+commands:
+  "tool":
+    kind: action
+    flags:
+      - name: mode
+        type: string
+        choices:
+          - value: red
+          - value: blue
+        default: 16777217.0
+        alternativeSources:
+          - type: $ENV
+            property: TOOL_MODE
+          - type: $FILE
+            property: $.mode
+  "tool run <target>":
+    kind: action
+    args:
+      - name: target
