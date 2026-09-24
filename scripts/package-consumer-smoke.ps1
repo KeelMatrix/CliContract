@@ -113,6 +113,33 @@ try {
         }
     }
 
+    function Assert-InformationalCase {
+        param(
+            [string] $Label,
+            [string] $OldText,
+            [string] $NewText
+        )
+
+        $oldInformational = Join-Path $temp ($Label + '-old.json')
+        $newInformational = Join-Path $temp ($Label + '-new.json')
+        [IO.File]::WriteAllText($oldInformational, $OldText, [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($newInformational, $NewText, [Text.UTF8Encoding]::new($false))
+
+        foreach ($threshold in @('breaking', 'warning')) {
+            $arguments = @('diff', $oldInformational, $newInformational, '--format', 'json', '--no-telemetry')
+            if ($threshold -eq 'warning') { $arguments += @('--fail-on', 'warning') }
+            $result = @(& $tool @arguments 2>&1)
+            $exit = $LASTEXITCODE
+            $output = $result -join "`n"
+            if ($exit -ne 0) { throw "Packed-tool $Label ($threshold) unexpectedly gated an informational finding: exit=$exit output=$output" }
+            try { $document = $output | ConvertFrom-Json } catch { throw "Packed-tool $Label ($threshold) did not return a JSON envelope: $output" }
+            $findings = @($document.findings)
+            $matching = @($findings | Where-Object { $_.code -eq 'KMCLI005' -and $_.category -eq 'info' })
+            if ($matching.Count -eq 0) { throw "Packed-tool $Label ($threshold) returned no KMCLI005 info finding: $output" }
+            Write-Output "CASE=$Label fail_on=$threshold exit=$exit code=KMCLI005 category=info finding_count=$($findings.Count)"
+        }
+    }
+
     $old = Join-Path $temp 'old.json'
     $new = Join-Path $temp 'new.json'
     $baseline = Join-Path $temp 'baseline.json'
@@ -158,6 +185,18 @@ try {
     $binaryExit = $LASTEXITCODE
     $binary | Out-Host
     if ($binaryExit -ne 1 -or -not (($binary -join "`n") -match 'KMCLI110')) { throw 'Binary rename on the packed tool did not return exit 1/KMCLI110.' }
+
+    $infoDescriptionOld = $schema.Replace('"version":"1"', '"version":"1","description":"old info description"')
+    $infoDescriptionNew = $infoDescriptionOld.Replace('old info description', 'new info description')
+    Assert-InformationalCase -Label 'info-description' -OldText $infoDescriptionOld -NewText $infoDescriptionNew
+
+    $choiceDescriptionOld = $schema.Replace('"region","type":"string"', '"region","type":"string","choices":[{"value":"red","description":"old choice description"}]')
+    $choiceDescriptionNew = $choiceDescriptionOld.Replace('old choice description', 'new choice description')
+    Assert-InformationalCase -Label 'choice-description' -OldText $choiceDescriptionOld -NewText $choiceDescriptionNew
+
+    $installGuidanceOld = $schema.Replace(',"commands":', ',"install":[{"name":"download","url":"https://install.invalid/old","description":"old install guidance"}],"commands":')
+    $installGuidanceNew = $installGuidanceOld.Replace('old install guidance', 'new install guidance')
+    Assert-InformationalCase -Label 'install-guidance' -OldText $installGuidanceOld -NewText $installGuidanceNew
 
     $validateOptions = & $tool validate $old --baseline $baseline --no-telemetry 2>&1
     if ($LASTEXITCODE -ne 2 -or -not (($validateOptions -join "`n") -match 'UNSUPPORTED_OPTION')) { throw 'Packed-tool validate accepted unsupported --baseline.' }

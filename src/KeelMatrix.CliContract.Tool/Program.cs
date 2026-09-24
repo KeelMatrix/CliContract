@@ -599,6 +599,8 @@ internal static class CliApplication
       Accepted command names include aliases at every command segment; retained aliases preserve old paths.
       All supported string, number, integer, and boolean type domains are compared, and exit-code changes warn.
       Argument passthrough and keyed global config formats are represented compatibility semantics.
+      Represented info metadata, install guidance, help text, and choice descriptions produce KMCLI005 info findings;
+      info findings are reported but never gate either --fail-on threshold.
 
     Validation boundary:
       One variadic positional argument is allowed and it must be last; minItems/maxItems require variadic=true.

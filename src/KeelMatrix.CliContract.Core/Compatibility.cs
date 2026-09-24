@@ -41,6 +41,7 @@ public static class CompatibilityAnalyzer
         var currentGraph = InvocationNameGraph.Create(current);
         var findings = new List<CompatibilityFinding>();
 
+        CompareInfo(baseline.Info, current.Info, findings);
         CompareRootInvocationNames(baseline, current, findings);
         CompareExitCodes(baseline.GlobalExitCodes, current.GlobalExitCodes, "root", findings);
         CompareGlobalConfig(baseline.GlobalConfig, current.GlobalConfig, findings);
@@ -81,6 +82,89 @@ public static class CompatibilityAnalyzer
         }
 
         return new CompatibilityResult(findings);
+    }
+
+    private static void CompareInfo(CanonicalInfo baseline, CanonicalInfo current, List<CompatibilityFinding> findings)
+    {
+        CompareInformationalValue(baseline.Title, current.Title, "info / title", "Info title", findings);
+        CompareInformationalValue(baseline.Summary, current.Summary, "info / summary", "Info summary", findings);
+        CompareInformationalValue(baseline.Description, current.Description, "info / description", "Info description", findings);
+        CompareInformationalValue(baseline.Version, current.Version, "info / version", "Info version", findings);
+
+        CompareLicense(baseline.License, current.License, findings);
+        CompareContact(baseline.Contact, current.Contact, findings);
+        CompareInstall(baseline.Install, current.Install, findings);
+    }
+
+    private static void CompareLicense(CanonicalLicense? baseline, CanonicalLicense? current, List<CompatibilityFinding> findings)
+    {
+        CompareInformationalValue(baseline?.Name, current?.Name, "info / license / name", "License name", findings);
+        CompareInformationalValue(baseline?.SpdxId, current?.SpdxId, "info / license / spdxId", "License SPDX identifier", findings);
+        CompareInformationalValue(baseline?.Url, current?.Url, "info / license / url", "License URL", findings);
+    }
+
+    private static void CompareContact(CanonicalContact? baseline, CanonicalContact? current, List<CompatibilityFinding> findings)
+    {
+        CompareInformationalValue(baseline?.Name, current?.Name, "info / contact / name", "Contact name", findings);
+        CompareInformationalValue(baseline?.Email, current?.Email, "info / contact / email", "Contact email", findings);
+        CompareInformationalValue(baseline?.Url, current?.Url, "info / contact / url", "Contact URL", findings);
+    }
+
+    private static void CompareInstall(CanonicalInstall[] baseline, CanonicalInstall[] current, List<CompatibilityFinding> findings)
+    {
+        var count = Math.Max(baseline.Length, current.Length);
+        for (var index = 0; index < count; index++)
+        {
+            var oldInstall = index < baseline.Length ? baseline[index] : null;
+            var newInstall = index < current.Length ? current[index] : null;
+            var path = "info / install / " + index;
+            CompareInformationalValue(oldInstall?.Name, newInstall?.Name, path + " / name", "Install name", findings);
+            CompareInformationalValue(oldInstall?.Command, newInstall?.Command, path + " / command", "Install command", findings);
+            CompareInformationalValue(oldInstall?.Url, newInstall?.Url, path + " / url", "Install URL", findings);
+            CompareInformationalValue(oldInstall?.Description, newInstall?.Description, path + " / description", "Install description", findings);
+        }
+    }
+
+    private static void CompareChoiceDescriptions(CanonicalChoice[] baseline, CanonicalChoice[] current, string path, List<CompatibilityFinding> findings)
+    {
+        var matchedCurrent = new bool[current.Length];
+        foreach (var oldChoice in baseline)
+        {
+            var currentIndex = -1;
+            for (var index = 0; index < current.Length; index++)
+            {
+                if (!matchedCurrent[index] && JsonNode.DeepEquals(oldChoice.Value, current[index].Value))
+                {
+                    currentIndex = index;
+                    break;
+                }
+            }
+
+            CanonicalChoice? newChoice = null;
+            if (currentIndex >= 0)
+            {
+                matchedCurrent[currentIndex] = true;
+                newChoice = current[currentIndex];
+            }
+
+            CompareInformationalValue(oldChoice.Description, newChoice?.Description, path + " / choices", "Choice description", findings);
+        }
+
+        for (var index = 0; index < current.Length; index++)
+        {
+            if (!matchedCurrent[index])
+            {
+                CompareInformationalValue(null, current[index].Description, path + " / choices", "Choice description", findings);
+            }
+        }
+    }
+
+    private static void CompareInformationalValue(string? baseline, string? current, string path, string label, List<CompatibilityFinding> findings)
+    {
+        if (!string.Equals(baseline, current, StringComparison.Ordinal))
+        {
+            findings.Add(new CompatibilityFinding("KMCLI005", "info", path, $"{label} changed."));
+        }
     }
 
     private static void CompareRootInvocationNames(CanonicalManifest baseline, CanonicalManifest current, List<CompatibilityFinding> findings)
@@ -297,6 +381,7 @@ public static class CompatibilityAnalyzer
             findings.Add(new CompatibilityFinding("KMCLI006", "info", path, "Parameter help visibility changed."));
         }
 
+        CompareChoiceDescriptions(baseline.Choices, current.Choices, path, findings);
         CompareText(baseline.Summary, current.Summary, path, "summary", findings);
         CompareText(baseline.Description, current.Description, path, "description", findings);
         CompareStatus(baseline.Status, current.Status, path, findings);

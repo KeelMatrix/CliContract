@@ -35,6 +35,76 @@ public sealed class CompatibilityTests
     }
 
     [Fact]
+    public void RepresentedInfoInstallAndChoiceHelpChangesAreInformationalInBothDirections()
+    {
+        var baseline = ManifestWithRepresentedInfo("old", "old-choice");
+        var current = ManifestWithRepresentedInfo("new", "new-choice");
+
+        var forward = CompatibilityAnalyzer.Compare(baseline, current).Findings;
+        var reverse = CompatibilityAnalyzer.Compare(current, baseline).Findings;
+
+        var expectedPaths = new[]
+        {
+            "info / title",
+            "info / summary",
+            "info / description",
+            "info / version",
+            "info / license / name",
+            "info / license / spdxId",
+            "info / license / url",
+            "info / contact / name",
+            "info / contact / email",
+            "info / contact / url",
+            "info / install / 0 / name",
+            "info / install / 0 / command",
+            "info / install / 0 / url",
+            "info / install / 0 / description",
+            "root / --value / choices"
+        };
+
+        foreach (var findings in new[] { forward, reverse })
+        {
+            Assert.Equal(expectedPaths.Length, findings.Count);
+            Assert.All(expectedPaths, path => Assert.Contains(findings, finding => finding.Code == "KMCLI005" && finding.Category == "info" && finding.Path == path));
+        }
+    }
+
+    [Fact]
+    public void AddedAndRemovedRepresentedHelpValuesProduceInformationalFindings()
+    {
+        var withoutInfo = ManifestWithRepresentedInfo(null, null, includeInstall: false, includeChoiceDescription: false);
+        var withInfo = ManifestWithRepresentedInfo("added", "added-choice", includeInstall: true, includeChoiceDescription: true);
+
+        var added = CompatibilityAnalyzer.Compare(withoutInfo, withInfo).Findings;
+        var removed = CompatibilityAnalyzer.Compare(withInfo, withoutInfo).Findings;
+
+        var expectedPaths = new[]
+        {
+            "info / title",
+            "info / summary",
+            "info / description",
+            "info / version",
+            "info / license / name",
+            "info / license / spdxId",
+            "info / license / url",
+            "info / contact / name",
+            "info / contact / email",
+            "info / contact / url",
+            "info / install / 0 / name",
+            "info / install / 0 / command",
+            "info / install / 0 / url",
+            "info / install / 0 / description",
+            "root / --value / choices"
+        };
+
+        foreach (var findings in new[] { added, removed })
+        {
+            Assert.Equal(expectedPaths.Length, findings.Count);
+            Assert.All(expectedPaths, path => Assert.Contains(findings, finding => finding.Code == "KMCLI005" && finding.Category == "info" && finding.Path == path));
+        }
+    }
+
+    [Fact]
     public void RequirednessChangeDoesNotAlsoReportImplicitArityNarrowing()
     {
         var optional = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string","required":false}]}}}""");
@@ -357,6 +427,46 @@ public sealed class CompatibilityTests
         root["opencliVersion"] = Normalizer.OpenCliVersion;
         root["info"] = new JsonObject { ["title"] = "Tool", ["binary"] = binary, ["version"] = "1" };
         return Normalizer.Normalize("opencli", root.ToJsonString());
+    }
+
+    private static CanonicalManifest ManifestWithRepresentedInfo(string? suffix, string? choiceDescription, bool includeInstall = true, bool includeChoiceDescription = true)
+    {
+        var info = new CanonicalInfo
+        {
+            Title = suffix is null ? null : "Title " + suffix,
+            Summary = suffix is null ? null : "Summary " + suffix,
+            Description = suffix is null ? null : "Description " + suffix,
+            Binary = "tool",
+            Version = suffix is null ? null : "1." + suffix,
+            License = suffix is null ? null : new CanonicalLicense { Name = "MIT " + suffix, SpdxId = "MIT-" + suffix, Url = "https://license.invalid/" + suffix },
+            Contact = suffix is null ? null : new CanonicalContact { Name = "Contact " + suffix, Email = suffix + "@example.invalid", Url = "https://contact.invalid/" + suffix },
+            Install = includeInstall && suffix is not null
+                ? [new CanonicalInstall { Name = "download-" + suffix, Command = "tool install " + suffix, Url = "https://install.invalid/" + suffix, Description = "Install " + suffix }]
+                : []
+        };
+
+        return new CanonicalManifest
+        {
+            Adapter = "opencli",
+            SourceVersion = Normalizer.OpenCliVersion,
+            Info = info,
+            Root = new CanonicalCommand
+            {
+                Path = "root",
+                Options =
+                [
+                    new CanonicalOption
+                    {
+                        Name = "--value",
+                        Type = "string",
+                        Choices =
+                        [
+                            new CanonicalChoice { Value = JsonValue.Create("one")!, Description = includeChoiceDescription ? choiceDescription : null }
+                        ]
+                    }
+                ]
+            }
+        };
     }
 
     private static CanonicalManifest NormalizeWithGlobal(string commands, string environmentProperty, string fileProperty, string configPath)
