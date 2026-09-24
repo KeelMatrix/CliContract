@@ -186,6 +186,113 @@ public sealed class CompatibilityTests
     }
 
     [Fact]
+    public void CommandRenameWithoutAliasIsBreaking()
+    {
+        var baseline = Normalize("""{"commands":{"tool deploy":{}}}""");
+        var current = Normalize("""{"commands":{"tool release":{}}}""");
+
+        var findings = CompatibilityAnalyzer.Compare(baseline, current).Findings;
+
+        Assert.Contains(findings, finding => finding.Code == "KMCLI103" && finding.Category == "breaking");
+    }
+
+    [Fact]
+    public void CommandRenameWithAliasPreservesTheAcceptedInvocation()
+    {
+        var baseline = Normalize("""{"commands":{"tool deploy run":{}}}""");
+        var current = Normalize("""{"commands":{"tool release":{"aliases":["deploy"]},"tool release run":{}}}""");
+
+        var findings = CompatibilityAnalyzer.Compare(baseline, current).Findings;
+
+        Assert.DoesNotContain(findings, finding => finding.Category == "breaking");
+        Assert.DoesNotContain(findings, finding => finding.Code == "KMCLI103");
+    }
+
+    [Fact]
+    public void AliasRemovalIsBreakingOnlyWhenItRemovesAnAcceptedInvocation()
+    {
+        var baseline = Normalize("""{"commands":{"tool deploy":{"aliases":["d"]}}}""");
+        var retainedThroughPrimary = Normalize("""{"commands":{"tool deploy":{}}}""");
+        var duplicatePrimary = Normalize("""{"commands":{"tool deploy":{"aliases":["deploy"]}}}""");
+
+        var retainedFindings = CompatibilityAnalyzer.Compare(baseline, retainedThroughPrimary).Findings;
+        var duplicateFindings = CompatibilityAnalyzer.Compare(duplicatePrimary, retainedThroughPrimary).Findings;
+
+        Assert.Contains(retainedFindings, finding => finding.Code == "KMCLI104" && finding.Category == "breaking");
+        Assert.DoesNotContain(duplicateFindings, finding => finding.Code == "KMCLI104" && finding.Category == "breaking");
+    }
+
+    [Theory]
+    [InlineData("string", "number", true)]
+    [InlineData("string", "integer", true)]
+    [InlineData("string", "boolean", true)]
+    [InlineData("number", "string", false)]
+    [InlineData("number", "integer", true)]
+    [InlineData("number", "boolean", true)]
+    [InlineData("integer", "string", false)]
+    [InlineData("integer", "number", false)]
+    [InlineData("integer", "boolean", true)]
+    [InlineData("boolean", "string", false)]
+    [InlineData("boolean", "number", true)]
+    [InlineData("boolean", "integer", true)]
+    public void SupportedTypeTransitionsUseAcceptedLexicalDomain(string oldType, string newType, bool breaking)
+    {
+        var baseline = Normalize($"{{\"commands\":{{\"tool\":{{\"flags\":[{{\"name\":\"value\",\"type\":\"{oldType}\"}}]}}}}}}");
+        var current = Normalize($"{{\"commands\":{{\"tool\":{{\"flags\":[{{\"name\":\"value\",\"type\":\"{newType}\"}}]}}}}}}");
+
+        var findings = CompatibilityAnalyzer.Compare(baseline, current).Findings;
+
+        Assert.Equal(breaking, findings.Any(finding => finding.Code == "KMCLI107" && finding.Category == "breaking"));
+    }
+
+    [Theory]
+    [InlineData("string", "\"1\"", "number", false)]
+    [InlineData("string", "\"1\"", "integer", false)]
+    [InlineData("string", "\"true\"", "boolean", false)]
+    [InlineData("number", "1", "string", false)]
+    [InlineData("number", "1", "integer", false)]
+    [InlineData("number", "1", "boolean", true)]
+    [InlineData("integer", "1", "string", false)]
+    [InlineData("integer", "1", "number", false)]
+    [InlineData("integer", "1", "boolean", true)]
+    [InlineData("boolean", "true", "string", false)]
+    [InlineData("boolean", "true", "number", true)]
+    [InlineData("boolean", "true", "integer", true)]
+    public void ConstrainedChoiceDomainsUseTheSameLexicalTypeRelation(string oldType, string oldChoice, string newType, bool breaking)
+    {
+        var baseline = Normalize($"{{\"commands\":{{\"tool\":{{\"flags\":[{{\"name\":\"value\",\"type\":\"{oldType}\",\"choices\":[{{\"value\":{oldChoice}}}]}}]}}}}}}");
+        var current = Normalize($"{{\"commands\":{{\"tool\":{{\"flags\":[{{\"name\":\"value\",\"type\":\"{newType}\"}}]}}}}}}");
+
+        var findings = CompatibilityAnalyzer.Compare(baseline, current).Findings;
+
+        Assert.Equal(breaking, findings.Any(finding => finding.Code == "KMCLI107" && finding.Category == "breaking"));
+    }
+
+    [Fact]
+    public void ConstrainingAnPreviouslyUnboundedDomainIsBreakingAndWideningAChoiceIsNot()
+    {
+        var unbounded = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string"}]}}}""");
+        var constrained = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string","choices":[{"value":"one"}]}]}}}""");
+        var oldChoice = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string","choices":[{"value":"one"}]}]}}}""");
+
+        Assert.Contains(CompatibilityAnalyzer.Compare(unbounded, constrained).Findings, finding => finding.Code == "KMCLI107" && finding.Category == "breaking");
+        Assert.DoesNotContain(CompatibilityAnalyzer.Compare(oldChoice, unbounded).Findings, finding => finding.Code == "KMCLI107");
+    }
+
+    [Fact]
+    public void ExitCodeChangesArePreservedAndWarn()
+    {
+        var baseline = NormalizeWithExitCodes("""[{"code":0,"status":"OK","summary":"ok"}]""", """[{"code":2,"status":"BAD_USER_INPUT_ERROR","summary":"bad"}]""");
+        var current = NormalizeWithExitCodes("""[{"code":0,"status":"OK","summary":"ok"},{"code":1,"status":"INTERNAL_CLI_ERROR","summary":"failed"}]""", """[{"code":2,"status":"BAD_USER_INPUT_ERROR","summary":"changed"}]""");
+
+        Assert.Single(baseline.GlobalExitCodes);
+        Assert.Single(baseline.Root.ExitCodes);
+        Assert.Equal("changed", current.Root.ExitCodes.Single().Summary);
+        var findings = CompatibilityAnalyzer.Compare(baseline, current).Findings;
+        Assert.Equal(2, findings.Count(finding => finding.Code == "KMCLI205" && finding.Category == "warning" && finding.Path == "root"));
+    }
+
+    [Fact]
     public void DefaultSourcesAndGlobalFileConfigurationAreWarningsIncludingOrderChanges()
     {
         var baseline = NormalizeWithGlobal("""{"commands":{"tool":{"flags":[{"name":"format","type":"string","alternativeSources":[{"type":"$ENV","property":"FORMAT"},{"type":"$FILE","property":"$.format"}]}]}}}""", "FORMAT", "$.format", "config.json");
@@ -267,6 +374,16 @@ public sealed class CompatibilityTests
                 ["alternativeSources"] = new JsonArray(new JsonObject { ["type"] = "$ENV", ["property"] = environmentProperty }, new JsonObject { ["type"] = "$FILE", ["property"] = fileProperty })
             })
         };
+        return Normalizer.Normalize("opencli", root.ToJsonString());
+    }
+
+    private static CanonicalManifest NormalizeWithExitCodes(string globalExitCodes, string commandExitCodes)
+    {
+        var root = JsonNode.Parse("""{"commands":{"tool":{"exitCodes":[]}}}""")!.AsObject();
+        root["opencliVersion"] = Normalizer.OpenCliVersion;
+        root["info"] = new JsonObject { ["title"] = "Tool", ["binary"] = "tool", ["version"] = "1" };
+        root["global"] = new JsonObject { ["exitCodes"] = JsonNode.Parse(globalExitCodes) };
+        root["commands"]!["tool"]!["exitCodes"] = JsonNode.Parse(commandExitCodes);
         return Normalizer.Normalize("opencli", root.ToJsonString());
     }
 

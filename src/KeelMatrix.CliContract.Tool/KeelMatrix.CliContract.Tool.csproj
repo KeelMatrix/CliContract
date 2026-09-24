@@ -29,8 +29,8 @@
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
-    <None Remove="**/.env*;**/*appsettings*.json;**/*telemetry*.json;**/*secret*;**/*local*.json;**/*.key;**/*.pfx" />
-    <Content Remove="**/.env*;**/*appsettings*.json;**/*telemetry*.json;**/*secret*;**/*local*.json;**/*.key;**/*.pfx" />
+    <None Remove="**/.env*;**/*appsettings*.json;**/*telemetry*.json;**/*.local.json;**/*.local.yaml;**/*.local.yml;**/*secret*;**/*credential*;**/*.key;**/*.pfx;**/*.pem;**/*.p12;**/*.log;**/logs/**;**/cache/**;**/.cache/**;**/*.nupkg;**/*.snupkg;**/*.zip;**/*.tar.gz" />
+    <Content Remove="**/.env*;**/*appsettings*.json;**/*telemetry*.json;**/*.local.json;**/*.local.yaml;**/*.local.yml;**/*secret*;**/*credential*;**/*.key;**/*.pfx;**/*.pem;**/*.p12;**/*.log;**/logs/**;**/cache/**;**/.cache/**;**/*.nupkg;**/*.snupkg;**/*.zip;**/*.tar.gz" />
     <None Include="README.md" Pack="true" PackagePath="" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\..\icon.png" Pack="true" PackagePath="icon.png" Link="icon.png" Condition="Exists('..\..\icon.png')" />

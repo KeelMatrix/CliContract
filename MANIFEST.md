@@ -10,12 +10,13 @@ CliContract writes canonical manifest schema version `1`. The manifest is a Keel
   "Adapter": "opencli",
   "SourceVersion": "1.0.0-alpha.14",
   "Info": { "Title": "Example CLI", "Summary": null, "Description": null, "Binary": "example", "Version": "1.0.0", "License": null, "Contact": null, "Install": [] },
+  "GlobalExitCodes": [],
   "GlobalConfig": null,
-  "Root": { "Path": "root", "Aliases": [], "Arguments": [], "Options": [], "Subcommands": [] }
+  "Root": { "Path": "root", "Aliases": [], "Hidden": false, "ExitCodes": [], "Examples": [], "Arguments": [], "Options": [], "Subcommands": [] }
 }
 ```
 
-`Info` preserves the validated metadata from the source, including scalar URL values in `Contact.Url`, `License.Url`, and `Install[].Url`. `Info.Binary` is invocation identity and is compared as breaking when renamed. URLs remain data and are never fetched. `GlobalConfig.FileSources` contains the supported `json`, `toml`, and `yaml` file-source paths sorted by format; the source object's member order is not represented. Commands contain `Path`, `Kind` (`action` or `group`), sorted `Aliases`, optional `Summary`, `Description`, and `Status`, plus `Arguments`, `Options`, and `Subcommands`. Parameters contain `Name`, optional `Summary`, `Description`, `Type`, `Required`, `ArityMinimum`, `ArityMaximum`, scalar `AllowedValues`, scalar `DefaultValue`, ordered `AlternativeSources`, and optional `Status`. Arguments additionally contain `Passthrough`, which defaults to false. Options additionally contain sorted `Aliases`.
+`Info` preserves the validated metadata from the source, including scalar URL values in `Contact.Url`, `License.Url`, and `Install[].Url`. `Info.Binary` is invocation identity and is compared as breaking when renamed. URLs remain data and are never fetched. `GlobalExitCodes` and command `ExitCodes` preserve code, status, summary, and description; represented changes are warnings. `GlobalConfig.FileSources` contains the supported `json`, `toml`, and `yaml` file-source paths sorted by format; the source object's member order is not represented. Commands contain `Path`, `Kind` (`action` or `group`), sorted `Aliases`, optional `Summary`, `Description`, `Status`, `Hidden`, `ExitCodes`, and `Examples`, plus `Arguments`, `Options`, and `Subcommands`. Parameters contain `Name`, optional `Summary`, `Description`, `Type`, `Required`, `ArityMinimum`, `ArityMaximum`, `Variadic`, `Hint`, `Hidden`, scalar `AllowedValues`, structured `Choices`, scalar `DefaultValue`, ordered `AlternativeSources`, and optional `Status`. Arguments additionally contain `Passthrough`, which defaults to false. Options additionally contain sorted `Aliases`.
 
 The current serializer includes null optional values so null and omission have one stable representation. Unknown manifest fields and versions are rejected. The only accepted `Adapter` is `opencli` with `SourceVersion` `1.0.0-alpha.14`.
 
@@ -25,6 +26,8 @@ The current serializer includes null optional values so null and omission have o
 - Invariant culture is used for scalar conversion.
 - Command paths are logical paths beginning at `root`.
 - Commands, options, aliases, and scalar choices are ordered with ordinal comparison; positional argument declaration order is retained.
+- Accepted command invocation names are modeled as primary names plus aliases at every command segment, so retained aliases preserve descendant invocation paths.
+- Non-variadic parameters never carry item bounds. At most one variadic positional argument is accepted, and it must be last; `minItems` and `maxItems` are preserved only for variadic parameters.
 - Option names use a `--` prefix in the manifest.
 - Omitted OpenCLI booleans use their documented defaults; null/default/alternative-source distinctions are preserved according to the supported adapter contract.
 - JSON escaping and indentation are produced by the stable .NET JSON serializer; no machine path or source-document metadata is retained.

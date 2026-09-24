@@ -57,7 +57,7 @@ public static class CanonicalManifestReader
 
     private static CanonicalManifest ParseManifest(JsonObject value, NormalizationLimits limits)
     {
-        EnsureProperties(value, ["SchemaVersion", "Adapter", "SourceVersion", "Info", "GlobalConfig", "Root"], "manifest");
+        EnsureProperties(value, ["SchemaVersion", "Adapter", "SourceVersion", "Info", "GlobalExitCodes", "GlobalConfig", "Root"], "manifest");
         var schemaVersion = RequiredInt(value, "SchemaVersion");
         if (schemaVersion != SupportedSchemaVersion)
         {
@@ -85,6 +85,7 @@ public static class CanonicalManifestReader
             Adapter = adapter,
             SourceVersion = sourceVersion,
             Info = value.ContainsKey("Info") ? ParseInfo(value["Info"], limits) : new(),
+            GlobalExitCodes = ReadExitCodes(value["GlobalExitCodes"], limits),
             GlobalConfig = value.ContainsKey("GlobalConfig") && value["GlobalConfig"] is not null ? ParseGlobalConfig(value["GlobalConfig"], limits) : null,
             Root = root
         };
@@ -174,7 +175,7 @@ public static class CanonicalManifestReader
 
     private static CanonicalCommand ParseCommand(JsonObject value, NormalizationLimits limits)
     {
-        EnsureProperties(value, ["Path", "Kind", "Aliases", "Summary", "Description", "Status", "Arguments", "Options", "Subcommands"], "command");
+        EnsureProperties(value, ["Path", "Kind", "Aliases", "Summary", "Description", "Status", "Hidden", "ExitCodes", "Examples", "Arguments", "Options", "Subcommands"], "command");
         var kind = ReadNullableString(value, "Kind", limits);
         if (kind is not null and not ("action" or "group"))
         {
@@ -189,6 +190,9 @@ public static class CanonicalManifestReader
             Summary = ReadNullableString(value, "Summary", limits),
             Description = ReadNullableString(value, "Description", limits),
             Status = ReadNullableString(value, "Status", limits),
+            Hidden = ReadNullableBool(value, "Hidden") ?? false,
+            ExitCodes = ReadExitCodes(value["ExitCodes"], limits),
+            Examples = ReadExamples(value["Examples"], limits),
             Arguments = ReadParameters(value["Arguments"], false, limits).Cast<CanonicalArgument>().ToArray(),
             Options = ReadParameters(value["Options"], true, limits).Cast<CanonicalOption>().ToArray(),
             Subcommands = ReadCommands(value["Subcommands"], limits)
@@ -210,8 +214,8 @@ public static class CanonicalManifestReader
         {
             var value = RequireObject(item, "INVALID_BASELINE");
             string[] properties = option
-                ? ["Name", "Aliases", "Summary", "Description", "Type", "Required", "ArityMinimum", "ArityMaximum", "AllowedValues", "DefaultValue", "AlternativeSources", "Status"]
-                : ["Name", "Summary", "Description", "Type", "Required", "ArityMinimum", "ArityMaximum", "AllowedValues", "DefaultValue", "AlternativeSources", "Passthrough", "Status"];
+                ? ["Name", "Aliases", "Summary", "Description", "Type", "Required", "ArityMinimum", "ArityMaximum", "Variadic", "Hint", "Hidden", "AllowedValues", "Choices", "DefaultValue", "AlternativeSources", "Status"]
+                : ["Name", "Summary", "Description", "Type", "Required", "ArityMinimum", "ArityMaximum", "Variadic", "Hint", "Hidden", "AllowedValues", "Choices", "DefaultValue", "AlternativeSources", "Passthrough", "Status"];
             EnsureProperties(value, properties, "parameter");
             var common = new ParameterParts(
                 RequiredString(value, "Name", limits),
@@ -221,7 +225,11 @@ public static class CanonicalManifestReader
                 ReadNullableBool(value, "Required"),
                 ReadNullableInt(value, "ArityMinimum"),
                 ReadNullableInt(value, "ArityMaximum"),
+                ReadNullableBool(value, "Variadic") ?? false,
+                ReadNullableString(value, "Hint", limits),
+                ReadNullableBool(value, "Hidden") ?? false,
                 ReadScalarArray(value["AllowedValues"], limits),
+                ReadChoices(value["Choices"], limits),
                 ReadNullableScalar(value, "DefaultValue"),
                 ReadSources(value["AlternativeSources"], limits),
                 option ? false : ReadNullableBool(value, "Passthrough") ?? false,
@@ -239,7 +247,11 @@ public static class CanonicalManifestReader
                     Required = common.Required,
                     ArityMinimum = common.Minimum,
                     ArityMaximum = common.Maximum,
+                    Variadic = common.Variadic,
+                    Hint = common.Hint,
+                    Hidden = common.Hidden,
                     AllowedValues = common.AllowedValues,
+                    Choices = common.Choices,
                     DefaultValue = common.DefaultValue,
                     AlternativeSources = common.Sources,
                     Status = common.Status
@@ -256,7 +268,11 @@ public static class CanonicalManifestReader
                     Required = common.Required,
                     ArityMinimum = common.Minimum,
                     ArityMaximum = common.Maximum,
+                    Variadic = common.Variadic,
+                    Hint = common.Hint,
+                    Hidden = common.Hidden,
                     AllowedValues = common.AllowedValues,
+                    Choices = common.Choices,
                     DefaultValue = common.DefaultValue,
                     AlternativeSources = common.Sources,
                     Passthrough = common.Passthrough,
@@ -264,6 +280,59 @@ public static class CanonicalManifestReader
                 };
             }
         }
+    }
+
+    private static CanonicalExitCode[] ReadExitCodes(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is null) return [];
+        var array = node as JsonArray ?? throw new NormalizationException("INVALID_BASELINE", "Canonical exit codes must be an array.");
+        CheckCollection(array.Count, limits);
+        return array.Select(item =>
+        {
+            var value = RequireObject(item, "INVALID_BASELINE");
+            EnsureProperties(value, ["Code", "Status", "Summary", "Description"], "exit code");
+            return new CanonicalExitCode
+            {
+                Code = RequiredInt(value, "Code"),
+                Status = RequiredString(value, "Status", limits),
+                Summary = RequiredString(value, "Summary", limits),
+                Description = ReadNullableString(value, "Description", limits)
+            };
+        }).ToArray();
+    }
+
+    private static CanonicalExample[] ReadExamples(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is null) return [];
+        var array = node as JsonArray ?? throw new NormalizationException("INVALID_BASELINE", "Canonical examples must be an array.");
+        CheckCollection(array.Count, limits);
+        return array.Select(item =>
+        {
+            var value = RequireObject(item, "INVALID_BASELINE");
+            EnsureProperties(value, ["Title", "Content"], "example");
+            return new CanonicalExample
+            {
+                Title = ReadNullableString(value, "Title", limits),
+                Content = RequiredString(value, "Content", limits)
+            };
+        }).ToArray();
+    }
+
+    private static CanonicalChoice[] ReadChoices(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is null) return [];
+        var array = node as JsonArray ?? throw new NormalizationException("INVALID_BASELINE", "Canonical choices must be an array.");
+        CheckCollection(array.Count, limits);
+        return array.Select(item =>
+        {
+            var value = RequireObject(item, "INVALID_BASELINE");
+            EnsureProperties(value, ["Value", "Description"], "choice");
+            return new CanonicalChoice
+            {
+                Value = ReadRequiredScalar(value["Value"], limits),
+                Description = ReadNullableString(value, "Description", limits)
+            };
+        }).ToArray();
     }
 
     private static CanonicalAlternativeSource[] ReadSources(JsonNode? node, NormalizationLimits limits)
@@ -300,6 +369,17 @@ public static class CanonicalManifestReader
 
             return Normalizer.CanonicalizeScalar(item);
         }).ToArray();
+    }
+
+    private static JsonNode ReadRequiredScalar(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is not JsonValue || node.GetValueKind() is not (JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new NormalizationException("INVALID_BASELINE", "A canonical scalar is invalid.");
+        }
+
+        if (node.GetValueKind() == JsonValueKind.String) _ = Bounded(node.GetValue<string>(), limits);
+        return Normalizer.CanonicalizeScalar(node);
     }
 
     private static JsonNode? ReadNullableScalar(JsonObject value, string property)
@@ -412,5 +492,5 @@ public static class CanonicalManifestReader
         exception.Message.Contains("maximum configured depth", StringComparison.OrdinalIgnoreCase);
 
     private sealed class Counter { public int Value; }
-    private sealed record ParameterParts(string Name, string? Summary, string? Description, string? Type, bool? Required, int? Minimum, int? Maximum, JsonNode[] AllowedValues, JsonNode? DefaultValue, CanonicalAlternativeSource[] Sources, bool Passthrough, string? Status);
+    private sealed record ParameterParts(string Name, string? Summary, string? Description, string? Type, bool? Required, int? Minimum, int? Maximum, bool Variadic, string? Hint, bool Hidden, JsonNode[] AllowedValues, CanonicalChoice[] Choices, JsonNode? DefaultValue, CanonicalAlternativeSource[] Sources, bool Passthrough, string? Status);
 }

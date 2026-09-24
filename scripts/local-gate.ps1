@@ -29,6 +29,8 @@ Assert-NativeSuccess 'No-execution harness'
 Assert-NativeSuccess 'Workflow safety regressions'
 & pwsh -NoProfile -File ./scripts/scan-user-facing-surface.ps1 -SelfTest
 Assert-NativeSuccess 'User-facing wording scan'
+& pwsh -NoProfile -File ./scripts/validate-sensitive-paths.ps1 -SelfTest
+Assert-NativeSuccess 'Sensitive-path ingress safety'
 & pwsh -NoProfile -File ./scripts/scan-history-wording.ps1
 Assert-NativeSuccess 'Reachable history wording scan'
 & pwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -SelfTest
@@ -47,7 +49,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 Assert-NativeSuccess 'Release artifact allowlist'
 & pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath $package -SelfTest
 Assert-NativeSuccess 'Package inspection'
-& pwsh -NoProfile -File ./scripts/package-consumer-smoke.ps1 -PackagePath $package
+& pwsh -NoProfile -File ./scripts/package-consumer-smoke.ps1 -PackagePath $package -SelfTest
 Assert-NativeSuccess 'Package consumer smoke'
 $elapsed = (Get-Date) - $started
 Write-Output ("LOCAL_GATE=PASS duration_ms={0}" -f [Math]::Round($elapsed.TotalMilliseconds))

@@ -1,0 +1,34 @@
+{
+  "families": [
+    {
+      "name": "environment",
+      "regex": "(^|/)\\.env(?:$|[._-])",
+      "gitignore": [".env*", "**/.env*"],
+      "packGlobs": ["**/.env*"]
+    },
+    {
+      "name": "local-config",
+      "regex": "(^|/)(?:appsettings|telemetry)(?:[._-].*)?\\.json$|(^|/).*\\.local\\.(?:json|ya?ml|config)$",
+      "gitignore": ["*appsettings*.json", "**/*appsettings*.json", "*telemetry*.json", "**/*telemetry*.json", "*.local.json", "**/*.local.json", "*.local.yaml", "**/*.local.yaml", "*.local.yml", "**/*.local.yml"],
+      "packGlobs": ["**/*appsettings*.json", "**/*telemetry*.json", "**/*.local.json", "**/*.local.yaml", "**/*.local.yml"]
+    },
+    {
+      "name": "secrets-and-keys",
+      "regex": "(^|/)(?:secret|secrets|credential|credentials)(?:[._-].*)?$|(^|/).*[-_.](?:secret|credentials?)\\.[^/]+$|(^|/).*\\.(?:key|pfx|pem|p12)$",
+      "gitignore": ["*secret*", "**/*secret*", "*.key", "**/*.key", "*.pfx", "**/*.pfx", "*.pem", "**/*.pem", "*.p12", "**/*.p12"],
+      "packGlobs": ["**/*secret*", "**/*credential*", "**/*.key", "**/*.pfx", "**/*.pem", "**/*.p12"]
+    },
+    {
+      "name": "logs-and-caches",
+      "regex": "(^|/)(?:logs?|cache|\\.cache)(?:/|$)|(^|/).*\\.log$",
+      "gitignore": ["*.log", "**/*.log", "logs/", "**/logs/", "cache/", "**/cache/", ".cache/", "**/.cache/"],
+      "packGlobs": ["**/*.log", "**/logs/**", "**/cache/**", "**/.cache/**"]
+    },
+    {
+      "name": "package-outputs-outside-artifacts",
+      "regex": "^(?!artifacts(?:/|$)).*\\.(?:nupkg|snupkg|zip|tar\\.gz)$",
+      "gitignore": ["*.nupkg", "**/*.nupkg", "*.snupkg", "**/*.snupkg", "*.zip", "**/*.zip", "*.tar.gz", "**/*.tar.gz"],
+      "packGlobs": ["**/*.nupkg", "**/*.snupkg", "**/*.zip", "**/*.tar.gz"]
+    }
+  ]
+}

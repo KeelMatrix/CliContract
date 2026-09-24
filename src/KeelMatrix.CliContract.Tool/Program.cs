@@ -115,7 +115,7 @@ internal static class CliApplication
 
     private static CanonicalManifest LoadSource(string path, InputKind inputKind)
     {
-        var input = ReadFile(path, "INPUT_NOT_FOUND");
+        var input = ReadFile(path, FileRole.SourceSchema);
         if (inputKind == InputKind.OpenCli)
         {
             return Normalizer.Normalize("opencli", input);
@@ -139,7 +139,7 @@ internal static class CliApplication
 
     private static CanonicalManifest LoadDescription(string path, InputKind inputKind)
     {
-        var input = ReadFile(path, "INPUT_NOT_FOUND");
+        var input = ReadFile(path, FileRole.SourceSchema);
         if (LooksLikeCanonicalManifest(input))
         {
             return CanonicalManifestReader.Read(input);
@@ -164,14 +164,14 @@ internal static class CliApplication
 
     private static CanonicalManifest ReadManifest(string path)
     {
-        return CanonicalManifestReader.Read(ReadFile(path, "BASELINE_NOT_FOUND"));
+        return CanonicalManifestReader.Read(ReadFile(path, FileRole.CanonicalBaseline));
     }
 
-    private static string ReadFile(string path, string code, bool schemaInput = true)
+    private static string ReadFile(string path, FileRole role)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
         {
-            throw new InvocationException(code, "The requested input file does not exist.");
+            throw new InvocationException(NotFoundCode(role), NotFoundMessage(role));
         }
 
         try
@@ -202,30 +202,66 @@ internal static class CliApplication
             }
             catch (DecoderFallbackException)
             {
-                if (schemaInput)
-                {
-                    throw new NormalizationException("INVALID_UTF8", "The input file is not valid UTF-8.");
-                }
-
-                throw new InvocationException("INVALID_UTF8", "The ignore file is not valid UTF-8.");
+                ThrowReadFailure(role, "INVALID_UTF8", "The file is not valid UTF-8.");
+                throw new InvalidOperationException();
             }
-        }
-        catch (NormalizationException)
-        {
-            throw;
-        }
-        catch (InvocationException)
-        {
-            throw;
         }
         catch (InputTooLargeException)
         {
-            throw new NormalizationException("INPUT_TOO_LARGE", "The input description exceeds the configured size limit in UTF-8 bytes.");
+            ThrowReadFailure(role, TooLargeCode(role), TooLargeMessage(role));
+            throw new InvalidOperationException();
         }
-        catch (Exception) when (code is "INPUT_NOT_FOUND" or "BASELINE_NOT_FOUND")
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            throw new InvocationException(code, "The requested input file could not be read.");
+            ThrowReadFailure(role, UnreadableCode(role), UnreadableMessage(role));
+            throw new InvalidOperationException();
         }
+    }
+
+    private static string NotFoundCode(FileRole role) => role switch
+    {
+        FileRole.CanonicalBaseline => "BASELINE_NOT_FOUND",
+        FileRole.Suppression => "IGNORE_NOT_FOUND",
+        _ => "INPUT_NOT_FOUND"
+    };
+
+    private static string NotFoundMessage(FileRole role) => role switch
+    {
+        FileRole.CanonicalBaseline => "The canonical baseline file does not exist.",
+        FileRole.Suppression => "The suppression file does not exist.",
+        _ => "The source schema file does not exist."
+    };
+
+    private static string UnreadableCode(FileRole role) => role switch
+    {
+        FileRole.CanonicalBaseline => "BASELINE_UNREADABLE",
+        FileRole.Suppression => "IGNORE_UNREADABLE",
+        _ => "INPUT_UNREADABLE"
+    };
+
+    private static string UnreadableMessage(FileRole role) => role switch
+    {
+        FileRole.CanonicalBaseline => "The canonical baseline file could not be read.",
+        FileRole.Suppression => "The suppression file could not be read.",
+        _ => "The source schema file could not be read."
+    };
+
+    private static string TooLargeCode(FileRole role) => role == FileRole.Suppression ? "IGNORE_TOO_LARGE" : "INPUT_TOO_LARGE";
+
+    private static string TooLargeMessage(FileRole role) => role == FileRole.Suppression
+        ? "The suppression file exceeds the configured size limit in UTF-8 bytes."
+        : role == FileRole.CanonicalBaseline
+            ? "The canonical baseline exceeds the configured size limit in UTF-8 bytes."
+            : "The source schema exceeds the configured size limit in UTF-8 bytes.";
+
+    private static void ThrowReadFailure(FileRole role, string code, string message)
+    {
+        if (role == FileRole.Suppression)
+        {
+            throw new InvocationException(code, message);
+        }
+
+        throw new NormalizationException(code, message);
     }
 
     private static void WriteManifest(string path, CanonicalManifest manifest)
@@ -237,11 +273,13 @@ internal static class CliApplication
             Directory.CreateDirectory(directory);
             File.WriteAllText(path, Normalizer.Serialize(manifest), new UTF8Encoding(false));
         }
-        catch (Exception)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            throw new InvocationException("OUTPUT_NOT_WRITABLE", "The snapshot output file could not be written.");
+            throw new InvocationException(WriteFailureCode(FileRole.OutputDestination), "The snapshot output file could not be written.");
         }
     }
+
+    private static string WriteFailureCode(FileRole role) => role == FileRole.OutputDestination ? "OUTPUT_NOT_WRITABLE" : "INVALID_INVOCATION";
 
     private static bool LooksLikeCanonicalManifest(string input)
     {
@@ -276,7 +314,7 @@ internal static class CliApplication
     private static IReadOnlyList<CompatibilityFinding> ApplySuppressions(IReadOnlyList<CompatibilityFinding> findings, string? ignorePath)
     {
         if (ignorePath is null) return findings;
-        var input = ReadFile(ignorePath, "IGNORE_NOT_FOUND", schemaInput: false);
+        var input = ReadFile(ignorePath, FileRole.Suppression);
         JsonNode document;
         try { document = JsonNode.Parse(input) ?? throw new JsonException(); }
         catch (JsonException) { throw new InvocationException("INVALID_IGNORE", "The ignore file must be valid JSON."); }
@@ -530,6 +568,7 @@ internal static class CliApplication
     private enum InputKind { Auto, OpenCli }
     private enum OutputFormat { Text, Json }
     private enum FailOn { Breaking, Warning }
+    private enum FileRole { SourceSchema, CanonicalBaseline, Suppression, OutputDestination }
 
     private const string HelpText = """
     CliContract fails CI when an OpenCLI command-line contract changes incompatibly.
@@ -557,7 +596,13 @@ internal static class CliApplication
       Finite JSON and recognized YAML numbers are compared by exact numeric value,
       including trailing-dot exponent mantissas such as 5.e2.
       YAML .inf and .nan are outside that boundary: tagged forms error; untagged forms are strings.
-      Argument passthrough and keyed global config formats are compatibility semantics.
+      Accepted command names include aliases at every command segment; retained aliases preserve old paths.
+      All supported string, number, integer, and boolean type domains are compared, and exit-code changes warn.
+      Argument passthrough and keyed global config formats are represented compatibility semantics.
+
+    Validation boundary:
+      One variadic positional argument is allowed and it must be last; minItems/maxItems require variadic=true.
+      Source and canonical-baseline read failures return 3. Suppression/configuration and output failures return 2.
 
     Exit codes:
       0  No gated compatibility finding

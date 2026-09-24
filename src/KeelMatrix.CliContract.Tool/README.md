@@ -12,7 +12,7 @@ dotnet tool install --global KeelMatrix.CliContract
 
 CliContract targets `net8.0` and requires the .NET 8 runtime. It is intended to run on Windows, Linux, and macOS where .NET 8 is available.
 
-Supported input: OpenCLI `1.0.0-alpha.14`, in JSON or YAML. Schema parsing and comparison require no network after restore; a successful comparison may make one bounded best-effort telemetry request unless telemetry is disabled. `CI=true` and `KEELMATRIX_DEVELOPMENT=true` suppress telemetry automatically. The tool does not execute the described CLI.
+Supported input: OpenCLI `1.0.0-alpha.14`, in JSON or YAML. Schema parsing and comparison require no network after restore; a successful comparison may make one bounded best-effort telemetry request unless telemetry is disabled. `CI=true` and `KEELMATRIX_DEVELOPMENT=true` suppress telemetry automatically. The tool does not execute the described CLI. The adapter remains intentionally pinned while upstream advances; the reviewed standards boundary is recorded in the repository's `docs/OPENCLI-FRESHNESS.md`.
 
 ## Quick Start
 
@@ -21,7 +21,7 @@ clicontract snapshot ./opencli.yaml --output cli-contract.json
 clicontract check ./opencli.yaml --baseline cli-contract.json
 ```
 
-Use `--format json` for CI consumers, `--fail-on warning` to gate warnings, and `--ignore rules.json` for explicit reviewed suppressions. Binary names, action/group runnable state, positional slots, argument passthrough behavior, default-source precedence, and keyed global file-source configuration are compared as described in the [compatibility rules](https://github.com/KeelMatrix/CliContract/blob/main/COMPATIBILITY-RULES.md) and [manifest specification](https://github.com/KeelMatrix/CliContract/blob/main/MANIFEST.md). Finite JSON numbers and recognized YAML integer/float spellings are canonicalized by exact numeric value, including trailing-dot exponent mantissas such as `5.e2`. YAML `.inf` and `.nan` are outside the JSON-number boundary: explicit `!!float` forms are rejected, while untagged forms remain strings. Unsupported command-option combinations return exit code `2` with `UNSUPPORTED_OPTION`; see `clicontract --help` for the per-command option matrix.
+Use `--format json` for CI consumers, `--fail-on warning` to gate warnings, and `--ignore rules.json` for explicit reviewed suppressions. The accepted invocation-name graph, binary identity, action/group runnable state, positional slots, all supported type and choice domains, argument passthrough behavior, default-source precedence, keyed global file-source configuration, and global/command exit-code contracts are compared as described in the [compatibility rules](https://github.com/KeelMatrix/CliContract/blob/main/COMPATIBILITY-RULES.md) and [manifest specification](https://github.com/KeelMatrix/CliContract/blob/main/MANIFEST.md). Retaining an old command or option name as an alias preserves that invocation, including descendants below a renamed group. Finite JSON numbers and recognized YAML integer/float spellings are canonicalized by exact numeric value, including trailing-dot exponent mantissas such as `5.e2`. YAML `.inf` and `.nan` are outside the JSON-number boundary: explicit `!!float` forms are rejected, while untagged forms remain strings. Unsupported command-option combinations return exit code `2` with `UNSUPPORTED_OPTION`; see `clicontract --help` for the per-command option matrix.
 
 ## Exit codes
 

@@ -32,7 +32,9 @@ clicontract validate ./opencli.yaml
 
 Breaking changes are gated by default. Use `--fail-on warning` when default or status changes should also fail CI. Description/help changes are informational. Suppressions are explicit JSON files passed with `--ignore`; they never suppress malformed or unsupported schemas.
 
-The stable diagnostic catalog and classification contract are in [`COMPATIBILITY-RULES.md`](COMPATIBILITY-RULES.md). The versioned canonical manifest is described in [`MANIFEST.md`](MANIFEST.md). Binary invocation identity, action/group runnable state, positional slots, argument passthrough behavior, alternative default sources, and keyed global file-source configuration are part of that compatibility contract.
+The stable diagnostic catalog and classification contract are in [`COMPATIBILITY-RULES.md`](COMPATIBILITY-RULES.md). The versioned canonical manifest is described in [`MANIFEST.md`](MANIFEST.md). The accepted invocation-name graph, binary identity, action/group runnable state, positional slots, type and choice domains, argument passthrough behavior, alternative default sources, keyed global file-source configuration, and exit-code contracts are represented there.
+
+Command and option renames remain compatible only when the old invocation name is retained as an alias. A retained group alias also preserves descendant paths. All supported OpenCLI type transitions (`string`, `number`, `integer`, and `boolean`) are checked for removal of accepted lexical values; global and command exit-code changes are reported as warnings. OpenCLI `x-*` extensions are accepted but outside the compatibility decision.
 
 Finite JSON numbers and recognized YAML integer/float spellings are canonicalized by exact numeric value, including exponent forms whose mantissa ends in a dot such as `5.e2`. YAML `.inf` and `.nan` spellings are outside the JSON-number boundary: an explicit `!!float` form is rejected, while an untagged form remains a string.
 
@@ -60,6 +62,8 @@ The OpenCLI adapter status is pinned to `1.0.0-alpha.14`; official examples and 
 
 The tool does not execute described CLIs, infer runtime behavior, generate clients or documentation, parse help output, fetch remote references, or provide a hosted registry.
 
+The adapter is intentionally pinned to OpenCLI `1.0.0-alpha.14`. The current upstream specification and tooling have moved forward; the reviewed standards boundary and the .NET CLI-schema/System.CommandLine feasibility decision are recorded in [`docs/OPENCLI-FRESHNESS.md`](docs/OPENCLI-FRESHNESS.md).
+
 ## CI
 
 Run the check in a build step and preserve the baseline in the application repository:
@@ -74,6 +78,10 @@ clicontract check ./opencli.yaml --baseline ./cli-contract.json --format json
 - `INPUT_TOO_LARGE`: reduce the input below the configured size limit.
 - `DEPTH_LIMIT`: reduce the input nesting below the configured depth limit.
 - `INVALID_UTF8`: save the source as strict UTF-8 without a malformed byte sequence.
+- `INPUT_UNREADABLE` or `BASELINE_UNREADABLE`: grant read access to the source or canonical baseline; these remain schema/baseline errors with exit code `3`.
+- `IGNORE_NOT_FOUND`, `IGNORE_UNREADABLE`, `IGNORE_TOO_LARGE`, or `INVALID_IGNORE`: fix the explicit suppression/configuration file; these are invocation errors with exit code `2`.
+- `OUTPUT_NOT_WRITABLE`: choose a writable snapshot destination; this is an invocation error with exit code `2`.
+- `OPENCLI_VARIADIC` or `OPENCLI_ARITY`: keep one variadic positional argument last and use item bounds only with `variadic: true`.
 - `UNSUPPORTED_OPENCLI_VERSION`: update the source to the pinned OpenCLI version or wait for a tool version that supports it.
 - `AMBIGUOUS_INPUT`: pass `--input opencli` after removing competing schema markers.
 - `DUPLICATE_OPTION`: provide each command-line option at most once.

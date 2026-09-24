@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace KeelMatrix.CliContract.Core;
@@ -38,29 +37,73 @@ public static class CompatibilityAnalyzer
             throw new CompatibilityException("BASELINE_VERSION_MISMATCH", "The baseline and current descriptions use different supported input versions.");
         }
 
-        var baselineDuplicate = CanonicalCommandValidation.FindDuplicatePath(baseline.Root);
-        var currentDuplicate = CanonicalCommandValidation.FindDuplicatePath(current.Root);
-        if (baselineDuplicate is not null || currentDuplicate is not null)
-        {
-            var duplicate = baselineDuplicate ?? currentDuplicate;
-            throw new CompatibilityException(
-                "OPENCLI_DUPLICATE_COMMAND_PATH",
-                $"The canonical command tree contains duplicate command path '{duplicate}'.");
-        }
-
+        var baselineGraph = InvocationNameGraph.Create(baseline);
+        var currentGraph = InvocationNameGraph.Create(current);
         var findings = new List<CompatibilityFinding>();
-        CompareInvocationIdentity(baseline, current, findings);
+
+        CompareRootInvocationNames(baseline, current, findings);
+        CompareExitCodes(baseline.GlobalExitCodes, current.GlobalExitCodes, "root", findings);
         CompareGlobalConfig(baseline.GlobalConfig, current.GlobalConfig, findings);
         CompareCommand(baseline.Root, current.Root, findings);
+
+        var matchedCurrentCommands = new HashSet<CanonicalCommand>();
+        foreach (var baselineCommand in baselineGraph.Commands.OrderBy(command => command.Path, StringComparer.Ordinal))
+        {
+            var oldInvocations = baselineGraph.GetInvocations(baselineCommand);
+            var candidates = oldInvocations
+                .Where(currentGraph.ByInvocation.ContainsKey)
+                .Select(invocation => currentGraph.ByInvocation[invocation])
+                .Distinct()
+                .ToArray();
+
+            if (candidates.Length == 0)
+            {
+                findings.Add(new CompatibilityFinding("KMCLI103", "breaking", baselineCommand.Path, "Removed command."));
+                continue;
+            }
+
+            if (candidates.Length > 1)
+            {
+                throw new CompatibilityException("OPENCLI_DUPLICATE_INVOCATION", "A baseline invocation is accepted by multiple current commands.");
+            }
+
+            var currentCommand = candidates[0];
+            matchedCurrentCommands.Add(currentCommand);
+            CompareInvocationNames(oldInvocations, currentGraph.GetInvocations(currentCommand), baselineCommand.Path, "callable alias", "KMCLI104", "KMCLI004", findings);
+            CompareCommand(baselineCommand, currentCommand, findings);
+        }
+
+        foreach (var currentCommand in currentGraph.Commands
+                     .Where(command => !matchedCurrentCommands.Contains(command))
+                     .OrderBy(command => command.Path, StringComparer.Ordinal))
+        {
+            findings.Add(new CompatibilityFinding("KMCLI001", "info", currentCommand.Path, "Added command."));
+        }
+
         return new CompatibilityResult(findings);
     }
 
-    private static void CompareInvocationIdentity(CanonicalManifest baseline, CanonicalManifest current, List<CompatibilityFinding> findings)
+    private static void CompareRootInvocationNames(CanonicalManifest baseline, CanonicalManifest current, List<CompatibilityFinding> findings)
     {
-        if (!string.Equals(baseline.Info.Binary, current.Info.Binary, StringComparison.Ordinal))
+        var oldNames = RootInvocationNames(baseline).ToHashSet(StringComparer.Ordinal);
+        var newNames = RootInvocationNames(current).ToHashSet(StringComparer.Ordinal);
+        foreach (var removed in oldNames.Except(newNames, StringComparer.Ordinal).Order(StringComparer.Ordinal))
         {
-            findings.Add(new CompatibilityFinding("KMCLI110", "breaking", "root", "CLI binary invocation name changed."));
+            var code = string.Equals(removed, baseline.Info.Binary, StringComparison.Ordinal) ? "KMCLI110" : "KMCLI104";
+            var message = code == "KMCLI110" ? "CLI binary invocation name changed." : $"Removed callable alias '{removed}'.";
+            findings.Add(new CompatibilityFinding(code, "breaking", "root", message));
         }
+
+        foreach (var added in newNames.Except(oldNames, StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        {
+            findings.Add(new CompatibilityFinding("KMCLI004", "info", "root", $"Added callable alias '{added}'."));
+        }
+    }
+
+    private static IEnumerable<string> RootInvocationNames(CanonicalManifest manifest)
+    {
+        if (manifest.Info.Binary is not null) yield return manifest.Info.Binary;
+        foreach (var alias in manifest.Root.Aliases) yield return alias;
     }
 
     private static void CompareGlobalConfig(CanonicalGlobalConfig? baseline, CanonicalGlobalConfig? current, List<CompatibilityFinding> findings)
@@ -75,58 +118,225 @@ public static class CompatibilityAnalyzer
         }
     }
 
-    private static string SourceKey(CanonicalFileSource source) => source.Format + "=" + source.Path;
-
-    private static string SourceKey(CanonicalAlternativeSource source) => source.Type + "=" + source.Property;
-
     private static void CompareCommand(CanonicalCommand baseline, CanonicalCommand current, List<CompatibilityFinding> findings)
     {
-        CompareAliases(baseline.Aliases, current.Aliases, baseline.Path, "callable alias", "KMCLI104", "KMCLI004", findings);
+        var path = baseline.Path;
         var baselineKind = baseline.Kind ?? "action";
         var currentKind = current.Kind ?? "action";
         if (!string.Equals(baselineKind, currentKind, StringComparison.Ordinal))
         {
             var isCallableSurfaceRemoved = baselineKind == "action" && currentKind == "group";
-            findings.Add(new CompatibilityFinding(
-                "KMCLI111",
-                isCallableSurfaceRemoved ? "breaking" : "info",
-                baseline.Path,
-                isCallableSurfaceRemoved ? "Callable command became a non-runnable group." : "Command runnable kind changed."));
+            findings.Add(new CompatibilityFinding("KMCLI111", isCallableSurfaceRemoved ? "breaking" : "info", path, isCallableSurfaceRemoved ? "Callable command became a non-runnable group." : "Command runnable kind changed."));
         }
-        CompareText(baseline.Summary, current.Summary, baseline.Path, "summary", findings);
-        CompareText(baseline.Description, current.Description, baseline.Path, "description", findings);
-        CompareStatus(baseline.Status, current.Status, baseline.Path, findings);
 
-        var baselineOptions = ToUniqueMap(baseline.Options, "option", baseline.Path);
-        var currentOptions = ToUniqueMap(current.Options, "option", current.Path);
-        CompareParameters(baselineOptions, currentOptions, baseline.Path, "option", findings);
+        if (baseline.Hidden != current.Hidden)
+        {
+            findings.Add(new CompatibilityFinding("KMCLI006", "info", path, "Command visibility changed."));
+        }
 
-        var baselineArgumentNames = baseline.Arguments.Select(argument => argument.Name).ToArray();
-        var currentArgumentNames = current.Arguments.Select(argument => argument.Name).ToArray();
-        if (HasPositionalSlotShift(baselineArgumentNames, currentArgumentNames))
+        CompareText(baseline.Summary, current.Summary, path, "summary", findings);
+        CompareText(baseline.Description, current.Description, path, "description", findings);
+        CompareStatus(baseline.Status, current.Status, path, findings);
+        CompareExitCodes(baseline.ExitCodes, current.ExitCodes, path, findings);
+        CompareExamples(baseline.Examples, current.Examples, path, findings);
+        CompareOptions(baseline, current, findings);
+        CompareArguments(baseline, current, findings);
+    }
+
+    private static void CompareOptions(CanonicalCommand baseline, CanonicalCommand current, List<CompatibilityFinding> findings)
+    {
+        var currentMap = ToUniqueOptionMap(current.Options, current.Path);
+        var matched = new HashSet<CanonicalOption>();
+        foreach (var oldOption in baseline.Options.OrderBy(option => option.Name, StringComparer.Ordinal))
+        {
+            var candidates = OptionInvocationNames(oldOption)
+                .Where(currentMap.ContainsKey)
+                .Select(name => currentMap[name])
+                .Distinct()
+                .ToArray();
+            if (candidates.Length == 0)
+            {
+                findings.Add(new CompatibilityFinding("KMCLI101", "breaking", baseline.Path + " / " + oldOption.Name, "Removed option."));
+                continue;
+            }
+
+            if (candidates.Length > 1)
+            {
+                throw new CompatibilityException("OPENCLI_DUPLICATE_PARAMETER", $"The current option collection at {current.Path} accepts one invocation name for multiple options.");
+            }
+
+            var newOption = candidates[0];
+            matched.Add(newOption);
+            var optionPath = baseline.Path + " / " + oldOption.Name;
+            CompareInvocationNames(OptionInvocationNames(oldOption), OptionInvocationNames(newOption), optionPath, "alias", "KMCLI104", "KMCLI004", findings);
+            CompareParameter(oldOption, newOption, optionPath, "option", findings);
+        }
+
+        foreach (var newOption in current.Options.Where(option => !matched.Contains(option)).OrderBy(option => option.Name, StringComparer.Ordinal))
+        {
+            var path = current.Path + " / " + newOption.Name;
+            var required = newOption.Required == true;
+            findings.Add(new CompatibilityFinding(required ? "KMCLI108" : "KMCLI002", required ? "breaking" : "info", path, required ? "Added required option." : "Added option."));
+        }
+    }
+
+    private static void CompareArguments(CanonicalCommand baseline, CanonicalCommand current, List<CompatibilityFinding> findings)
+    {
+        var oldNames = baseline.Arguments.Select(argument => argument.Name).ToArray();
+        var newNames = current.Arguments.Select(argument => argument.Name).ToArray();
+        if (HasPositionalSlotShift(oldNames, newNames))
         {
             findings.Add(new CompatibilityFinding("KMCLI109", "breaking", baseline.Path, "Positional argument slot changed."));
         }
 
-        var baselineArguments = ToUniqueMap(baseline.Arguments, "argument", baseline.Path);
-        var currentArguments = ToUniqueMap(current.Arguments, "argument", current.Path);
-        CompareParameters(baselineArguments, currentArguments, baseline.Path, "argument", findings);
-
-        var baselineCommands = ToUniqueCommandMap(baseline.Subcommands);
-        var currentCommands = ToUniqueCommandMap(current.Subcommands);
-        foreach (var removed in baselineCommands.Keys.Except(currentCommands.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        var currentMap = ToUniqueArgumentMap(current.Arguments, current.Path);
+        var matched = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var oldArgument in baseline.Arguments.OrderBy(argument => argument.Name, StringComparer.Ordinal))
         {
-            findings.Add(new CompatibilityFinding("KMCLI103", "breaking", removed, "Removed command."));
+            if (!currentMap.TryGetValue(oldArgument.Name, out var newArgument))
+            {
+                findings.Add(new CompatibilityFinding("KMCLI102", "breaking", baseline.Path + " / " + oldArgument.Name, "Removed argument."));
+                continue;
+            }
+
+            matched.Add(oldArgument.Name);
+            CompareParameter(oldArgument, newArgument, baseline.Path + " / " + oldArgument.Name, "argument", findings);
         }
 
-        foreach (var added in currentCommands.Keys.Except(baselineCommands.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        foreach (var newArgument in current.Arguments.Where(argument => !matched.Contains(argument.Name)).OrderBy(argument => argument.Name, StringComparer.Ordinal))
         {
-            findings.Add(new CompatibilityFinding("KMCLI001", "info", added, "Added command."));
+            var path = current.Path + " / " + newArgument.Name;
+            var required = newArgument.Required == true;
+            findings.Add(new CompatibilityFinding(required ? "KMCLI108" : "KMCLI003", required ? "breaking" : "info", path, required ? "Added required argument." : "Added argument."));
+        }
+    }
+
+    private static Dictionary<string, CanonicalOption> ToUniqueOptionMap(IEnumerable<CanonicalOption> options, string commandPath)
+    {
+        var result = new Dictionary<string, CanonicalOption>(StringComparer.Ordinal);
+        foreach (var option in options)
+        {
+            foreach (var name in OptionInvocationNames(option))
+            {
+                if (!result.TryAdd(name, option) && !ReferenceEquals(result[name], option))
+                {
+                    throw new CompatibilityException("OPENCLI_DUPLICATE_PARAMETER", $"The canonical option collection at {commandPath} contains duplicate accepted invocation names.");
+                }
+            }
         }
 
-        foreach (var path in baselineCommands.Keys.Intersect(currentCommands.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        return result;
+    }
+
+    private static Dictionary<string, CanonicalArgument> ToUniqueArgumentMap(IEnumerable<CanonicalArgument> arguments, string commandPath)
+    {
+        var result = new Dictionary<string, CanonicalArgument>(StringComparer.Ordinal);
+        foreach (var argument in arguments)
         {
-            CompareCommand(baselineCommands[path], currentCommands[path], findings);
+            if (!result.TryAdd(argument.Name, argument))
+            {
+                throw new CompatibilityException("OPENCLI_DUPLICATE_PARAMETER", $"The canonical argument collection at {commandPath} contains duplicate names.");
+            }
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<string> OptionInvocationNames(CanonicalOption option)
+    {
+        yield return option.Name;
+        foreach (var alias in option.Aliases) yield return alias;
+    }
+
+    private static void CompareParameter(CanonicalParameter baseline, CanonicalParameter current, string path, string kind, List<CompatibilityFinding> findings)
+    {
+        if (current.Required == true && baseline.Required != true)
+        {
+            findings.Add(new CompatibilityFinding("KMCLI105", "breaking", path, $"{Capitalize(kind)} changed from optional to required."));
+        }
+
+        if (baseline is CanonicalArgument oldArgument && current is CanonicalArgument newArgument && oldArgument.Passthrough != newArgument.Passthrough)
+        {
+            findings.Add(new CompatibilityFinding("KMCLI112", oldArgument.Passthrough ? "breaking" : "info", path, oldArgument.Passthrough ? "Argument no longer accepts post-- forms as passthrough." : "Argument accepts post-- forms as passthrough."));
+        }
+
+        if (baseline.Variadic != current.Variadic || IsArityNarrowed(baseline, current))
+        {
+            if (!baseline.Variadic && current.Variadic)
+            {
+                findings.Add(new CompatibilityFinding("KMCLI106", "info", path, $"Accepted {kind} arity widened."));
+            }
+            else if (IsArityNarrowed(baseline, current))
+            {
+                findings.Add(new CompatibilityFinding("KMCLI106", "breaking", path, $"Accepted {kind} arity narrowed."));
+            }
+        }
+
+        if (!baseline.AlternativeSources.Select(SourceKey).SequenceEqual(current.AlternativeSources.Select(SourceKey), StringComparer.Ordinal))
+        {
+            findings.Add(new CompatibilityFinding("KMCLI204", "warning", path, "Represented default-source resolution changed."));
+        }
+
+        var domain = CompareDomain(baseline, current);
+        if (domain == DomainChange.Narrowed)
+        {
+            findings.Add(new CompatibilityFinding("KMCLI107", "breaking", path, $"Accepted {kind} type or domain narrowed."));
+        }
+        else if (domain == DomainChange.Changed)
+        {
+            findings.Add(new CompatibilityFinding("KMCLI203", "warning", path, $"Represented {kind} type or domain changed."));
+        }
+
+        if (!JsonNode.DeepEquals(baseline.DefaultValue, current.DefaultValue))
+        {
+            findings.Add(new CompatibilityFinding("KMCLI201", "warning", path, "Default value changed."));
+        }
+
+        if (baseline.Hint != current.Hint || baseline.Hidden != current.Hidden)
+        {
+            findings.Add(new CompatibilityFinding("KMCLI006", "info", path, "Parameter help visibility changed."));
+        }
+
+        CompareText(baseline.Summary, current.Summary, path, "summary", findings);
+        CompareText(baseline.Description, current.Description, path, "description", findings);
+        CompareStatus(baseline.Status, current.Status, path, findings);
+    }
+
+    private static string SourceKey(CanonicalAlternativeSource source) => source.Type + "=" + source.Property;
+
+    private static void CompareInvocationNames(IEnumerable<string> baseline, IEnumerable<string> current, string path, string kind, string removedCode, string addedCode, List<CompatibilityFinding> findings)
+    {
+        var oldNames = baseline.ToHashSet(StringComparer.Ordinal);
+        var newNames = current.ToHashSet(StringComparer.Ordinal);
+        foreach (var removed in oldNames.Except(newNames, StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        {
+            findings.Add(new CompatibilityFinding(removedCode, "breaking", path, $"Removed {kind} '{removed}'."));
+        }
+
+        foreach (var added in newNames.Except(oldNames, StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        {
+            findings.Add(new CompatibilityFinding(addedCode, "info", path, $"Added {kind} '{added}'."));
+        }
+    }
+
+    private static void CompareExitCodes(IEnumerable<CanonicalExitCode> baseline, IEnumerable<CanonicalExitCode> current, string path, List<CompatibilityFinding> findings)
+    {
+        var oldByCode = baseline.ToDictionary(exitCode => exitCode.Code);
+        var newByCode = current.ToDictionary(exitCode => exitCode.Code);
+        var changed = oldByCode.Count != newByCode.Count || oldByCode.Any(pair => !newByCode.TryGetValue(pair.Key, out var value) || !string.Equals(pair.Value.Status, value.Status, StringComparison.Ordinal) || !string.Equals(pair.Value.Summary, value.Summary, StringComparison.Ordinal) || !string.Equals(pair.Value.Description, value.Description, StringComparison.Ordinal));
+        if (changed)
+        {
+            findings.Add(new CompatibilityFinding("KMCLI205", "warning", path, "Represented exit-code contract changed."));
+        }
+    }
+
+    private static void CompareExamples(IEnumerable<CanonicalExample> baseline, IEnumerable<CanonicalExample> current, string path, List<CompatibilityFinding> findings)
+    {
+        var oldValues = baseline.Select(example => (example.Title ?? string.Empty) + "\u001f" + example.Content).ToHashSet(StringComparer.Ordinal);
+        var newValues = current.Select(example => (example.Title ?? string.Empty) + "\u001f" + example.Content).ToHashSet(StringComparer.Ordinal);
+        if (!oldValues.SetEquals(newValues))
+        {
+            findings.Add(new CompatibilityFinding("KMCLI006", "info", path, "Command examples changed."));
         }
     }
 
@@ -143,176 +353,10 @@ public static class CompatibilityAnalyzer
                     break;
                 }
             }
-
-            if (currentIndex >= 0 && currentIndex != index)
-            {
-                return true;
-            }
+            if (currentIndex >= 0 && currentIndex != index) return true;
         }
 
         return false;
-    }
-
-    private static Dictionary<string, TParameter> ToUniqueMap<TParameter>(
-        IEnumerable<TParameter> parameters,
-        string kind,
-        string commandPath)
-        where TParameter : CanonicalParameter
-    {
-        var result = new Dictionary<string, TParameter>(StringComparer.Ordinal);
-        foreach (var parameter in parameters)
-        {
-            if (!result.TryAdd(parameter.Name, parameter))
-            {
-                throw new CompatibilityException(
-                    "OPENCLI_DUPLICATE_PARAMETER",
-                    $"The canonical {kind} collection at {commandPath} contains duplicate normalized names.");
-            }
-        }
-
-        return result;
-    }
-
-    private static Dictionary<string, CanonicalCommand> ToUniqueCommandMap(IEnumerable<CanonicalCommand> commands)
-    {
-        var result = new Dictionary<string, CanonicalCommand>(StringComparer.Ordinal);
-        foreach (var command in commands)
-        {
-            if (!result.TryAdd(command.Path, command))
-            {
-                throw new CompatibilityException(
-                    "OPENCLI_DUPLICATE_COMMAND_PATH",
-                    $"The canonical command collection contains duplicate command path '{command.Path}'.");
-            }
-        }
-
-        return result;
-    }
-
-    private static void CompareParameters<TParameter>(
-        IReadOnlyDictionary<string, TParameter> baseline,
-        IReadOnlyDictionary<string, TParameter> current,
-        string commandPath,
-        string kind,
-        List<CompatibilityFinding> findings)
-        where TParameter : CanonicalParameter
-    {
-        foreach (var removed in baseline.Keys.Except(current.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
-        {
-            var path = commandPath + " / " + removed;
-            var code = kind == "option" ? "KMCLI101" : "KMCLI102";
-            findings.Add(new CompatibilityFinding(code, "breaking", path, $"Removed {kind}."));
-        }
-
-        foreach (var added in current.Keys.Except(baseline.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
-        {
-            var parameter = current[added];
-            var path = commandPath + " / " + added;
-            if (parameter.Required == true)
-            {
-                findings.Add(new CompatibilityFinding("KMCLI108", "breaking", path, $"Added required {kind}."));
-            }
-            else
-            {
-                var code = kind == "option" ? "KMCLI002" : "KMCLI003";
-                findings.Add(new CompatibilityFinding(code, "info", path, $"Added {kind}."));
-            }
-        }
-
-        foreach (var name in baseline.Keys.Intersect(current.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
-        {
-            var oldValue = baseline[name];
-            var newValue = current[name];
-            var path = commandPath + " / " + name;
-
-            if (oldValue is CanonicalOption oldOption && newValue is CanonicalOption newOption)
-            {
-                CompareAliases(oldOption.Aliases, newOption.Aliases, path, "alias", "KMCLI104", "KMCLI004", findings);
-            }
-
-            if (newValue.Required == true && oldValue.Required != true)
-            {
-                findings.Add(new CompatibilityFinding("KMCLI105", "breaking", path, $"{Capitalize(kind)} changed from optional to required."));
-            }
-
-            if (oldValue is CanonicalArgument oldArgument && newValue is CanonicalArgument newArgument && oldArgument.Passthrough != newArgument.Passthrough)
-            {
-                findings.Add(new CompatibilityFinding(
-                    "KMCLI112",
-                    oldArgument.Passthrough ? "breaking" : "info",
-                    path,
-                    oldArgument.Passthrough
-                        ? "Argument no longer accepts post-- forms as passthrough."
-                        : "Argument accepts post-- forms as passthrough."));
-            }
-
-            if (IsArityNarrowed(oldValue, newValue))
-            {
-                findings.Add(new CompatibilityFinding("KMCLI106", "breaking", path, $"Accepted {kind} arity narrowed."));
-            }
-
-            if (!oldValue.AlternativeSources.Select(SourceKey).SequenceEqual(newValue.AlternativeSources.Select(SourceKey), StringComparer.Ordinal))
-            {
-                findings.Add(new CompatibilityFinding("KMCLI204", "warning", path, "Represented default-source resolution changed."));
-            }
-
-            var domain = CompareDomain(oldValue, newValue);
-            if (domain == DomainChange.Narrowed)
-            {
-                findings.Add(new CompatibilityFinding("KMCLI107", "breaking", path, $"Accepted {kind} type or domain narrowed."));
-            }
-            else if (domain == DomainChange.Changed)
-            {
-                findings.Add(new CompatibilityFinding("KMCLI203", "warning", path, $"Represented {kind} type or domain changed."));
-            }
-
-            if (!JsonNode.DeepEquals(oldValue.DefaultValue, newValue.DefaultValue))
-            {
-                findings.Add(new CompatibilityFinding("KMCLI201", "warning", path, "Default value changed."));
-            }
-
-            CompareText(oldValue.Summary, newValue.Summary, path, "summary", findings);
-            CompareText(oldValue.Description, newValue.Description, path, "description", findings);
-            CompareStatus(oldValue.Status, newValue.Status, path, findings);
-        }
-    }
-
-    private static void CompareAliases(
-        IEnumerable<string> baseline,
-        IEnumerable<string> current,
-        string path,
-        string kind,
-        string removedCode,
-        string addedCode,
-        List<CompatibilityFinding> findings)
-    {
-        var oldAliases = baseline.ToHashSet(StringComparer.Ordinal);
-        var newAliases = current.ToHashSet(StringComparer.Ordinal);
-        foreach (var alias in oldAliases.Except(newAliases, StringComparer.Ordinal).Order(StringComparer.Ordinal))
-        {
-            findings.Add(new CompatibilityFinding(removedCode, "breaking", path, $"Removed {kind} '{alias}'."));
-        }
-
-        foreach (var alias in newAliases.Except(oldAliases, StringComparer.Ordinal).Order(StringComparer.Ordinal))
-        {
-            findings.Add(new CompatibilityFinding(addedCode, "info", path, $"Added {kind} '{alias}'."));
-        }
-    }
-
-    private static void CompareText(string? baseline, string? current, string path, string kind, List<CompatibilityFinding> findings)
-    {
-        if (!string.Equals(baseline, current, StringComparison.Ordinal))
-        {
-            findings.Add(new CompatibilityFinding("KMCLI005", "info", path, $"{Capitalize(kind)} changed."));
-        }
-    }
-
-    private static void CompareStatus(string? baseline, string? current, string path, List<CompatibilityFinding> findings)
-    {
-        if (!string.Equals(baseline, current, StringComparison.Ordinal))
-        {
-            findings.Add(new CompatibilityFinding("KMCLI202", "warning", path, "Status or deprecation state changed."));
-        }
     }
 
     private static bool IsArityNarrowed(CanonicalParameter baseline, CanonicalParameter current)
@@ -321,56 +365,122 @@ public static class CompatibilityAnalyzer
         var newMinimum = current.ArityMinimum ?? 0;
         var oldMaximum = baseline.ArityMaximum ?? int.MaxValue;
         var newMaximum = current.ArityMaximum ?? int.MaxValue;
-        var minimumNarrowed = newMinimum > oldMinimum &&
-            !(baseline.Required != true && current.Required == true && oldMinimum == 0 && newMinimum == 1);
-        return minimumNarrowed || newMaximum < oldMaximum;
+        var minimumNarrowed = newMinimum > oldMinimum && !(baseline.Required != true && current.Required == true && oldMinimum == 0 && newMinimum == 1);
+        return minimumNarrowed || newMaximum < oldMaximum || baseline.Variadic && !current.Variadic;
     }
 
     private static DomainChange CompareDomain(CanonicalParameter baseline, CanonicalParameter current)
     {
-        var oldType = NormalizeType(baseline.Type);
-        var newType = NormalizeType(current.Type);
-        var typeNarrowed = IsTypeNarrower(oldType, newType);
-        var typeChanged = !string.Equals(oldType, newType, StringComparison.Ordinal);
-
-        var oldValues = baseline.AllowedValues.Select(value => value.ToJsonString()).ToHashSet(StringComparer.Ordinal);
-        var newValues = current.AllowedValues.Select(value => value.ToJsonString()).ToHashSet(StringComparer.Ordinal);
-        var valuesChanged = !oldValues.SetEquals(newValues);
-        var valuesRemoved = oldValues.Count > 0 && newValues.Count > 0 && !oldValues.IsSubsetOf(newValues);
-        var valuesNarrowed = valuesChanged && newValues.Count > 0 && (oldValues.Count == 0 || valuesRemoved || newValues.IsSubsetOf(oldValues));
-
-        if (typeNarrowed || valuesNarrowed)
-        {
-            return DomainChange.Narrowed;
-        }
-
-        return typeChanged || valuesChanged ? DomainChange.Changed : DomainChange.Unchanged;
+        var oldDomain = AcceptedDomain.Create(baseline);
+        var newDomain = AcceptedDomain.Create(current);
+        var oldSubset = oldDomain.IsSubsetOf(newDomain);
+        var newSubset = newDomain.IsSubsetOf(oldDomain);
+        if (!oldSubset) return DomainChange.Narrowed;
+        return newSubset ? DomainChange.Unchanged : DomainChange.Changed;
     }
-
-    private static bool IsTypeNarrower(string? baseline, string? current)
-    {
-        if (baseline is null || current is null || string.Equals(baseline, current, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        return baseline switch
-        {
-            "any" => true,
-            "number" when current is "integer" or "int" => true,
-            "string" when current == "enum" => true,
-            _ => false
-        };
-    }
-
-    private static string? NormalizeType(string? type) => type?.Trim().ToLowerInvariant();
 
     private static string Capitalize(string value) => char.ToUpperInvariant(value[0]) + value[1..];
 
-    private enum DomainChange
+    private static void CompareText(string? baseline, string? current, string path, string kind, List<CompatibilityFinding> findings)
     {
-        Unchanged,
-        Changed,
-        Narrowed
+        if (!string.Equals(baseline, current, StringComparison.Ordinal)) findings.Add(new CompatibilityFinding("KMCLI005", "info", path, $"{Capitalize(kind)} changed."));
+    }
+
+    private static void CompareStatus(string? baseline, string? current, string path, List<CompatibilityFinding> findings)
+    {
+        if (!string.Equals(baseline, current, StringComparison.Ordinal)) findings.Add(new CompatibilityFinding("KMCLI202", "warning", path, "Status or deprecation state changed."));
+    }
+
+    private enum DomainChange { Unchanged, Changed, Narrowed }
+
+    private sealed class AcceptedDomain
+    {
+        private readonly string _type;
+        private readonly JsonNode[]? _choices;
+
+        private AcceptedDomain(string type, JsonNode[]? choices) { _type = type; _choices = choices; }
+
+        public static AcceptedDomain Create(CanonicalParameter parameter) => new(NormalizeType(parameter.Type), parameter.Choices.Length == 0 ? null : parameter.Choices.Select(choice => choice.Value).ToArray());
+
+        public bool IsSubsetOf(AcceptedDomain other)
+        {
+            if (_choices is null) return other._choices is null && BaseSubset(_type, other._type);
+            if (other._choices is null) return _choices.All(value => Accepts(other._type, value));
+            return _choices.All(value => other._choices.Any(candidate => string.Equals(LexicalKey(value), LexicalKey(candidate), StringComparison.Ordinal) && Accepts(other._type, candidate)));
+        }
+
+        private static bool BaseSubset(string oldType, string newType) => string.Equals(oldType, newType, StringComparison.Ordinal) || oldType == "integer" && newType == "number" || oldType is "integer" or "number" or "boolean" && newType == "string";
+
+        private static bool Accepts(string type, JsonNode value) => type switch
+        {
+            "string" => value.GetValueKind() is System.Text.Json.JsonValueKind.String or System.Text.Json.JsonValueKind.Number or System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False,
+            "number" => value.GetValueKind() == System.Text.Json.JsonValueKind.Number || value is JsonValue stringValue && stringValue.TryGetValue<string>(out var numberText) && decimal.TryParse(numberText, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _),
+            "integer" => value.GetValueKind() == System.Text.Json.JsonValueKind.Number && IsInteger(value) || value is JsonValue integerValue && integerValue.TryGetValue<string>(out var integerText) && decimal.TryParse(integerText, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out _),
+            "boolean" => value.GetValueKind() is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False || value is JsonValue booleanValue && booleanValue.TryGetValue<string>(out var booleanText) && booleanText is "true" or "false",
+            _ => false
+        };
+
+        private static string LexicalKey(JsonNode value) => value.GetValueKind() switch
+        {
+            System.Text.Json.JsonValueKind.String => value.GetValue<string>(),
+            System.Text.Json.JsonValueKind.Number => value.ToJsonString(),
+            System.Text.Json.JsonValueKind.True => "true",
+            System.Text.Json.JsonValueKind.False => "false",
+            _ => value.ToJsonString()
+        };
+
+        private static bool IsInteger(JsonNode value) => value is JsonValue json && (json.TryGetValue<int>(out _) || json.TryGetValue<decimal>(out var decimalValue) && decimal.Truncate(decimalValue) == decimalValue);
+
+        private static string NormalizeType(string? type) => type?.Trim().ToLowerInvariant() switch { null or "" => "string", var value => value };
+    }
+
+    private sealed class InvocationNameGraph
+    {
+        public required IReadOnlyList<CanonicalCommand> Commands { get; init; }
+        public required IReadOnlyDictionary<string, CanonicalCommand> ByInvocation { get; init; }
+        private IReadOnlyDictionary<CanonicalCommand, IReadOnlyList<string>> Paths { get; init; } = new Dictionary<CanonicalCommand, IReadOnlyList<string>>();
+        public IReadOnlyList<string> GetInvocations(CanonicalCommand command) => Paths[command];
+
+        public static InvocationNameGraph Create(CanonicalManifest manifest)
+        {
+            var commands = Flatten(manifest.Root).ToArray();
+            var byPath = new Dictionary<string, CanonicalCommand>(StringComparer.Ordinal);
+            foreach (var command in commands)
+            {
+                if (!byPath.TryAdd(command.Path, command)) throw new CompatibilityException("OPENCLI_DUPLICATE_COMMAND_PATH", $"The canonical command collection contains duplicate command path '{command.Path}'.");
+            }
+            var paths = new Dictionary<CanonicalCommand, IReadOnlyList<string>>();
+            var byInvocation = new Dictionary<string, CanonicalCommand>(StringComparer.Ordinal);
+            foreach (var command in commands.OrderBy(command => command.Path.Count(character => character == '/')).ThenBy(command => command.Path, StringComparer.Ordinal))
+            {
+                var invocations = command.Path == "root" ? ["root"] : BuildChildPaths(command, byPath, paths);
+                paths[command] = invocations;
+                foreach (var invocation in invocations)
+                {
+                    if (byInvocation.TryGetValue(invocation, out var existing) && !ReferenceEquals(existing, command)) throw new CompatibilityException("OPENCLI_DUPLICATE_INVOCATION", "The canonical command graph contains duplicate accepted invocation paths.");
+                    byInvocation[invocation] = command;
+                }
+            }
+
+            return new InvocationNameGraph { Commands = commands.Where(command => command.Path != "root").ToArray(), ByInvocation = byInvocation, Paths = paths };
+        }
+
+        private static string[] BuildChildPaths(CanonicalCommand command, Dictionary<string, CanonicalCommand> byPath, Dictionary<CanonicalCommand, IReadOnlyList<string>> paths)
+        {
+            var segments = command.Path.Split(" / ", StringSplitOptions.None);
+            var parentPath = string.Join(" / ", segments[..^1]);
+            if (!byPath.TryGetValue(parentPath, out var parent) || !paths.TryGetValue(parent, out var parentPaths))
+            {
+                parentPaths = [parentPath];
+            }
+            var names = new[] { segments[^1] }.Concat(command.Aliases).Distinct(StringComparer.Ordinal);
+            return parentPaths.SelectMany(parentInvocation => names.Select(name => parentInvocation + " / " + name)).Distinct(StringComparer.Ordinal).ToArray();
+        }
+
+        private static IEnumerable<CanonicalCommand> Flatten(CanonicalCommand root)
+        {
+            yield return root;
+            foreach (var child in root.Subcommands.SelectMany(Flatten)) yield return child;
+        }
     }
 }

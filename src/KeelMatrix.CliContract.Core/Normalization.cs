@@ -709,10 +709,7 @@ public static class Normalizer
 
         if (command.ContainsKey("args"))
         {
-            foreach (var argument in RequireArray(command["args"], "OPENCLI_COLLECTION", limits))
-            {
-                ValidateParameter(argument, false, limits);
-            }
+            ValidateArguments(RequireArray(command["args"], "OPENCLI_COLLECTION", limits), limits);
         }
 
         if (command.ContainsKey("flags"))
@@ -769,6 +766,24 @@ public static class Normalizer
         }
     }
 
+    private static void ValidateArguments(JsonArray arguments, NormalizationLimits limits)
+    {
+        var variadicCount = 0;
+        for (var index = 0; index < arguments.Count; index++)
+        {
+            var argument = RequireObject(arguments[index], "OPENCLI_PARAMETER");
+            ValidateParameter(argument, false, limits);
+            var variadic = OptionalBoolean(argument, "variadic") ?? false;
+            if (!variadic) continue;
+
+            variadicCount++;
+            if (variadicCount > 1 || index != arguments.Count - 1)
+            {
+                throw new NormalizationException("OPENCLI_VARIADIC", "Only one variadic positional argument is allowed and it must be last.");
+            }
+        }
+    }
+
     private static void ValidateType(JsonObject parameter, NormalizationLimits limits, bool required)
     {
         if (!parameter.ContainsKey("type"))
@@ -793,6 +808,12 @@ public static class Normalizer
 
     private static void ValidateArity(JsonObject parameter, NormalizationLimits limits)
     {
+        var variadic = OptionalBoolean(parameter, "variadic") ?? false;
+        if (!variadic && (parameter.ContainsKey("minItems") || parameter.ContainsKey("maxItems")))
+        {
+            throw new NormalizationException("OPENCLI_ARITY", "minItems and maxItems apply only when variadic is true.");
+        }
+
         var minimum = ReadOptionalNonNegativeInt(parameter, "minItems", limits);
         var maximum = ReadOptionalNonNegativeInt(parameter, "maxItems", limits);
         if (minimum.HasValue && maximum.HasValue && minimum.Value > maximum.Value)
@@ -1052,6 +1073,16 @@ public static class Normalizer
         return false;
     }
 
+    private static int RequiredInt(JsonObject value, string property, string code)
+    {
+        if (value[property] is JsonValue node && node.GetValueKind() == JsonValueKind.Number && TryGetInt(node, out var result))
+        {
+            return result;
+        }
+
+        throw new NormalizationException(code, $"The required '{property}' field must be an integer.");
+    }
+
     private static CanonicalManifest NormalizeOpenCli(JsonNode document, NormalizationLimits limits)
     {
         var root = RequireObject(document, "OPENCLI_ROOT");
@@ -1093,6 +1124,7 @@ public static class Normalizer
             Adapter = "opencli",
             SourceVersion = version,
             Info = NormalizeInfo(info, installNode, limits),
+            GlobalExitCodes = global is null ? [] : ReadExitCodes(OptionalProperty(global, "exitCodes", "OPENCLI_GLOBAL"), limits),
             Root = new CanonicalCommand
             {
                 Path = "root",
@@ -1102,7 +1134,10 @@ public static class Normalizer
                 Options = rootOptions,
                 Aliases = rootCommand?.Aliases ?? [],
                 Summary = rootCommand?.Summary,
-                Description = rootCommand?.Description
+                Description = rootCommand?.Description,
+                Hidden = rootCommand?.Hidden ?? false,
+                ExitCodes = rootCommand?.ExitCodes ?? [],
+                Examples = rootCommand?.Examples ?? []
             },
             GlobalConfig = global is not null && global.ContainsKey("config")
                 ? NormalizeGlobalConfig(RequireObject(global["config"], "OPENCLI_GLOBAL"), limits)
@@ -1194,6 +1229,9 @@ public static class Normalizer
             Summary = OptionalString(value, "summary", limits),
             Description = OptionalString(value, "description", limits),
             Status = null,
+            Hidden = OptionalBoolean(value, "hidden") ?? false,
+            ExitCodes = ReadExitCodes(OptionalProperty(value, "exitCodes", "OPENCLI_COMMAND"), limits),
+            Examples = ReadExamples(OptionalProperty(value, "examples", "OPENCLI_COMMAND"), limits),
             Arguments = arguments,
             Options = options
         };
@@ -1248,6 +1286,9 @@ public static class Normalizer
                 required,
                 minimum,
                 maximum,
+                variadic,
+                OptionalString(parameter, "hint", limits),
+                OptionalBoolean(parameter, "hidden") ?? false,
                 choices,
                 option ? OptionalScalar(parameter, "default", limits) : null,
                 alternativeSources,
@@ -1265,7 +1306,11 @@ public static class Normalizer
                     Required = common.Required,
                     ArityMinimum = common.Minimum,
                     ArityMaximum = common.Maximum,
+                    Variadic = common.Variadic,
+                    Hint = common.Hint,
+                    Hidden = common.Hidden,
                     AllowedValues = common.AllowedValues,
+                    Choices = common.Choices,
                     DefaultValue = common.DefaultValue,
                     AlternativeSources = common.AlternativeSources,
                     Status = common.Status
@@ -1282,7 +1327,11 @@ public static class Normalizer
                     Required = common.Required,
                     ArityMinimum = common.Minimum,
                     ArityMaximum = common.Maximum,
+                    Variadic = common.Variadic,
+                    Hint = common.Hint,
+                    Hidden = common.Hidden,
                     AllowedValues = common.AllowedValues,
+                    Choices = common.Choices,
                     DefaultValue = common.DefaultValue,
                     AlternativeSources = common.AlternativeSources,
                     Passthrough = common.Passthrough,
@@ -1463,7 +1512,7 @@ public static class Normalizer
         return CanonicalizeScalar(node);
     }
 
-    private static JsonNode[] ReadChoices(JsonNode? node, NormalizationLimits limits)
+    private static CanonicalChoice[] ReadChoices(JsonNode? node, NormalizationLimits limits)
     {
         if (node is null)
         {
@@ -1477,8 +1526,15 @@ public static class Normalizer
         }
 
         return array.Select(item =>
-            RequiredScalar(RequireObject(item, "OPENCLI_CHOICE"), "value", "OPENCLI_CHOICE", limits))
-            .OrderBy(ScalarSortKey, StringComparer.Ordinal)
+            {
+                var choice = RequireObject(item, "OPENCLI_CHOICE");
+                return new CanonicalChoice
+                {
+                    Value = RequiredScalar(choice, "value", "OPENCLI_CHOICE", limits),
+                    Description = OptionalString(choice, "description", limits)
+                };
+            })
+            .OrderBy(choice => ScalarSortKey(choice.Value), StringComparer.Ordinal)
             .ToArray();
     }
 
@@ -1547,5 +1603,44 @@ public static class Normalizer
     }
 
     private sealed class Counter { public int Value; }
-    private sealed record ParameterValues(string Name, string? Summary, string? Description, string? Type, bool? Required, int? Minimum, int? Maximum, JsonNode[] AllowedValues, JsonNode? DefaultValue, CanonicalAlternativeSource[] AlternativeSources, bool Passthrough, string? Status);
+    private static CanonicalExitCode[] ReadExitCodes(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is null) return [];
+        var array = RequireArray(node, "OPENCLI_GLOBAL", limits);
+        var seen = new HashSet<int>();
+        return array.Select(item =>
+        {
+            var value = RequireObject(item, "OPENCLI_EXIT_CODE");
+            var code = RequiredInt(value, "code", "OPENCLI_EXIT_CODE");
+            if (!seen.Add(code)) throw new NormalizationException("OPENCLI_EXIT_CODE", "Exit code values must be unique.");
+            return new CanonicalExitCode
+            {
+                Code = code,
+                Status = RequiredString(value, "status", "OPENCLI_EXIT_CODE", limits),
+                Summary = RequiredString(value, "summary", "OPENCLI_EXIT_CODE", limits),
+                Description = OptionalString(value, "description", limits)
+            };
+        }).OrderBy(exitCode => exitCode.Code).ToArray();
+    }
+
+    private static CanonicalExample[] ReadExamples(JsonNode? node, NormalizationLimits limits)
+    {
+        if (node is null) return [];
+        return RequireArray(node, "OPENCLI_COMMAND", limits)
+            .Select(item =>
+            {
+                var value = RequireObject(item, "OPENCLI_COMMAND");
+                return new CanonicalExample
+                {
+                    Title = OptionalString(value, "title", limits),
+                    Content = RequiredString(value, "content", "OPENCLI_COMMAND", limits)
+                };
+            })
+            .ToArray();
+    }
+
+    private sealed record ParameterValues(string Name, string? Summary, string? Description, string? Type, bool? Required, int? Minimum, int? Maximum, bool Variadic, string? Hint, bool Hidden, CanonicalChoice[] Choices, JsonNode? DefaultValue, CanonicalAlternativeSource[] AlternativeSources, bool Passthrough, string? Status)
+    {
+        public JsonNode[] AllowedValues => Choices.Select(choice => choice.Value).ToArray();
+    }
 }

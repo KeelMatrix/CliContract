@@ -8,6 +8,7 @@ public sealed class CanonicalManifest
     public required string Adapter { get; init; }
     public required string SourceVersion { get; init; }
     public CanonicalInfo Info { get; init; } = new();
+    public CanonicalExitCode[] GlobalExitCodes { get; init; } = [];
     public CanonicalGlobalConfig? GlobalConfig { get; init; }
     public required CanonicalCommand Root { get; init; }
 }
@@ -57,6 +58,20 @@ public sealed class CanonicalInstall
     public string? Description { get; init; }
 }
 
+public sealed class CanonicalExitCode
+{
+    public int Code { get; init; }
+    public required string Status { get; init; }
+    public required string Summary { get; init; }
+    public string? Description { get; init; }
+}
+
+public sealed class CanonicalExample
+{
+    public string? Title { get; init; }
+    public required string Content { get; init; }
+}
+
 public sealed class CanonicalCommand
 {
     public required string Path { get; init; }
@@ -65,6 +80,9 @@ public sealed class CanonicalCommand
     public string? Summary { get; init; }
     public string? Description { get; init; }
     public string? Status { get; init; }
+    public bool Hidden { get; init; }
+    public CanonicalExitCode[] ExitCodes { get; init; } = [];
+    public CanonicalExample[] Examples { get; init; } = [];
     public CanonicalArgument[] Arguments { get; init; } = [];
     public CanonicalOption[] Options { get; init; } = [];
     public CanonicalCommand[] Subcommands { get; init; } = [];
@@ -103,10 +121,20 @@ public abstract class CanonicalParameter
     public bool? Required { get; init; }
     public int? ArityMinimum { get; init; }
     public int? ArityMaximum { get; init; }
+    public bool Variadic { get; init; }
+    public string? Hint { get; init; }
+    public bool Hidden { get; init; }
     public JsonNode[] AllowedValues { get; init; } = [];
+    public CanonicalChoice[] Choices { get; init; } = [];
     public JsonNode? DefaultValue { get; init; }
     public CanonicalAlternativeSource[] AlternativeSources { get; init; } = [];
     public string? Status { get; init; }
+}
+
+public sealed class CanonicalChoice
+{
+    public required JsonNode Value { get; init; }
+    public string? Description { get; init; }
 }
 
 public sealed class CanonicalAlternativeSource

@@ -1,0 +1,216 @@
+[
+  {
+    "id": "minimal-json",
+    "oracle": "official-valid-example",
+    "valid": true,
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": {} }
+    }
+  },
+  {
+    "id": "recognized-fields",
+    "oracle": "official-schema-validation",
+    "valid": true,
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": {
+        "title": "Tool",
+        "summary": "A tool",
+        "description": "A complete contract",
+        "binary": "tool",
+        "version": "1",
+        "license": { "name": "MIT", "spdxId": "MIT", "url": "https://example.test/license" },
+        "contact": { "name": "Support", "email": "support@example.test", "url": "https://example.test/support" }
+      },
+      "install": [{ "name": "dotnet", "command": "dotnet tool install tool", "description": "Install the tool" }],
+      "global": {
+        "exitCodes": [{ "code": 0, "status": "OK", "summary": "Success", "description": "Completed" }],
+        "config": { "json": "tool.json", "toml": "tool.toml", "yaml": "tool.yaml" },
+        "flags": [{ "name": "verbose", "type": "boolean", "aliases": ["v"], "default": false }]
+      },
+      "commands": {
+        "tool": {
+          "kind": "action",
+          "aliases": ["t"],
+          "hidden": false,
+          "exitCodes": [{ "code": 1, "status": "INTERNAL_CLI_ERROR", "summary": "Failure" }],
+          "examples": [{ "title": "Run", "content": "tool" }],
+          "args": [{ "name": "target", "type": "string", "summary": "Target", "passthrough": true }],
+          "flags": [{ "name": "count", "type": "integer", "choices": [{ "value": 1, "description": "One" }, { "value": 2 }], "alternativeSources": [{ "type": "$ENV", "property": "COUNT" }] }]
+        }
+      },
+      "x-vendor": { "ignored": true }
+    }
+  },
+  {
+    "id": "all-supported-types-and-aliases",
+    "oracle": "official-valid-example",
+    "valid": true,
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "flags": [
+        { "name": "text", "type": "string", "choices": [{ "value": "a" }, { "value": "b" }] },
+        { "name": "number", "type": "number" },
+        { "name": "whole", "type": "integer" },
+        { "name": "enabled", "type": "boolean", "aliases": ["e"] }
+      ] } }
+    }
+  },
+  {
+    "id": "variadic-last",
+    "oracle": "normative-cross-field-rule",
+    "valid": true,
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "args": [{ "name": "rest", "variadic": true, "minItems": 1, "maxItems": 3 }] } }
+    }
+  },
+  {
+    "id": "extension-fields",
+    "oracle": "official-schema-extension",
+    "valid": true,
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1", "x-info": { "owner": "example" } },
+      "commands": { "tool": { "x-command": "ignored", "flags": [{ "name": "value", "type": "string", "x-flag": true }] } }
+    }
+  },
+  {
+    "id": "variadic-not-last",
+    "oracle": "normative-cross-field-rule",
+    "valid": false,
+    "expectedCode": "OPENCLI_VARIADIC",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "args": [{ "name": "rest", "variadic": true }, { "name": "later" }] } }
+    }
+  },
+  {
+    "id": "two-variadic",
+    "oracle": "normative-cross-field-rule",
+    "valid": false,
+    "expectedCode": "OPENCLI_VARIADIC",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "args": [{ "name": "first", "variadic": true }, { "name": "second", "variadic": true }] } }
+    }
+  },
+  {
+    "id": "nonvariadic-bounds",
+    "oracle": "normative-cross-field-rule",
+    "valid": false,
+    "expectedCode": "OPENCLI_ARITY",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "flags": [{ "name": "value", "type": "string", "maxItems": 2 }] } }
+    }
+  },
+  {
+    "id": "reversed-bounds",
+    "oracle": "normative-cross-field-rule",
+    "valid": false,
+    "expectedCode": "OPENCLI_ARITY",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "args": [{ "name": "rest", "variadic": true, "minItems": 3, "maxItems": 1 }] } }
+    }
+  },
+  {
+    "id": "missing-flag-type",
+    "oracle": "official-schema-validation",
+    "valid": false,
+    "expectedCode": "OPENCLI_FLAG_TYPE",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "flags": [{ "name": "value" }] } }
+    }
+  },
+  {
+    "id": "empty-alternative-sources",
+    "oracle": "official-schema-validation",
+    "valid": false,
+    "expectedCode": "OPENCLI_DEFAULT_SOURCES",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "flags": [{ "name": "value", "type": "string", "alternativeSources": [] }] } }
+    }
+  },
+  {
+    "id": "invalid-command-kind",
+    "oracle": "official-schema-validation",
+    "valid": false,
+    "expectedCode": "OPENCLI_COMMAND",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "kind": "unknown" } }
+    }
+  },
+  {
+    "id": "binary-identity",
+    "oracle": "normative-cross-field-rule",
+    "valid": false,
+    "expectedCode": "OPENCLI_COMMAND_KEY",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "other": {} }
+    }
+  },
+  {
+    "id": "invalid-exit-status",
+    "oracle": "official-schema-validation",
+    "valid": false,
+    "expectedCode": "OPENCLI_EXIT_CODE",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "global": { "exitCodes": [{ "code": 0, "status": "UNKNOWN", "summary": "Nope" }] },
+      "commands": { "tool": {} }
+    }
+  },
+  {
+    "id": "unknown-version",
+    "oracle": "version-policy",
+    "valid": false,
+    "expectedCode": "UNSUPPORTED_OPENCLI_VERSION",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.15",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": {} }
+    }
+  },
+  {
+    "id": "unknown-non-extension-field",
+    "oracle": "official-schema-validation",
+    "valid": false,
+    "expectedCode": "OPENCLI_UNKNOWN_FIELD",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "unsupported": true } }
+    }
+  },
+  {
+    "id": "remote-reference",
+    "oracle": "offline-boundary",
+    "valid": false,
+    "expectedCode": "OPENCLI_REMOTE_REFERENCE",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": {} },
+      "$ref": "https://example.test/schema.json"
+    }
+  }
+]

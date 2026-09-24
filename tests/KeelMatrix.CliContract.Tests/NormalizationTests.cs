@@ -23,6 +23,50 @@ public sealed class NormalizationTests
     }
 
     [Fact]
+    public void PinnedAlpha14ConformanceCorpusMatchesItsOracle()
+    {
+        var corpus = JsonNode.Parse(File.ReadAllText(Fixture("opencli", "alpha14-conformance-corpus.json")))!.AsArray();
+
+        foreach (var item in corpus)
+        {
+            var caseId = item!["id"]!.GetValue<string>();
+            var document = item["document"]!.ToJsonString();
+            if (item["valid"]!.GetValue<bool>())
+            {
+                _ = Normalizer.Normalize("opencli", document);
+                continue;
+            }
+
+            var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", document));
+            Assert.Equal(item["expectedCode"]!.GetValue<string>(), error.Code);
+            Assert.False(string.IsNullOrWhiteSpace(caseId));
+        }
+    }
+
+    [Fact]
+    public void PinnedAlpha14JsonAndYamlMinimalDocumentsAreEquivalent()
+    {
+        var json = Normalizer.Normalize("opencli", """
+            {"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"enabled","type":"boolean","default":true}]}}}
+            """);
+        var yaml = Normalizer.Normalize("opencli", """
+            opencliVersion: 1.0.0-alpha.14
+            info:
+              title: Tool
+              binary: tool
+              version: '1'
+            commands:
+              tool:
+                flags:
+                  - name: enabled
+                    type: boolean
+                    default: true
+            """);
+
+        Assert.Equal(Normalizer.Serialize(json), Normalizer.Serialize(yaml));
+    }
+
+    [Fact]
     public void OpenCliSourceOrderAndLineEndingsDoNotChangeBytes()
     {
         var first = File.ReadAllText(Fixture("opencli", "example-cli.json"));
@@ -725,6 +769,45 @@ public sealed class NormalizationTests
     {
         var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", "{\"opencliVersion\":\"1.0.0-alpha.14\",\"info\":{\"title\":\"t\",\"binary\":\"b\",\"version\":\"1\"},\"commands\":{\"tool\":{\"flags\":[{\"name\":\"x\",\"type\":{}}]}}}"));
         Assert.Equal("OPENCLI_FLAG_TYPE", error.Code);
+    }
+
+    [Fact]
+    public void NonVariadicArgumentsRejectItemBounds()
+    {
+        var document = OpenCliDocument("""
+            {"commands":{"tool":{"args":[{"name":"value","minItems":1}]}}}
+            """);
+
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", document));
+
+        Assert.Equal("OPENCLI_ARITY", error.Code);
+    }
+
+    [Theory]
+    [InlineData("[{\"name\":\"rest\",\"variadic\":true},{\"name\":\"later\"}]")]
+    [InlineData("[{\"name\":\"first\",\"variadic\":true},{\"name\":\"second\",\"variadic\":true}]")]
+    public void VariadicArgumentsMustBeLastAndUnique(string arguments)
+    {
+        var document = OpenCliDocument($"{{\"commands\":{{\"tool\":{{\"args\":{arguments}}}}}}}");
+
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", document));
+
+        Assert.Equal("OPENCLI_VARIADIC", error.Code);
+    }
+
+    [Fact]
+    public void LastVariadicArgumentPreservesItsBounds()
+    {
+        var document = OpenCliDocument("""
+            {"commands":{"tool":{"args":[{"name":"rest","variadic":true,"minItems":1,"maxItems":3}]}}}
+            """);
+
+        var manifest = Normalizer.Normalize("opencli", document);
+        var argument = manifest.Root.Arguments.Single();
+
+        Assert.True(argument.Variadic);
+        Assert.Equal(1, argument.ArityMinimum);
+        Assert.Equal(3, argument.ArityMaximum);
     }
 
     private static string OpenCliDocument(string commandsAndOptionalProperties)
