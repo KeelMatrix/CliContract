@@ -21,8 +21,8 @@ public sealed class CompatibilityTests
     [Fact]
     public void RequirednessArityAliasDefaultAndDescriptionChangesUseStableCategories()
     {
-        var oldManifest = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["-v"],"required":false,"variadic":true,"maxItems":3,"default":"one","description":"old"}]}}}""");
-        var newManifest = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["-x"],"required":true,"variadic":true,"maxItems":1,"default":"two","description":"new"}]}}}""");
+        var oldManifest = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["-v"],"required":false,"default":"one","description":"old"},{"name":"items","type":"string","variadic":true,"maxItems":3}]}}}""");
+        var newManifest = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["-x"],"required":true,"default":"two","description":"new"},{"name":"items","type":"string","variadic":true,"maxItems":1}]}}}""");
 
         var findings = CompatibilityAnalyzer.Compare(oldManifest, newManifest).Findings;
 
@@ -414,6 +414,21 @@ public sealed class CompatibilityTests
 
         Assert.Equal(Normalizer.Serialize(manifest), Normalizer.Serialize(roundTrip));
         Assert.Empty(CompatibilityAnalyzer.Compare(roundTrip, manifest).Findings);
+    }
+
+    [Fact]
+    public void ExactNumericDomainsRemainReflexiveOutsideDecimalRange()
+    {
+        var huge = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"number","choices":[{"value":1e1000},{"value":1e-1000},{"value":-0.0}]}]}}}""");
+        var integral = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"integer","choices":[{"value":1e1000}]}]}}}""");
+        var numericIntegral = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"number","choices":[{"value":1e1000}]}]}}}""");
+
+        Assert.Empty(CompatibilityAnalyzer.Compare(huge, huge).Findings);
+        Assert.DoesNotContain(CompatibilityAnalyzer.Compare(integral, numericIntegral).Findings, finding => finding.Code == "KMCLI107");
+
+        var fraction = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"number","choices":[{"value":1e-1000}]}]}}}""");
+        var integer = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"integer"}]}}}""");
+        Assert.Contains(CompatibilityAnalyzer.Compare(fraction, integer).Findings, finding => finding.Code == "KMCLI107" && finding.Category == "breaking");
     }
 
     private static CanonicalManifest Normalize(string commands)

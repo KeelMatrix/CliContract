@@ -25,7 +25,7 @@ Use `--format json` for CI consumers, `--fail-on warning` to gate warnings, and 
 
 ## Exit codes
 
-`0` means no gated finding, `1` means a gated finding, `2` means invalid invocation/configuration, `3` means invalid or unsupported input, and `4` means an unexpected tool failure. JSON output places compatibility findings and tool errors in separate arrays.
+`0` means no gated finding, `1` means a gated finding, `2` means a missing source/baseline path, invalid invocation/configuration, or output failure, `3` means a present but unreadable or invalid source/baseline, and `4` means an unexpected tool failure. See the [error taxonomy](https://github.com/KeelMatrix/CliContract/blob/main/docs/ERROR-TAXONOMY.md). JSON output places compatibility findings and tool errors in separate arrays.
 
 ## Privacy and limitations
 

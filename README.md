@@ -32,7 +32,7 @@ clicontract validate ./opencli.yaml
 
 Breaking changes are gated by default. Use `--fail-on warning` when default, status, or other warning changes should also fail CI. Represented `info` metadata, install guidance, summary/description text, and choice-description changes produce `KMCLI005` informational findings; visibility and example metadata changes produce `KMCLI006` informational findings. Both are reported in either mode but do not gate either threshold. Suppressions are explicit JSON files passed with `--ignore`; they never suppress malformed or unsupported schemas.
 
-The stable diagnostic catalog and classification contract are in [`COMPATIBILITY-RULES.md`](COMPATIBILITY-RULES.md). The versioned canonical manifest is described in [`MANIFEST.md`](MANIFEST.md). The accepted invocation-name graph, binary identity, action/group runnable state, positional slots, type and choice domains, argument passthrough behavior, alternative default sources, keyed global file-source configuration, and exit-code contracts are represented there.
+The selected diagnostic catalog and classification contract are in [`COMPATIBILITY-RULES.md`](COMPATIBILITY-RULES.md); the complete role-aware error taxonomy is [`docs/ERROR-TAXONOMY.md`](docs/ERROR-TAXONOMY.md). The versioned canonical manifest is described in [`MANIFEST.md`](MANIFEST.md). The accepted invocation-name graph, binary identity, action/group runnable state, positional slots, type and choice domains, argument passthrough behavior, alternative default sources, keyed global file-source configuration, and exit-code contracts are represented there.
 
 Command and option renames remain compatible only when the old invocation name is retained as an alias. A retained group alias also preserves descendant paths. All supported OpenCLI type transitions (`string`, `number`, `integer`, and `boolean`) are checked for removal of accepted lexical values; global and command exit-code changes are reported as warnings. OpenCLI `x-*` extensions are accepted but outside the compatibility decision.
 
@@ -46,8 +46,8 @@ Command-specific options are enforced: `snapshot` accepts `--input`, `--format`,
 | ---: | --- |
 | `0` | Compatible, or no change at the selected failure threshold |
 | `1` | A gated compatibility finding was reported |
-| `2` | Invalid invocation or configuration |
-| `3` | Invalid or unsupported input schema or baseline |
+| `2` | Missing source/baseline path, invalid invocation/configuration, or output failure |
+| `3` | Present but unreadable, malformed, unsupported, or invalid source schema/baseline |
 | `4` | Unexpected tool failure |
 
 JSON output always separates `findings` from `errors`. Informational changes remain findings with their stable code and category even when the selected failure threshold returns exit code `0`; a parser or adapter error cannot be represented as a compatible result.
@@ -78,10 +78,12 @@ clicontract check ./opencli.yaml --baseline ./cli-contract.json --format json
 - `INPUT_TOO_LARGE`: reduce the input below the configured size limit.
 - `DEPTH_LIMIT`: reduce the input nesting below the configured depth limit.
 - `INVALID_UTF8`: save the source as strict UTF-8 without a malformed byte sequence.
-- `INPUT_UNREADABLE` or `BASELINE_UNREADABLE`: grant read access to the source or canonical baseline; these remain schema/baseline errors with exit code `3`.
+- `INPUT_NOT_FOUND` or `BASELINE_NOT_FOUND`: supply an existing source or canonical baseline path; missing paths are invocation/configuration errors with exit code `2`.
+- `INPUT_UNREADABLE` or `BASELINE_UNREADABLE`: grant read access to the source or canonical baseline; present read failures remain schema/baseline errors with exit code `3`.
 - `IGNORE_NOT_FOUND`, `IGNORE_UNREADABLE`, `IGNORE_TOO_LARGE`, or `INVALID_IGNORE`: fix the explicit suppression/configuration file; these are invocation errors with exit code `2`.
 - `OUTPUT_NOT_WRITABLE`: choose a writable snapshot destination; this is an invocation error with exit code `2`.
-- `OPENCLI_VARIADIC` or `OPENCLI_ARITY`: keep one variadic positional argument last and use item bounds only with `variadic: true`.
+- `OPENCLI_GROUP_COMMAND`, `OPENCLI_ARGUMENT_ORDER`, `OPENCLI_VARIADIC`, or `OPENCLI_ARITY`: keep groups free of local parameters, required positionals after optional positionals, one variadic positional argument last, and item bounds only with `variadic: true`.
+- `OPENCLI_DEFAULT` or `OPENCLI_DEFAULT_SOURCE`: use a default representable by its flag type and configure a global JSON, TOML, or YAML file source before using `$FILE`.
 - `UNSUPPORTED_OPENCLI_VERSION`: update the source to the pinned OpenCLI version or wait for a tool version that supports it.
 - `AMBIGUOUS_INPUT`: pass `--input opencli` after removing competing schema markers.
 - `DUPLICATE_OPTION`: provide each command-line option at most once.

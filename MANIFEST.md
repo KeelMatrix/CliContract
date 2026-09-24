@@ -27,7 +27,10 @@ The current serializer includes null optional values so null and omission have o
 - Command paths are logical paths beginning at `root`.
 - Commands, options, aliases, and scalar choices are ordered with ordinal comparison; positional argument declaration order is retained.
 - Accepted command invocation names are modeled as primary names plus aliases at every command segment, so retained aliases preserve descendant invocation paths.
+- OpenCLI command keys use the pinned alpha.14 grammar: modifiers beginning with non-letter syntax (`--`, `<...>`, `{...}`, and `[...]`) terminate the logical command-key prefix and never become canonical command segments.
 - Non-variadic parameters never carry item bounds. At most one variadic positional argument is accepted, and it must be last; `minItems` and `maxItems` are preserved only for variadic parameters.
+- Group commands contain no command-local arguments or flags; required positionals cannot follow optional positionals; variadic flags cannot be required; and `$FILE` sources require a configured global JSON, TOML, or YAML file source.
+- Option accepted names and command accepted invocation paths are unique after normalization, including global/root merges, aliases, sibling commands, and descendants below aliases. The same invariant is enforced after source normalization and canonical-manifest parsing.
 - Option names use a `--` prefix in the manifest.
 - Omitted OpenCLI booleans use their documented defaults; null/default/alternative-source distinctions are preserved according to the supported adapter contract.
 - JSON escaping and indentation are produced by the stable .NET JSON serializer; no machine path or source-document metadata is retained.
@@ -36,6 +39,8 @@ The current serializer includes null optional values so null and omission have o
 
 Semantically equivalent OpenCLI JSON/YAML documents therefore produce byte-identical manifests across Windows, Linux, and macOS when run with the same tool version.
 
+Typed defaults are validated against their declared flag type before canonicalization. Integer defaults must be exact integers and boolean defaults must be booleans; string defaults use the alpha.14 scalar-to-string policy. Numeric choices, defaults, and compatibility domains use one exact finite-number model without a decimal or machine-integer range boundary.
+
 ## Version policy
 
 The manifest schema version is independent of the upstream OpenCLI version. A future incompatible manifest or source version must receive an explicit implementation and versioned contract; the current tool fails closed rather than best-effort parsing it. Baselines and current descriptions must use the same manifest and supported source versions.
@@ -43,3 +48,5 @@ The manifest schema version is independent of the upstream OpenCLI version. A fu
 ## Unsupported constructs
 
 The v1 adapter does not interpret runtime behavior, execute commands, scrape help, or fetch remote references. Represented informational metadata is preserved in `Info` and compared as non-gating `KMCLI005` findings; `Info.Binary` remains invocation compatibility semantics. See [`COMPATIBILITY-RULES.md`](COMPATIBILITY-RULES.md) for the complete contract boundary.
+
+For the CLI failure-role contract, see [`docs/ERROR-TAXONOMY.md`](docs/ERROR-TAXONOMY.md): missing source/baseline paths return exit `2`, while present invalid or unreadable source/baseline files return exit `3`.

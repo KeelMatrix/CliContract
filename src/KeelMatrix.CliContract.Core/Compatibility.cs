@@ -491,7 +491,7 @@ public static class CompatibilityAnalyzer
         {
             if (_choices is null) return other._choices is null && BaseSubset(_type, other._type);
             if (other._choices is null) return _choices.All(value => Accepts(other._type, value));
-            return _choices.All(value => other._choices.Any(candidate => string.Equals(LexicalKey(value), LexicalKey(candidate), StringComparison.Ordinal) && Accepts(other._type, candidate)));
+            return _choices.All(value => other._choices.Any(candidate => EquivalentValue(other._type, value, candidate) && Accepts(other._type, candidate)));
         }
 
         private static bool BaseSubset(string oldType, string newType) => string.Equals(oldType, newType, StringComparison.Ordinal) || oldType == "integer" && newType == "number" || oldType is "integer" or "number" or "boolean" && newType == "string";
@@ -499,22 +499,38 @@ public static class CompatibilityAnalyzer
         private static bool Accepts(string type, JsonNode value) => type switch
         {
             "string" => value.GetValueKind() is System.Text.Json.JsonValueKind.String or System.Text.Json.JsonValueKind.Number or System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False,
-            "number" => value.GetValueKind() == System.Text.Json.JsonValueKind.Number || value is JsonValue stringValue && stringValue.TryGetValue<string>(out var numberText) && decimal.TryParse(numberText, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _),
-            "integer" => value.GetValueKind() == System.Text.Json.JsonValueKind.Number && IsInteger(value) || value is JsonValue integerValue && integerValue.TryGetValue<string>(out var integerText) && decimal.TryParse(integerText, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out _),
+            "number" => ExactNumber.TryParse(value, allowNumericString: true, out _),
+            "integer" => ExactNumber.TryParse(value, allowNumericString: true, out var integer) && integer.IsInteger,
             "boolean" => value.GetValueKind() is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False || value is JsonValue booleanValue && booleanValue.TryGetValue<string>(out var booleanText) && booleanText is "true" or "false",
             _ => false
         };
 
-        private static string LexicalKey(JsonNode value) => value.GetValueKind() switch
+        private static bool EquivalentValue(string type, JsonNode left, JsonNode right) => type switch
+        {
+            "number" or "integer" => ExactNumber.TryParse(left, allowNumericString: true, out var leftNumber) &&
+                ExactNumber.TryParse(right, allowNumericString: true, out var rightNumber) &&
+                leftNumber.EqualsValue(rightNumber),
+            "boolean" => BooleanValue(left) == BooleanValue(right),
+            "string" => StringValue(left) == StringValue(right),
+            _ => JsonNode.DeepEquals(left, right)
+        };
+
+        private static string StringValue(JsonNode value) => value.GetValueKind() switch
         {
             System.Text.Json.JsonValueKind.String => value.GetValue<string>(),
-            System.Text.Json.JsonValueKind.Number => value.ToJsonString(),
+            System.Text.Json.JsonValueKind.Number => ExactNumber.TryParse(value, allowNumericString: false, out var number) ? number.ToCanonicalString() : value.ToJsonString(),
             System.Text.Json.JsonValueKind.True => "true",
             System.Text.Json.JsonValueKind.False => "false",
             _ => value.ToJsonString()
         };
 
-        private static bool IsInteger(JsonNode value) => value is JsonValue json && (json.TryGetValue<int>(out _) || json.TryGetValue<decimal>(out var decimalValue) && decimal.Truncate(decimalValue) == decimalValue);
+        private static string? BooleanValue(JsonNode value) => value.GetValueKind() switch
+        {
+            System.Text.Json.JsonValueKind.True => "true",
+            System.Text.Json.JsonValueKind.False => "false",
+            System.Text.Json.JsonValueKind.String when value.GetValue<string>() is "true" or "false" => value.GetValue<string>(),
+            _ => null
+        };
 
         private static string NormalizeType(string? type) => type?.Trim().ToLowerInvariant() switch { null or "" => "string", var value => value };
     }

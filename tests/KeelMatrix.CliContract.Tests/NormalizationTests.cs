@@ -158,10 +158,10 @@ public sealed class NormalizationTests
     public void ExplicitNonFiniteYamlFloatsRemainOutsideTheJsonNumberBoundary(string yamlScalar)
     {
         var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", NumericYamlDocument($"!!float {yamlScalar}")));
-        var implicitManifest = Normalizer.Normalize("opencli", NumericYamlDocument(yamlScalar));
+        var implicitError = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", NumericYamlDocument(yamlScalar)));
 
         Assert.Equal("OPENCLI_NUMBER", error.Code);
-        Assert.Equal($"\"{yamlScalar}\"", implicitManifest.Root.Options.Single().DefaultValue!.ToJsonString());
+        Assert.Equal("OPENCLI_DEFAULT", implicitError.Code);
     }
 
     [Fact]
@@ -180,11 +180,10 @@ public sealed class NormalizationTests
         """;
 
         var numericManifest = Normalizer.Normalize("opencli", numeric);
-        var stringManifest = Normalizer.Normalize("opencli", yaml);
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", yaml));
 
         Assert.Equal("16", numericManifest.Root.Options.Single().DefaultValue!.ToJsonString());
-        Assert.Equal("\"0x10\"", stringManifest.Root.Options.Single().DefaultValue!.ToJsonString());
-        Assert.Contains(CompatibilityAnalyzer.Compare(numericManifest, stringManifest).Findings, finding => finding.Code == "KMCLI201");
+        Assert.Equal("OPENCLI_DEFAULT", error.Code);
     }
 
     [Fact]
@@ -253,12 +252,12 @@ public sealed class NormalizationTests
         var overCommands = new JsonObject();
         for (var index = 0; index < 3; index++)
         {
-            exactCommands[$"tool {index}"] = new JsonObject();
+            exactCommands[$"tool command{index}"] = new JsonObject();
         }
 
         for (var index = 0; index < 4; index++)
         {
-            overCommands[$"tool {index}"] = new JsonObject();
+            overCommands[$"tool command{index}"] = new JsonObject();
         }
 
         Normalizer.Normalize("opencli", OpenCliDocument(new JsonObject { ["commands"] = exactCommands }.ToJsonString()), new NormalizationLimits(MaxCollectionItems: 3));
@@ -662,7 +661,6 @@ public sealed class NormalizationTests
         Assert.Equal(["second", "first"], secondManifest.Root.Subcommands.Single().Arguments.Select(argument => argument.Name));
         Assert.NotEqual(Normalizer.Serialize(firstManifest), Normalizer.Serialize(secondManifest));
     }
-
     [Fact]
     public void OpenCliNestedCommandPathCollisionsFailClosed()
     {
@@ -707,7 +705,7 @@ public sealed class NormalizationTests
     public void OpenCliAlternativeDefaultSourcesAreCanonicalAndOrdered()
     {
         var first = OpenCliDocument("""
-        {"commands":{"tool run [flags]":{"flags":[{"name":"output","type":"string","default":"text","alternativeSources":[{"type":"$ENV","property":"OUTPUT"},{"type":"$FILE","property":"$.output"}]}]}}}
+        {"global":{"config":{"json":"~/.config/tool/config.json"}},"commands":{"tool run [flags]":{"flags":[{"name":"output","type":"string","default":"text","alternativeSources":[{"type":"$ENV","property":"OUTPUT"},{"type":"$FILE","property":"$.output"}]}]}}}
         """);
         var second = first.Replace("OUTPUT", "OTHER_OUTPUT", StringComparison.Ordinal);
 
@@ -750,7 +748,7 @@ public sealed class NormalizationTests
         Assert.Equal("tool", manifest.Info.Binary);
         Assert.Equal(["json", "yaml"], manifest.GlobalConfig!.FileSources.Select(source => source.Format));
         Assert.Equal("action", manifest.Root.Kind);
-        Assert.Equal("16777217", manifest.Root.Options.Single(option => option.Name == "--mode").DefaultValue!.ToJsonString());
+        Assert.Equal("\"16777217\"", manifest.Root.Options.Single(option => option.Name == "--mode").DefaultValue!.ToJsonString());
     }
 
     [Fact]
@@ -762,6 +760,115 @@ public sealed class NormalizationTests
         var login = manifest.Root.Subcommands.Single(command => command.Path == "root / user / login");
         Assert.Equal(["$ENV", "$FILE"], login.Options.Single(option => option.Name == "--username").AlternativeSources.Select(source => source.Type));
         Assert.Contains(manifest.Root.Subcommands, command => command.Path == "root / pet / upload-image");
+    }
+
+    [Fact]
+    public void TaggedAlpha14CommandKeysStripAllModifierGrammar()
+    {
+        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "petstore-cli.ocs.yaml")));
+
+        var paths = manifest.Root.Subcommands.Select(command => command.Path).ToHashSet(StringComparer.Ordinal);
+        Assert.Contains("root / list", paths);
+        Assert.Contains("root / pet", paths);
+        Assert.Contains("root / pet / upload-image", paths);
+        Assert.Contains("root / store / order", paths);
+        Assert.DoesNotContain(paths, path => path.Contains("--", StringComparison.Ordinal));
+        Assert.DoesNotContain(paths, path => path.Contains('<') || path.Contains('[') || path.Contains('{'));
+        Assert.DoesNotContain(paths, path => path.EndsWith("arguments", StringComparison.Ordinal));
+        Assert.Equal(23, paths.Count);
+    }
+
+    [Fact]
+    public void GlobalFlagCommandKeysStopBeforeInlineFlagModifiers()
+    {
+        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "globalflags-cli.ocs.yaml")));
+
+        Assert.Equal(["root / echo", "root / greet", "root / ping", "root / send"], manifest.Root.Subcommands.Select(command => command.Path).OrderBy(path => path, StringComparer.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("{\"commands\":{\"tool {command}\":{\"kind\":\"group\",\"args\":[{\"name\":\"bad\"}]}}}", "OPENCLI_GROUP_COMMAND")]
+    [InlineData("{\"commands\":{\"tool {command}\":{\"kind\":\"group\",\"flags\":[{\"name\":\"bad\",\"type\":\"string\"}]}}}", "OPENCLI_GROUP_COMMAND")]
+    [InlineData("{\"commands\":{\"tool\":{\"args\":[{\"name\":\"optional\"},{\"name\":\"required\",\"required\":true}]}}}", "OPENCLI_ARGUMENT_ORDER")]
+    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"values\",\"type\":\"string\",\"variadic\":true,\"required\":true}]}}}", "OPENCLI_VARIADIC")]
+    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"string\"},{\"name\":\"other\",\"type\":\"string\",\"aliases\":[\"value\"]}]}}}", "OPENCLI_DUPLICATE_PARAMETER")]
+    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"string\",\"alternativeSources\":[{\"type\":\"$FILE\",\"property\":\"$.value\"}]}]}}}", "OPENCLI_DEFAULT_SOURCE")]
+    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"integer\",\"default\":1.5}]}}}", "OPENCLI_DEFAULT")]
+    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"boolean\",\"default\":1}]}}}", "OPENCLI_DEFAULT")]
+    public void TaggedAlpha14LogicalValidationRejectsCompleteRuleFamilies(string body, string expectedCode)
+    {
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", OpenCliDocument(body)));
+
+        Assert.Equal(expectedCode, error.Code);
+    }
+
+    [Fact]
+    public void OpaqueExtensionsMayContainReferenceLookingMetadata()
+    {
+        var manifest = Normalizer.Normalize("opencli", OpenCliDocument("""
+            {"x-tool":{"$ref":"https://example.invalid/metadata","include":"offline"},"commands":{"tool":{"x-command":{"$dynamicRef":"metadata"}}}}
+            """));
+
+        Assert.Equal("root", manifest.Root.Path);
+    }
+
+    [Fact]
+    public void ExactNumericDefaultsRemainValidBeyondDecimalRangeAndRoundTrip()
+    {
+        const string integer = "100000000000000000000000000000000000000000000000000";
+        var json = OpenCliDocument("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"integer\",\"type\":\"integer\",\"default\":" + integer + "},{\"name\":\"tiny\",\"type\":\"number\",\"default\":1e-1000},{\"name\":\"negativeZero\",\"type\":\"number\",\"default\":-0.0}]}}}");
+        var manifest = Normalizer.Normalize("opencli", json);
+        var values = manifest.Root.Options.ToDictionary(option => option.Name, StringComparer.Ordinal);
+
+        Assert.Equal("1e50", values["--integer"].DefaultValue!.ToJsonString());
+        Assert.Equal("1e-1000", values["--tiny"].DefaultValue!.ToJsonString());
+        Assert.Equal("0", values["--negativeZero"].DefaultValue!.ToJsonString());
+        Assert.Empty(CompatibilityAnalyzer.Compare(manifest, manifest).Findings);
+        Assert.Equal(Normalizer.Serialize(manifest), Normalizer.Serialize(CanonicalManifestReader.Read(Normalizer.Serialize(manifest))));
+    }
+
+    [Theory]
+    [InlineData("{\"commands\":{\"tool one\":{\"aliases\":[\"shared\"]},\"tool two\":{\"aliases\":[\"shared\"]}}}", "OPENCLI_DUPLICATE_INVOCATION")]
+    [InlineData("{\"commands\":{\"tool one\":{\"aliases\":[\"two\"]},\"tool two\":{}}}", "OPENCLI_DUPLICATE_INVOCATION")]
+    [InlineData("{\"commands\":{\"tool parent\":{\"aliases\":[\"p\"]},\"tool parent child\":{},\"tool p child\":{}}}", "OPENCLI_DUPLICATE_INVOCATION")]
+    [InlineData("{\"global\":{\"flags\":[{\"name\":\"one\",\"type\":\"string\",\"aliases\":[\"shared\"]},{\"name\":\"two\",\"type\":\"string\",\"aliases\":[\"shared\"]}]},\"commands\":{\"tool\":{}}}", "OPENCLI_DUPLICATE_PARAMETER")]
+    public void AmbiguousAcceptedInvocationsFailDuringNormalization(string body, string expectedCode)
+    {
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", OpenCliDocument(body)));
+
+        Assert.Equal(expectedCode, error.Code);
+    }
+
+    [Fact]
+    public void CanonicalManifestReaderRejectsAmbiguousAcceptedOptionNames()
+    {
+        var manifest = Normalizer.Normalize("opencli", OpenCliDocument("""
+            {"commands":{"tool":{"flags":[{"name":"one","type":"string"},{"name":"two","type":"string"}]}}}
+            """));
+        var document = JsonNode.Parse(Normalizer.Serialize(manifest))!.AsObject();
+        var options = document["Root"]!["Options"]!.AsArray();
+        options[0]!["Aliases"] = new JsonArray("shared");
+        options[1]!["Aliases"] = new JsonArray("shared");
+
+        var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        Assert.Equal("OPENCLI_DUPLICATE_PARAMETER", error.Code);
+    }
+
+    [Fact]
+    public void CanonicalManifestReaderRejectsAmbiguousCommandAliases()
+    {
+        var manifest = Normalizer.Normalize("opencli", OpenCliDocument("""
+            {"commands":{"tool one":{},"tool two":{}}}
+            """));
+        var document = JsonNode.Parse(Normalizer.Serialize(manifest))!.AsObject();
+        var commands = document["Root"]!["Subcommands"]!.AsArray();
+        commands[0]!["Aliases"] = new JsonArray("shared");
+        commands[1]!["Aliases"] = new JsonArray("shared");
+
+        var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        Assert.Equal("OPENCLI_DUPLICATE_INVOCATION", error.Code);
     }
 
     [Fact]

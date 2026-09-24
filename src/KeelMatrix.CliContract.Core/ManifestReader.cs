@@ -72,14 +72,7 @@ public static class CanonicalManifestReader
         }
 
         var root = ParseCommand(RequireObject(value["Root"], "INVALID_BASELINE"), limits);
-        if (CanonicalCommandValidation.FindDuplicatePath(root) is not null)
-        {
-            throw new NormalizationException(
-                "OPENCLI_DUPLICATE_COMMAND_PATH",
-                "The canonical command tree contains duplicate command paths.");
-        }
-
-        return new CanonicalManifest
+        var manifest = new CanonicalManifest
         {
             SchemaVersion = schemaVersion,
             Adapter = adapter,
@@ -89,6 +82,8 @@ public static class CanonicalManifestReader
             GlobalConfig = value.ContainsKey("GlobalConfig") && value["GlobalConfig"] is not null ? ParseGlobalConfig(value["GlobalConfig"], limits) : null,
             Root = root
         };
+        CanonicalInvariantValidator.Validate(manifest);
+        return manifest;
     }
 
     private static CanonicalGlobalConfig ParseGlobalConfig(JsonNode? node, NormalizationLimits limits)

@@ -29,6 +29,8 @@ Assert-NativeSuccess 'No-execution harness'
 Assert-NativeSuccess 'Workflow safety regressions'
 & pwsh -NoProfile -File ./scripts/scan-user-facing-surface.ps1 -SelfTest
 Assert-NativeSuccess 'User-facing wording scan'
+& pwsh -NoProfile -File ./scripts/verify-error-taxonomy.ps1
+Assert-NativeSuccess 'Error taxonomy documentation check'
 & pwsh -NoProfile -File ./scripts/validate-sensitive-paths.ps1 -SelfTest
 Assert-NativeSuccess 'Sensitive-path ingress safety'
 & pwsh -NoProfile -File ./scripts/scan-history-wording.ps1

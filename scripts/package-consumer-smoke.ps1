@@ -97,6 +97,16 @@ try {
     $help = & $tool --help 2>&1
     if ($LASTEXITCODE -ne 0 -or -not (($help -join "`n") -match 'snapshot')) { throw 'Installed tool help failed.' }
 
+    $officialPetstore = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\fixtures\opencli\petstore-cli.ocs.yaml')).Path
+    $officialBaseline = Join-Path $temp 'official-petstore.canonical.json'
+    & $tool validate $officialPetstore --input opencli --no-telemetry | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw 'Installed tool rejected the tagged alpha.14 command-key fixture.' }
+    & $tool snapshot $officialPetstore --input opencli --output $officialBaseline --no-telemetry | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw 'Installed tool could not snapshot the tagged alpha.14 command-key fixture.' }
+    & $tool check $officialPetstore --input opencli --baseline $officialBaseline --no-telemetry | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw 'Installed tool could not check the tagged alpha.14 command-key fixture against itself.' }
+    Write-Output 'CASE=official-alpha14-command-key-grammar exit=0'
+
     function Assert-ToolError {
         param(
             [string] $Label,

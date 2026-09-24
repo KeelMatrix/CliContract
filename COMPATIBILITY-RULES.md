@@ -40,13 +40,22 @@ This document defines the v1 change-classification contract for KeelMatrix CliCo
 
 Each finding has a stable code, category, logical command path, and bounded message. Paths use forms such as `root / deploy / --region`; source filesystem paths are not diagnostic paths.
 
-## Stable tool diagnostics
+## Selected tool diagnostics
+
+This is a selected compatibility-diagnostic catalog. The complete role-aware exit taxonomy is [`docs/ERROR-TAXONOMY.md`](docs/ERROR-TAXONOMY.md); source and baseline path roles are intentionally documented there rather than repeated as findings.
 
 | Code | Exit code | Meaning |
 | --- | ---: | --- |
 | `OPENCLI_REMOTE_REFERENCE` | `3` | Remote schema reference or include is unsupported; no network resolution is attempted |
 | `OPENCLI_DUPLICATE_PARAMETER` | `3` | An argument or option collection contains duplicate normalized names |
 | `OPENCLI_DUPLICATE_COMMAND_PATH` | `3` | Different OpenCLI command keys normalize to the same canonical command path |
+| `OPENCLI_DUPLICATE_INVOCATION` | `3` | Different commands or aliases accept the same logical invocation |
+| `OPENCLI_GROUP_COMMAND` | `3` | A group command declares local positional arguments or flags |
+| `OPENCLI_ARGUMENT_ORDER` | `3` | A required positional argument follows an optional positional argument |
+| `OPENCLI_VARIADIC` | `3` | A variadic argument/flag violates its placement or requiredness rules |
+| `OPENCLI_ARITY` | `3` | Item bounds are invalid for the declared variadic parameter |
+| `OPENCLI_DEFAULT` | `3` | A typed default cannot be represented by its declared flag type |
+| `OPENCLI_DEFAULT_SOURCE` | `3` | A `$FILE` alternative source has no applicable global config file source |
 | `OPENCLI_NUMBER` | `3` | An explicitly numeric scalar is not a supported finite canonical JSON number |
 | `UNEXPECTED_ERROR` | `4` | Unexpected tool failure |
 
@@ -98,7 +107,7 @@ Type/domain widening does not produce a breaking finding. The accepted-domain re
 
 The adapter requires `opencliVersion: 1.0.0-alpha.14`, required `info.title`, `info.binary`, and `info.version`, and validates all recognized in-contract fields plus the pinned schema's required structure. The binary is invocation identity: every command key must begin with `info.binary`, and a binary rename is breaking. Command `kind` is preserved as runnable state; omitted kind is normalized as an action, and action-to-group is breaking. Informational `info` and install metadata are preserved in `CanonicalManifest.Info` and compared as `KMCLI005` info findings; binary is compatibility semantics. Global file-source configuration and global/command exit codes are preserved canonically. Argument `passthrough` is normalized with a default of false and is compatibility semantics because it controls how accepted forms after `--` are interpreted. Help metadata, examples, hidden state, defaults, alternative sources, exit-code metadata, and choice descriptions remain represented so their changes produce the documented stable findings instead of being discarded. `x-*` extensions are accepted and ignored. Unknown non-extension fields on the root, command, argument, flag, choice, and other recognized schema objects fail closed. Invalid recognized values fail closed.
 
-The pinned conformance corpus is [`fixtures/opencli/alpha14-conformance-corpus.json`](fixtures/opencli/alpha14-conformance-corpus.json). It covers official valid structure, recognized fields, extensions, arguments, flags, variadic bounds, aliases, choices, defaults, alternative sources, command kind, binary identity, exit codes, config, unknown versions, and invalid combinations. Unit tests execute its validity oracle and separately compare equivalent JSON and YAML documents. The repository does not invoke a remote validator at runtime; the local `ocli` executable was not available during this refresh, so differential validation is intentionally not a release prerequisite.
+The pinned conformance corpus is [`fixtures/opencli/alpha14-conformance-corpus.json`](fixtures/opencli/alpha14-conformance-corpus.json), with its tagged-test inventory in [`docs/OPENCLI-ALPHA14-CONFORMANCE.md`](docs/OPENCLI-ALPHA14-CONFORMANCE.md). It covers official valid structure, recognized fields, opaque extensions, arguments, flags, variadic bounds, aliases, choices, defaults, alternative sources, command kind, binary identity, exit codes, config, unknown versions, and invalid combinations. Unit tests execute its validity oracle and separately compare equivalent JSON and YAML documents. The repository does not invoke a remote validator at runtime; the local `ocli` executable was not available during this refresh, so differential validation is intentionally not a release prerequisite.
 
 The adapter supports nested commands, root/global flags, aliases, positional arguments, requiredness, represented arity, scalar choices, scalar defaults, `$ENV`/`$FILE` alternative sources, summaries, descriptions, and bounded Unicode text. It does not claim support for deprecation/status because alpha.14 does not represent that contract field.
 
@@ -108,9 +117,11 @@ Finite JSON numbers and recognized YAML integer/float spellings are compared by 
 
 Unknown upstream or canonical manifest versions are rejected explicitly. JSON duplicate keys, duplicate normalized parameter names, malformed JSON/YAML, YAML anchors/aliases, excessive size/depth/node/string/collection limits, invalid recognized fields, and incompatible baselines are errors, never compatible results. The described CLI is never started.
 
-The tool never fetches a network resource and makes no network access while parsing or comparing. Remote schema references that would require resolution, including `$ref`, `$dynamicRef`, `$recursiveRef`, includes, and remote document references, fail closed with `OPENCLI_REMOTE_REFERENCE` (CLI exit code `3`). In contrast, schema-valid scalar URL values in informational OpenCLI metadata, including `info.contact.url`, `info.license.url`, and `info.install.url`, are accepted and preserved verbatim in `CanonicalManifest.Info`. These values are data only and are never fetched. The optional post-comparison telemetry request is separate from schema parsing and comparison and is disabled by the documented opt-out and development/CI controls.
+The tool never fetches a network resource and makes no network access while parsing or comparing. Remote schema references that would require resolution, including `$ref`, `$dynamicRef`, `$recursiveRef`, includes, and remote document references, fail closed with `OPENCLI_REMOTE_REFERENCE` (CLI exit code `3`). In contrast, reference-looking values inside opaque `x-*` extension subtrees are accepted as metadata and never interpreted. Schema-valid scalar URL values in informational OpenCLI metadata, including `info.contact.url`, `info.license.url`, and `info.install.url`, are accepted and preserved verbatim in `CanonicalManifest.Info`. These values are data only and are never fetched. The optional post-comparison telemetry request is separate from schema parsing and comparison and is disabled by the documented opt-out and development/CI controls.
 
 Diagnostics do not echo complete documents, defaults, descriptions, or schema fragments. After a successful nonempty comparison, the tool requests one failure-isolated activation through the published `KeelMatrix.Telemetry` package without passing schema-derived values. `--no-telemetry`, `KEELMATRIX_NO_TELEMETRY=1`, `KEELMATRIX_DEVELOPMENT=true`, and `CI=true` disable the request; no schema data is emitted.
+
+Missing source or baseline paths return exit `2`; present but unreadable, invalid-UTF-8, oversized, malformed, unsupported, or otherwise invalid source/baseline files return exit `3`. Suppression/configuration and output failures return exit `2`; unexpected failures return exit `4`. See [`docs/ERROR-TAXONOMY.md`](docs/ERROR-TAXONOMY.md).
 
 File failures are role-aware: a missing source, baseline, or suppression file is an invocation/configuration error (exit `2`); unreadable, invalid-UTF-8, oversized, malformed, or unsupported source and canonical baseline data is a schema/baseline error (exit `3`); invalid, unreadable, invalid-UTF-8, or oversized suppression data is an invocation/configuration error (exit `2`); and an output write failure is an invocation/configuration error (exit `2`). Only unexpected failures reach exit `4`. Text and JSON output use the same taxonomy.
 

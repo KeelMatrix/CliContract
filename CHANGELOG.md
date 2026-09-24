@@ -13,3 +13,6 @@ This file records user-visible changes to KeelMatrix CliContract.
 - Compatibility coverage for accepted command/option invocation graphs, retained aliases, all supported type-pair domains, constrained choices, binary identity, runnable command kind, positional slots, default-source resolution, global file-source configuration, and global/command exit-code warnings.
 - Pinned alpha.14 conformance corpus with variadic cross-field validation, deterministic JSON/YAML equivalence checks, role-aware input errors, and fail-closed package provenance and sensitive-path gates.
 - Fail-closed packed-tool and symbol-package archive validation.
+- Alpha.14 command-key parsing now follows the tagged modifier grammar, and tagged logical validation covers groups, positional ordering, variadic flags, duplicate accepted names, `$FILE` prerequisites, and typed defaults.
+- Canonical manifests enforce accepted-invocation uniqueness after both source normalization and manifest parsing; exact numeric domains no longer use a decimal-range boundary.
+- Public error documentation now distinguishes missing source/baseline paths (exit `2`) from present invalid or unreadable source/baseline files (exit `3`), with a shared taxonomy table.

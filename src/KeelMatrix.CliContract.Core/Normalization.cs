@@ -58,7 +58,9 @@ public static class Normalizer
             {
                 var document = ParseOpenCliDocument(input, bounded);
                 ValidateOpenCliDocument(document, bounded);
-                return NormalizeOpenCli(document, bounded);
+                var manifest = NormalizeOpenCli(document, bounded);
+                CanonicalInvariantValidator.Validate(manifest);
+                return manifest;
             }
 
             throw new NormalizationException("UNSUPPORTED_ADAPTER", "The requested input adapter is not supported by this tool.");
@@ -302,7 +304,13 @@ public static class Normalizer
         }
 
         if (negative) value = -value;
-        return JsonNode.Parse(value.ToString(CultureInfo.InvariantCulture))!.AsValue();
+        var canonical = value.ToString(CultureInfo.InvariantCulture);
+        if (!ExactNumber.TryParse(canonical, out var exact))
+        {
+            throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is invalid.");
+        }
+
+        return JsonNode.Parse(exact.ToCanonicalString())!.AsValue();
     }
 
     private static JsonValue CanonicalizeYamlFloat(string raw)
@@ -497,95 +505,12 @@ public static class Normalizer
 
     private static JsonValue CanonicalizeNumber(string raw)
     {
-        var index = 0;
-        var negative = raw.Length > 0 && raw[0] == '-';
-        if (negative) index++;
-
-        var integerStart = index;
-        while (index < raw.Length && char.IsDigit(raw[index])) index++;
-        if (index == integerStart)
+        if (!ExactNumber.TryParse(raw, out var number))
         {
             throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is invalid.");
         }
 
-        var integerDigits = raw[integerStart..index];
-        var fractionDigits = string.Empty;
-        if (index < raw.Length && raw[index] == '.')
-        {
-            var fractionStart = ++index;
-            while (index < raw.Length && char.IsDigit(raw[index])) index++;
-            fractionDigits = raw[fractionStart..index];
-            if (fractionDigits.Length == 0)
-            {
-                throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is invalid.");
-            }
-        }
-
-        var exponent = BigInteger.Zero;
-        if (index < raw.Length && (raw[index] is 'e' or 'E'))
-        {
-            index++;
-            var exponentNegative = index < raw.Length && raw[index] == '-';
-            if (exponentNegative || (index < raw.Length && raw[index] == '+')) index++;
-            var exponentStart = index;
-            while (index < raw.Length && char.IsDigit(raw[index])) index++;
-            if (index == exponentStart)
-            {
-                throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is invalid.");
-            }
-
-            exponent = BigInteger.Parse(raw[exponentStart..index], CultureInfo.InvariantCulture);
-            if (exponentNegative) exponent = -exponent;
-        }
-
-        if (index != raw.Length)
-        {
-            throw new NormalizationException("OPENCLI_NUMBER", "A numeric value is invalid.");
-        }
-
-        var digits = (integerDigits + fractionDigits).TrimStart('0');
-        if (digits.Length == 0)
-        {
-            return JsonNode.Parse("0")!.AsValue();
-        }
-
-        var trailingZeroCount = digits.Length - digits.TrimEnd('0').Length;
-        if (trailingZeroCount > 0)
-        {
-            digits = digits[..^trailingZeroCount];
-        }
-
-        var scale = exponent - fractionDigits.Length + trailingZeroCount;
-        var decimalPoint = scale + digits.Length;
-        var normalized = decimalPoint >= -28 && decimalPoint <= 29
-            ? FormatPlainNumber(digits, decimalPoint, negative)
-            : FormatScientificNumber(digits, decimalPoint, negative);
-
-        return JsonNode.Parse(normalized)!.AsValue();
-    }
-
-    private static string FormatPlainNumber(string digits, BigInteger decimalPoint, bool negative)
-    {
-        var prefix = negative ? "-" : string.Empty;
-        if (decimalPoint <= 0)
-        {
-            return prefix + "0." + new string('0', checked((int)-decimalPoint)) + digits;
-        }
-
-        if (decimalPoint >= digits.Length)
-        {
-            return prefix + digits + new string('0', checked((int)(decimalPoint - digits.Length)));
-        }
-
-        var point = checked((int)decimalPoint);
-        return prefix + digits[..point] + "." + digits[point..];
-    }
-
-    private static string FormatScientificNumber(string digits, BigInteger decimalPoint, bool negative)
-    {
-        var prefix = negative ? "-" : string.Empty;
-        var significand = digits.Length == 1 ? digits : digits[0] + "." + digits[1..];
-        return prefix + significand + "e" + (decimalPoint - 1).ToString(CultureInfo.InvariantCulture);
+        return JsonNode.Parse(number.ToCanonicalString())!.AsValue();
     }
 
     private static void ValidateOpenCliDocument(JsonNode document, NormalizationLimits limits)
@@ -597,6 +522,7 @@ public static class Normalizer
         ValidateInfo(root["info"], limits);
         ValidateInstall(root["install"], limits);
         ValidateGlobal(root["global"], limits);
+        var definedConfigFiles = DefinedConfigFiles(root["global"], limits);
 
         if (root.ContainsKey("commands"))
         {
@@ -608,7 +534,7 @@ public static class Normalizer
                     throw new NormalizationException("OPENCLI_COMMAND", "An OpenCLI command must be an object.");
                 }
 
-                ValidateCommand(command.Value, limits);
+                ValidateCommand(command.Value, limits, definedConfigFiles);
             }
         }
     }
@@ -680,16 +606,17 @@ public static class Normalizer
         EnsureOpenCliProperties(global, "global", "exitCodes", "config", "flags");
         ValidateExitCodes(global["exitCodes"], limits);
         ValidateConfig(global["config"], limits);
+        var definedConfigFiles = DefinedConfigFiles(global, limits);
         if (global.ContainsKey("flags"))
         {
             foreach (var flag in RequireArray(global["flags"], "OPENCLI_COLLECTION", limits))
             {
-                ValidateParameter(flag, true, limits);
+                ValidateParameter(flag, true, limits, definedConfigFiles);
             }
         }
     }
 
-    private static void ValidateCommand(JsonNode node, NormalizationLimits limits)
+    private static void ValidateCommand(JsonNode node, NormalizationLimits limits, IReadOnlySet<string> definedConfigFiles)
     {
         var command = RequireObject(node, "OPENCLI_COMMAND");
         EnsureOpenCliProperties(command, "command", "summary", "description", "aliases", "args", "flags", "hidden", "kind", "exitCodes", "examples");
@@ -716,8 +643,14 @@ public static class Normalizer
         {
             foreach (var flag in RequireArray(command["flags"], "OPENCLI_COLLECTION", limits))
             {
-                ValidateParameter(flag, true, limits);
+                ValidateParameter(flag, true, limits, definedConfigFiles);
             }
+        }
+
+        var kindValue = OptionalString(command, "kind", limits);
+        if (kindValue == "group" && ((command["args"] as JsonArray)?.Count > 0 || (command["flags"] as JsonArray)?.Count > 0))
+        {
+            throw new NormalizationException("OPENCLI_GROUP_COMMAND", "A group command cannot declare command-local arguments or flags.");
         }
 
         if (command.TryGetPropertyValue("examples", out var examples) && examples is not null)
@@ -734,7 +667,7 @@ public static class Normalizer
         }
     }
 
-    private static void ValidateParameter(JsonNode? node, bool option, NormalizationLimits limits)
+    private static void ValidateParameter(JsonNode? node, bool option, NormalizationLimits limits, IReadOnlySet<string>? definedConfigFiles = null)
     {
         var parameter = RequireObject(node, "OPENCLI_PARAMETER");
         if (!option && (parameter.ContainsKey("default") || parameter.ContainsKey("alternativeSources")))
@@ -761,18 +694,29 @@ public static class Normalizer
 
         if (option)
         {
-            if (parameter.ContainsKey("default")) ValidateScalar(parameter["default"], limits, "OPENCLI_DEFAULT");
-            if (parameter.ContainsKey("alternativeSources")) ValidateAlternativeSources(parameter["alternativeSources"], limits);
+            if (parameter.ContainsKey("default"))
+            {
+                ValidateScalar(parameter["default"], limits, "OPENCLI_DEFAULT");
+                ValidateTypedDefault(parameter, limits);
+            }
+            if (parameter.ContainsKey("alternativeSources")) ValidateAlternativeSources(parameter["alternativeSources"], limits, definedConfigFiles);
         }
     }
 
     private static void ValidateArguments(JsonArray arguments, NormalizationLimits limits)
     {
         var variadicCount = 0;
+        var seenOptional = false;
         for (var index = 0; index < arguments.Count; index++)
         {
             var argument = RequireObject(arguments[index], "OPENCLI_PARAMETER");
             ValidateParameter(argument, false, limits);
+            var required = OptionalBoolean(argument, "required") ?? false;
+            if (seenOptional && required)
+            {
+                throw new NormalizationException("OPENCLI_ARGUMENT_ORDER", "A required positional argument cannot follow an optional positional argument.");
+            }
+            seenOptional |= !required;
             var variadic = OptionalBoolean(argument, "variadic") ?? false;
             if (!variadic) continue;
 
@@ -781,6 +725,25 @@ public static class Normalizer
             {
                 throw new NormalizationException("OPENCLI_VARIADIC", "Only one variadic positional argument is allowed and it must be last.");
             }
+        }
+    }
+
+    private static void ValidateTypedDefault(JsonObject parameter, NormalizationLimits limits)
+    {
+        var type = OptionalString(parameter, "type", limits) ?? "string";
+        var value = parameter["default"]!;
+        var valid = type switch
+        {
+            "string" => value is JsonValue stringValue && stringValue.GetValueKind() is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False,
+            "number" => ExactNumber.TryParse(value, allowNumericString: false, out _),
+            "integer" => ExactNumber.TryParse(value, allowNumericString: false, out var integer) && integer.IsInteger,
+            "boolean" => value is JsonValue booleanValue && booleanValue.GetValueKind() is JsonValueKind.True or JsonValueKind.False,
+            _ => false
+        };
+
+        if (!valid)
+        {
+            throw new NormalizationException("OPENCLI_DEFAULT", $"The default value is not representable by the declared {type} flag type.");
         }
     }
 
@@ -836,7 +799,7 @@ public static class Normalizer
         }
     }
 
-    private static void ValidateAlternativeSources(JsonNode? node, NormalizationLimits limits)
+    private static void ValidateAlternativeSources(JsonNode? node, NormalizationLimits limits, IReadOnlySet<string>? definedConfigFiles)
     {
         if (node is null) return;
         var sources = RequireArray(node, "OPENCLI_DEFAULT_SOURCES", limits);
@@ -858,7 +821,26 @@ public static class Normalizer
                 _ = RequiredStringValue(value["property"], "OPENCLI_DEFAULT_SOURCE");
                 ValidateOptionalString(value, "property", bounded, "OPENCLI_DEFAULT_SOURCE");
             });
+
+            var sourceType = RequiredStringValue(RequireObject(source, "OPENCLI_DEFAULT_SOURCE")["type"], "OPENCLI_DEFAULT_SOURCE");
+            if (sourceType == "$FILE" && (definedConfigFiles is null || definedConfigFiles.Count == 0))
+            {
+                throw new NormalizationException("OPENCLI_DEFAULT_SOURCE", "A $FILE alternative source requires a global.config file source.");
+            }
         }
+    }
+
+    private static HashSet<string> DefinedConfigFiles(JsonNode? globalNode, NormalizationLimits limits)
+    {
+        if (globalNode is not JsonObject global || !global.ContainsKey("config")) return new HashSet<string>(StringComparer.Ordinal);
+        var config = RequireObject(global["config"], "OPENCLI_GLOBAL");
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in new[] { "json", "toml", "yaml" })
+        {
+            if (OptionalString(config, property, limits) is { Length: > 0 }) result.Add(property);
+        }
+
+        return result;
     }
 
     private static void ValidateConfig(JsonNode? node, NormalizationLimits limits)
@@ -920,6 +902,7 @@ public static class Normalizer
         {
             foreach (var property in obj)
             {
+                if (property.Key.StartsWith("x-", StringComparison.Ordinal)) continue;
                 if (property.Key is "$ref" or "$dynamicRef" or "$recursiveRef" or "include")
                 {
                     throw new NormalizationException("OPENCLI_REMOTE_REFERENCE", "Remote schema references and includes are not supported.");
@@ -1290,7 +1273,7 @@ public static class Normalizer
                 OptionalString(parameter, "hint", limits),
                 OptionalBoolean(parameter, "hidden") ?? false,
                 choices,
-                option ? OptionalScalar(parameter, "default", limits) : null,
+                option ? ReadTypedDefault(parameter, limits) : null,
                 alternativeSources,
                 passthrough,
                 null);
@@ -1356,11 +1339,19 @@ public static class Normalizer
 
     private static string ParseOpenCliPath(string key, string binary)
     {
-        var tokens = key.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(token => !(token.StartsWith('<') && token.EndsWith('>')))
-            .Where(token => !(token.StartsWith('{') && token.EndsWith('}')))
-            .Where(token => !(token.StartsWith('[') && token.EndsWith(']')))
-            .ToArray();
+        var commandEnd = -1;
+        for (var index = 0; index + 1 < key.Length; index++)
+        {
+            if (!char.IsWhiteSpace(key[index]) || key[index] is '\r' or '\n') continue;
+            if (!char.IsAsciiLetter(key[index + 1]))
+            {
+                commandEnd = index;
+                break;
+            }
+        }
+
+        var commandLine = commandEnd < 0 ? key : key[..commandEnd];
+        var tokens = commandLine.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (tokens.Length == 0)
         {
             throw new NormalizationException("OPENCLI_COMMAND_KEY", "An OpenCLI command key must contain a command name.");
@@ -1372,6 +1363,24 @@ public static class Normalizer
         }
 
         return tokens.Length == 1 ? "root" : "root / " + string.Join(" / ", tokens.Skip(1));
+    }
+
+    private static JsonNode? ReadTypedDefault(JsonObject parameter, NormalizationLimits limits)
+    {
+        var value = OptionalScalar(parameter, "default", limits);
+        if (value is null) return null;
+
+        return OptionalString(parameter, "type", limits) switch
+        {
+            "string" => value.GetValueKind() switch
+            {
+                JsonValueKind.String => value.DeepClone(),
+                JsonValueKind.Number => JsonValue.Create(value.ToJsonString()),
+                JsonValueKind.True or JsonValueKind.False => JsonValue.Create(value.GetValue<bool>() ? "true" : "false"),
+                _ => value.DeepClone()
+            },
+            _ => value.DeepClone()
+        };
     }
 
     private static void EnsureUniqueCommandPaths(IEnumerable<CanonicalCommand> commands)

@@ -6,6 +6,7 @@
     "version": "1.0.0"
   },
   "global": {
+    "config": {"json": "~/.config/regression/config.json"},
     "flags": [
       {
         "name": "debug",

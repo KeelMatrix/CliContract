@@ -212,5 +212,128 @@
       "commands": { "tool": {} },
       "$ref": "https://example.test/schema.json"
     }
+  },
+  {
+    "id": "opaque-extension-reference-looking-content",
+    "oracle": "official-schema-extension",
+    "valid": true,
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1", "x-tool": { "$ref": "https://example.invalid/metadata", "include": "offline" } },
+      "commands": { "tool": { "x-command": { "$dynamicRef": "metadata" } } }
+    }
+  },
+  {
+    "id": "group-with-local-arguments",
+    "oracle": "tagged-logical-validation",
+    "valid": false,
+    "expectedCode": "OPENCLI_GROUP_COMMAND",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool {command}": { "kind": "group", "args": [{ "name": "value" }] } }
+    }
+  },
+  {
+    "id": "required-after-optional-positional",
+    "oracle": "tagged-logical-validation",
+    "valid": false,
+    "expectedCode": "OPENCLI_ARGUMENT_ORDER",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "args": [{ "name": "optional" }, { "name": "required", "required": true }] } }
+    }
+  },
+  {
+    "id": "variadic-required-flag",
+    "oracle": "tagged-logical-validation",
+    "valid": false,
+    "expectedCode": "OPENCLI_VARIADIC",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "flags": [{ "name": "value", "type": "string", "variadic": true, "required": true }] } }
+    }
+  },
+  {
+    "id": "duplicate-flag-alias",
+    "oracle": "tagged-logical-validation",
+    "valid": false,
+    "expectedCode": "OPENCLI_DUPLICATE_PARAMETER",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "flags": [{ "name": "one", "type": "string", "aliases": ["shared"] }, { "name": "two", "type": "string", "aliases": ["shared"] }] } }
+    }
+  },
+  {
+    "id": "file-source-without-global-config",
+    "oracle": "tagged-logical-validation",
+    "valid": false,
+    "expectedCode": "OPENCLI_DEFAULT_SOURCE",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "flags": [{ "name": "value", "type": "string", "alternativeSources": [{ "type": "$FILE", "property": "$.value" }] }] } }
+    }
+  },
+  {
+    "id": "file-source-with-global-config",
+    "oracle": "tagged-logical-validation",
+    "valid": true,
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "global": { "config": { "json": "tool.json" } },
+      "commands": { "tool": { "flags": [{ "name": "value", "type": "string", "alternativeSources": [{ "type": "$FILE", "property": "$.value" }] }] } }
+    }
+  },
+  {
+    "id": "integer-default-fraction",
+    "oracle": "tagged-codec-default-validation",
+    "valid": false,
+    "expectedCode": "OPENCLI_DEFAULT",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "flags": [{ "name": "value", "type": "integer", "default": 1.5 }] } }
+    }
+  },
+  {
+    "id": "boolean-default-number",
+    "oracle": "tagged-codec-default-validation",
+    "valid": false,
+    "expectedCode": "OPENCLI_DEFAULT",
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "flags": [{ "name": "value", "type": "boolean", "default": 1 }] } }
+    }
+  },
+  {
+    "id": "exact-large-integer-default",
+    "oracle": "exact-number-policy",
+    "valid": true,
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": { "tool": { "flags": [{ "name": "value", "type": "integer", "default": 100000000000000000000000000000000000000000000000000 }] } }
+    }
+  },
+  {
+    "id": "modifier-key-grammar",
+    "oracle": "tagged-codec-command-key-grammar",
+    "valid": true,
+    "document": {
+      "opencliVersion": "1.0.0-alpha.14",
+      "info": { "title": "Tool", "binary": "tool", "version": "1" },
+      "commands": {
+        "tool list [flags] -- <arguments>": {},
+        "tool greet --name <string> [flags]": {},
+        "tool send <recipient> --count <integer> [flags]": {},
+        "tool {command}": { "kind": "group" }
+      }
+    }
   }
 ]

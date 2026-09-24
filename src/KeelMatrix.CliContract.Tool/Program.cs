@@ -605,7 +605,8 @@ internal static class CliApplication
 
     Validation boundary:
       One variadic positional argument is allowed and it must be last; minItems/maxItems require variadic=true.
-      Source and canonical-baseline read failures return 3. Suppression/configuration and output failures return 2.
+      Missing source or baseline paths return 2. Present but unreadable, malformed, unsupported, invalid-UTF-8,
+      or oversized source/baseline files return 3. Suppression/configuration and output failures return 2.
 
     Exit codes:
       0  No gated compatibility finding
