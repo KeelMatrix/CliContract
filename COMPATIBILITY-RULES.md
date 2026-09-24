@@ -18,7 +18,7 @@ This document defines the v1 change-classification contract for KeelMatrix CliCo
 | `KMCLI002` | info | Optional option added |
 | `KMCLI003` | info | Optional argument added |
 | `KMCLI004` | info | Alias added |
-| `KMCLI005` | info | Represented informational metadata, install guidance, or summary/description/help changed |
+| `KMCLI005` | info | Represented informational metadata, install guidance, summary/description text, or choice description changed |
 | `KMCLI006` | info | Represented hidden/help example metadata changed |
 | `KMCLI101` | breaking | Option removed |
 | `KMCLI102` | breaking | Argument removed |
@@ -74,8 +74,10 @@ The adapter accepts the pinned OpenCLI `1.0.0-alpha.14` field set below. Every r
 | `global.config` (`json`, `toml`, `yaml`) | (b) | Preserved and compared as a configuration warning |
 | `info.title`, `info.summary`, `info.description`, `info.version` | (b) | Preserved and compared as `KMCLI005` informational metadata |
 | `info.install` and install fields `name`, `command`, `url`, `description` | (b) | Preserved and compared as `KMCLI005` informational installation guidance |
-| command `summary`, `description`, `hidden`, `examples` (`title`, `content`) | (b) | Preserved help and documentation metadata |
-| parameter `summary`, `description`, `hint`, `hidden` | (b) | Preserved help metadata |
+| command `summary`, `description` | (b) | Preserved and compared as `KMCLI005` informational help text |
+| command `hidden`, `examples` (`title`, `content`) | (b) | Preserved and compared as `KMCLI006` informational visibility/example metadata |
+| parameter `summary`, `description` | (b) | Preserved and compared as `KMCLI005` informational help text |
+| parameter `hint`, `hidden` | (b) | Preserved and compared as `KMCLI006` informational help metadata |
 | parameter `default` and `alternativeSources` (`type`, `property`) | (b) | Preserved and compared as warnings because automation defaults can change |
 | `global.exitCodes` and command `exitCodes` (`code`, `status`, `summary`, `description`) | (b) | Preserved and compared as `KMCLI205` warnings |
 | `info.license` fields `name`, `spdxId`, `url`; `info.contact` fields `name`, `email`, `url` | (b) | Preserved and compared as `KMCLI005` informational metadata; never fetched |

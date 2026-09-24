@@ -30,7 +30,7 @@ clicontract validate ./opencli.yaml
 
 ## Compatibility rules
 
-Breaking changes are gated by default. Use `--fail-on warning` when default, status, or other warning changes should also fail CI. Represented `info` metadata, install guidance, summary/description/help, and choice-description changes produce `KMCLI005` informational findings; they are reported in both modes but do not gate either threshold. Suppressions are explicit JSON files passed with `--ignore`; they never suppress malformed or unsupported schemas.
+Breaking changes are gated by default. Use `--fail-on warning` when default, status, or other warning changes should also fail CI. Represented `info` metadata, install guidance, summary/description text, and choice-description changes produce `KMCLI005` informational findings; visibility and example metadata changes produce `KMCLI006` informational findings. Both are reported in either mode but do not gate either threshold. Suppressions are explicit JSON files passed with `--ignore`; they never suppress malformed or unsupported schemas.
 
 The stable diagnostic catalog and classification contract are in [`COMPATIBILITY-RULES.md`](COMPATIBILITY-RULES.md). The versioned canonical manifest is described in [`MANIFEST.md`](MANIFEST.md). The accepted invocation-name graph, binary identity, action/group runnable state, positional slots, type and choice domains, argument passthrough behavior, alternative default sources, keyed global file-source configuration, and exit-code contracts are represented there.
 
