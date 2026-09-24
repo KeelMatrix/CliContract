@@ -1,0 +1,20 @@
+{
+  "opencliVersion": "1.0.0-alpha.14",
+  "info": { "title": "Numeric generated", "binary": "tool", "version": "1" },
+  "commands": {
+    "tool": {
+      "flags": [
+        {
+          "name": "huge",
+          "type": "integer",
+          "choices": [
+            { "value": 0 },
+            { "value": 1.25e-1000 },
+            { "value": 1e50 }
+          ],
+          "default": 1e1000000
+        }
+      ]
+    }
+  }
+}

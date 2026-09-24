@@ -828,6 +828,78 @@ public sealed class NormalizationTests
     }
 
     [Theory]
+    [InlineData("numeric-integer-domain-fraction.json")]
+    [InlineData("numeric-integer-domain-fraction.yaml")]
+    public void IntegerChoicesMustBeRepresentableByTheDeclaredType(string fixture)
+    {
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", fixture))));
+
+        Assert.Equal("OPENCLI_CHOICE", error.Code);
+    }
+
+    [Fact]
+    public void CanonicalManifestReaderRejectsNonIntegralIntegerChoices()
+    {
+        var manifest = Normalizer.Normalize("opencli", OpenCliDocument("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"integer\",\"choices\":[{\"value\":1}]}]}}}"));
+        var document = JsonNode.Parse(Normalizer.Serialize(manifest))!.AsObject();
+        document["Root"]!["Options"]![0]!["Choices"]![0]!["Value"] = JsonValue.Create(1.25);
+
+        var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        Assert.Equal("OPENCLI_CHOICE", error.Code);
+    }
+
+    [Fact]
+    public void ExactIntegralChoicesRemainReflexiveOutsideDecimalRange()
+    {
+        var manifest = Normalizer.Normalize("opencli", OpenCliDocument("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"integer\",\"choices\":[{\"value\":1e1000},{\"value\":-0.0}]}]}}}"));
+
+        Assert.Empty(CompatibilityAnalyzer.Compare(manifest, manifest).Findings);
+        Assert.Empty(CompatibilityAnalyzer.Compare(CanonicalManifestReader.Read(Normalizer.Serialize(manifest)), manifest).Findings);
+    }
+
+    [Theory]
+    [InlineData("number", "\"1\"")]
+    [InlineData("integer", "1.5")]
+    [InlineData("boolean", "1")]
+    public void ChoicesMustMatchTheirDeclaredType(string type, string value)
+    {
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", OpenCliDocument($"{{\"commands\":{{\"tool\":{{\"flags\":[{{\"name\":\"value\",\"type\":\"{type}\",\"choices\":[{{\"value\":{value}}}]}}]}}}}}}")));
+
+        Assert.Equal("OPENCLI_CHOICE", error.Code);
+    }
+
+    [Theory]
+    [InlineData("example-cli.json")]
+    [InlineData("example-cli-reordered.json")]
+    [InlineData("example-cli.yaml")]
+    [InlineData("fix-round10.yaml")]
+    [InlineData("global-config-order-a.json")]
+    [InlineData("global-config-order-a.yaml")]
+    [InlineData("global-config-order-b.json")]
+    [InlineData("global-config-order-b.yaml")]
+    [InlineData("globalflags-cli.ocs.yaml")]
+    [InlineData("numeric-defaults-exponent.json")]
+    [InlineData("numeric-defaults-extreme.json")]
+    [InlineData("numeric-defaults-plain.json")]
+    [InlineData("numeric-defaults-yaml.json")]
+    [InlineData("numeric-defaults-yaml.yaml")]
+    [InlineData("petstore-cli.ocs.json")]
+    [InlineData("petstore-cli.ocs.yaml")]
+    [InlineData("pleasantries-cli.ocs.yaml")]
+    [InlineData("regression-fixtures.json")]
+    [InlineData("valid-argument-passthrough.json")]
+    [InlineData("valid-argument-passthrough-false.json")]
+    public void ValidFixturesRemainReflexiveAfterCanonicalRoundTrip(string fixture)
+    {
+        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", fixture)));
+        var roundTrip = CanonicalManifestReader.Read(Normalizer.Serialize(manifest));
+
+        Assert.Empty(CompatibilityAnalyzer.Compare(manifest, manifest).Findings);
+        Assert.Empty(CompatibilityAnalyzer.Compare(roundTrip, roundTrip).Findings);
+    }
+
+    [Theory]
     [InlineData("{\"commands\":{\"tool one\":{\"aliases\":[\"shared\"]},\"tool two\":{\"aliases\":[\"shared\"]}}}", "OPENCLI_DUPLICATE_INVOCATION")]
     [InlineData("{\"commands\":{\"tool one\":{\"aliases\":[\"two\"]},\"tool two\":{}}}", "OPENCLI_DUPLICATE_INVOCATION")]
     [InlineData("{\"commands\":{\"tool parent\":{\"aliases\":[\"p\"]},\"tool parent child\":{},\"tool p child\":{}}}", "OPENCLI_DUPLICATE_INVOCATION")]

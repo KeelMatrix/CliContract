@@ -690,14 +690,15 @@ public static class Normalizer
         ValidateOptionalString(parameter, "description", limits, "OPENCLI_PARAMETER");
         ValidateStringArray(parameter["aliases"], "OPENCLI_ALIASES", limits);
         ValidateArity(parameter, limits);
-        ValidateChoices(parameter["choices"], limits);
+        var type = OptionalString(parameter, "type", limits);
+        ValidateChoices(parameter["choices"], type, limits);
 
         if (option)
         {
             if (parameter.ContainsKey("default"))
             {
                 ValidateScalar(parameter["default"], limits, "OPENCLI_DEFAULT");
-                ValidateTypedDefault(parameter, limits);
+                ValidateTypedDefault(parameter, type);
             }
             if (parameter.ContainsKey("alternativeSources")) ValidateAlternativeSources(parameter["alternativeSources"], limits, definedConfigFiles);
         }
@@ -728,22 +729,13 @@ public static class Normalizer
         }
     }
 
-    private static void ValidateTypedDefault(JsonObject parameter, NormalizationLimits limits)
+    private static void ValidateTypedDefault(JsonObject parameter, string? type)
     {
-        var type = OptionalString(parameter, "type", limits) ?? "string";
         var value = parameter["default"]!;
-        var valid = type switch
+        var normalizedType = TypedDomain.NormalizeType(type);
+        if (!TypedDomain.Accepts(normalizedType, value))
         {
-            "string" => value is JsonValue stringValue && stringValue.GetValueKind() is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False,
-            "number" => ExactNumber.TryParse(value, allowNumericString: false, out _),
-            "integer" => ExactNumber.TryParse(value, allowNumericString: false, out var integer) && integer.IsInteger,
-            "boolean" => value is JsonValue booleanValue && booleanValue.GetValueKind() is JsonValueKind.True or JsonValueKind.False,
-            _ => false
-        };
-
-        if (!valid)
-        {
-            throw new NormalizationException("OPENCLI_DEFAULT", $"The default value is not representable by the declared {type} flag type.");
+            throw new NormalizationException("OPENCLI_DEFAULT", $"The default value is not representable by the declared {normalizedType} flag type.");
         }
     }
 
@@ -785,16 +777,20 @@ public static class Normalizer
         }
     }
 
-    private static void ValidateChoices(JsonNode? node, NormalizationLimits limits)
+    private static void ValidateChoices(JsonNode? node, string? type, NormalizationLimits limits)
     {
         if (node is null) return;
         foreach (var choice in RequireArray(node, "OPENCLI_CHOICES", limits))
         {
-            ValidateObject(choice, "choice", limits, ["value", "description"], static (value, bounded) =>
+            ValidateObject(choice, "choice", limits, ["value", "description"], (value, bounded) =>
             {
                 if (!value.ContainsKey("value")) throw new NormalizationException("OPENCLI_CHOICE", "A choice value is required.");
                 ValidateScalar(value["value"], bounded, "OPENCLI_CHOICE");
                 ValidateOptionalString(value, "description", bounded, "OPENCLI_CHOICE");
+                if (!TypedDomain.Accepts(type, value["value"]!))
+                {
+                    throw new NormalizationException("OPENCLI_CHOICE", $"A choice value is not representable by the declared {TypedDomain.NormalizeType(type)} parameter type.");
+                }
             });
         }
     }

@@ -180,6 +180,48 @@ try {
     Assert-Case 'yaml-json-numeric-diff' (Invoke-Tool @('diff', $yamlNumeric, $jsonNumeric, '--fail-on', 'warning', '--no-telemetry')) 0 'COMPATIBLE'
     Write-Output "CASE=yaml-json-numeric-canonical-bytes trailing-dot-exponents=true sha256=$yamlNumericHash"
 
+    $invalidIntegerDomainJson = Join-Path $root 'fixtures/opencli/numeric-integer-domain-fraction.json'
+    $invalidIntegerDomainYaml = Join-Path $root 'fixtures/opencli/numeric-integer-domain-fraction.yaml'
+    foreach ($sourcePath in @($invalidIntegerDomainJson, $invalidIntegerDomainYaml)) {
+        $label = [IO.Path]::GetFileNameWithoutExtension($sourcePath)
+        $invalidManifest = Join-Path $temp ($label + '.canonical.json')
+        Assert-Case "$label-validate" (Invoke-Tool @('validate', $sourcePath, '--format', 'json', '--no-telemetry')) 3 'OPENCLI_CHOICE'
+        Assert-Case "$label-snapshot" (Invoke-Tool @('snapshot', $sourcePath, '--format', 'json', '--output', $invalidManifest, '--no-telemetry')) 3 'OPENCLI_CHOICE'
+        Assert-Case "$label-check" (Invoke-Tool @('check', $sourcePath, '--format', 'json', '--baseline', $baselinePath, '--no-telemetry')) 3 'OPENCLI_CHOICE'
+        Assert-Case "$label-diff" (Invoke-Tool @('diff', $sourcePath, $sourcePath, '--format', 'json', '--no-telemetry')) 3 'OPENCLI_CHOICE'
+    }
+
+    $validFixtures = @(
+        'example-cli.json',
+        'example-cli-reordered.json',
+        'example-cli.yaml',
+        'fix-round10.yaml',
+        'global-config-order-a.json',
+        'global-config-order-a.yaml',
+        'global-config-order-b.json',
+        'global-config-order-b.yaml',
+        'globalflags-cli.ocs.yaml',
+        'numeric-defaults-exponent.json',
+        'numeric-defaults-extreme.json',
+        'numeric-defaults-plain.json',
+        'numeric-defaults-yaml.json',
+        'numeric-defaults-yaml.yaml',
+        'petstore-cli.ocs.json',
+        'petstore-cli.ocs.yaml',
+        'pleasantries-cli.ocs.yaml',
+        'regression-fixtures.json',
+        'valid-argument-passthrough.json',
+        'valid-argument-passthrough-false.json'
+    )
+    foreach ($fixture in $validFixtures) {
+        $sourcePath = Join-Path $root ('fixtures/opencli/' + $fixture)
+        $label = $fixture -replace '[^A-Za-z0-9]', '-'
+        $manifestPath = Join-Path $temp ($label + '.self.canonical.json')
+        Assert-Case "$label-self-snapshot" (Invoke-Tool @('snapshot', $sourcePath, '--input', 'opencli', '--output', $manifestPath, '--no-telemetry')) 0 'SNAPSHOT'
+        Assert-Case "$label-self-check" (Invoke-Tool @('check', $sourcePath, '--input', 'opencli', '--baseline', $manifestPath, '--no-telemetry')) 0 'COMPATIBLE'
+        Assert-Case "$label-self-diff" (Invoke-Tool @('diff', $manifestPath, $manifestPath, '--input', 'opencli', '--no-telemetry')) 0 'COMPATIBLE'
+    }
+
     $configOld = Join-Path $root 'fixtures/opencli/global-config-order-a.json'
     $configNew = Join-Path $root 'fixtures/opencli/global-config-order-b.json'
     Assert-Case 'global-config-order-diff' (Invoke-Tool @('diff', $configOld, $configNew, '--fail-on', 'warning', '--no-telemetry')) 0 'COMPATIBLE'

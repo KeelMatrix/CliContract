@@ -39,7 +39,7 @@ The current serializer includes null optional values so null and omission have o
 
 Semantically equivalent OpenCLI JSON/YAML documents therefore produce byte-identical manifests across Windows, Linux, and macOS when run with the same tool version.
 
-Typed defaults are validated against their declared flag type before canonicalization. Integer defaults must be exact integers and boolean defaults must be booleans; string defaults use the alpha.14 scalar-to-string policy. Numeric choices, defaults, and compatibility domains use one exact finite-number representation without a decimal or machine-integer range boundary.
+Typed defaults and constrained choices are validated against their declared parameter type before canonicalization. Integer defaults and choices must be exact integers, boolean defaults and choices must be booleans, and numeric defaults and choices must be finite JSON-number values; string defaults use the alpha.14 scalar-to-string policy. Numeric choices, defaults, canonicalization, and compatibility domains use one exact finite-number representation without a decimal or machine-integer range boundary. Consequently, every accepted canonical manifest is reflexive under self-comparison.
 
 ## Version policy
 

@@ -55,6 +55,7 @@ This is a selected compatibility-diagnostic catalog. The complete role-aware exi
 | `OPENCLI_VARIADIC` | `3` | A variadic argument/flag violates its placement or requiredness rules |
 | `OPENCLI_ARITY` | `3` | Item bounds are invalid for the declared variadic parameter |
 | `OPENCLI_DEFAULT` | `3` | A typed default cannot be represented by its declared flag type |
+| `OPENCLI_CHOICE` | `3` | A constrained choice cannot be represented by its declared parameter type |
 | `OPENCLI_DEFAULT_SOURCE` | `3` | A `$FILE` alternative source has no applicable global config file source |
 | `OPENCLI_NUMBER` | `3` | An explicitly numeric scalar is not a supported finite canonical JSON number |
 | `UNEXPECTED_ERROR` | `4` | Unexpected tool failure |
@@ -101,7 +102,7 @@ The analyzer compares the accepted invocation-name graph (a trie of primary name
 
 Breaking rules are command/option/argument removal, callable alias removal, binary invocation rename, action-to-group transitions, optional-to-required changes, arity narrowing, required type narrowing, allowed-value removal from an explicitly constrained current domain, allowed-value domain narrowing, and loss of accepted post-`--` argument forms when `passthrough` changes from true to false. Adding an optional command/option/argument or alias is informational. Adding a required parameter is breaking. Enabling argument passthrough is informational. Default changes, alternative-source type/property/order changes, and global file-source configuration changes are warnings. Changes to represented `info` metadata, install guidance, command/parameter summary or description/help, examples/visibility metadata, and choice descriptions are informational by default and use `KMCLI005` or `KMCLI006` as listed in the catalog. Deprecation/status changes are warnings only when represented by the supported format.
 
-Type/domain widening does not produce a breaking finding. The accepted-domain relation covers every supported OpenCLI type pair (`string`, `number`, `integer`, and `boolean`) and then applies constrained choice sets; any removal of previously accepted lexical values is breaking. A changed represented type/domain that cannot be proven to be a narrowing is reported as `KMCLI203` warning.
+Type/domain widening does not produce a breaking finding. The accepted-domain relation covers every supported OpenCLI type pair (`string`, `number`, `integer`, and `boolean`) and then applies constrained choice sets; any removal of previously accepted lexical values is breaking. Choice and default values are validated against the declared type before canonicalization, so a fractional integer value or other mismatch is rejected with exit `3` rather than becoming a non-reflexive manifest. Canonicalization, typed validation, and constrained-domain comparison share the same exact finite-number representation, including arbitrary magnitudes outside `decimal` range. A changed represented type/domain that cannot be proven to be a narrowing is reported as `KMCLI203` warning.
 
 ## Supported upstream boundary
 

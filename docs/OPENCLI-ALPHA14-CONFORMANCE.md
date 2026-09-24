@@ -9,7 +9,7 @@ CliContract accepts only OpenCLI `1.0.0-alpha.14`. The committed fixtures and te
 | `TestValidateJSON` | `PinnedAlpha14ConformanceCorpusMatchesItsOracle`; `petstore-cli.ocs.json` |
 | `TestValidateYAML` | `TaggedAlpha14CommandKeysStripAllModifierGrammar`; `petstore-cli.ocs.yaml`; `pleasantries-cli.ocs.yaml` |
 | `TestValidateJSON_InvalidJSON` | malformed JSON cases in `NormalizationTests` |
-| `TestValidateYAML_LogicalValidationErrors` | corpus cases for variadic placement, arity, argument order, group fields, and typed defaults |
+| `TestValidateYAML_LogicalValidationErrors` | corpus cases for variadic placement, arity, argument order, group fields, typed defaults, and declared-type choice validation |
 | `TestValidateYAML_InvalidYAML` | malformed YAML and unsupported-tag cases in `NormalizationTests` |
 | `TestValidationError_PathFormatting` | bounded stable error-code assertions in the normalization tests |
 | `TestValidateYAML_DuplicateFlagNames` | duplicate primary and accepted option-name tests |
@@ -28,6 +28,6 @@ No tagged validation case is omitted. Cases that the tagged validator expresses 
 
 ## Corpus coverage
 
-`fixtures/opencli/alpha14-conformance-corpus.json` covers valid and rejected JSON documents for schema fields, extensions, command identity, command-key modifiers, groups, positional ordering, variadic arguments and flags, duplicate accepted option names, typed defaults, `$ENV`/`$FILE` prerequisites, exact numeric values, unknown versions, and offline reference rejection. JSON/YAML byte-equivalence is checked separately using the tagged petstore and pleasantries fixtures.
+`fixtures/opencli/alpha14-conformance-corpus.json` covers valid and rejected JSON documents for schema fields, extensions, command identity, command-key modifiers, groups, positional ordering, variadic arguments and flags, duplicate accepted option names, typed defaults, declared-type constrained choices, `$ENV`/`$FILE` prerequisites, exact numeric values, unknown versions, and offline reference rejection. The committed `numeric-integer-domain-fraction.json` and `.yaml` fixtures prove that a fractional choice on an integer parameter is rejected with bounded `OPENCLI_CHOICE` exit-`3` behavior in both source formats. JSON/YAML byte-equivalence and self-reflexive canonical round trips are checked separately using the numeric, petstore, pleasantries, and regression fixtures.
 
 The extension case deliberately contains `$ref`, `$dynamicRef`, and `include` inside an opaque `x-*` subtree. Those values are metadata and are never interpreted or fetched.

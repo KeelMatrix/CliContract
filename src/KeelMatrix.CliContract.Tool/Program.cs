@@ -598,6 +598,8 @@ internal static class CliApplication
       YAML .inf and .nan are outside that boundary: tagged forms error; untagged forms are strings.
       Accepted command names include aliases at every command segment; retained aliases preserve old paths.
       All supported string, number, integer, and boolean type domains are compared, and exit-code changes warn.
+      Choices and defaults must match their declared type; non-integral integer values fail with exit 3.
+      Exact numeric representation and integer detection are shared by validation and compatibility comparison.
       Argument passthrough and keyed global config formats are represented compatibility semantics.
       Represented info metadata, install guidance, summary/description text, and choice descriptions produce KMCLI005
       info findings; visibility and example metadata produce KMCLI006 info findings. Info findings are reported but
@@ -605,6 +607,7 @@ internal static class CliApplication
 
     Validation boundary:
       One variadic positional argument is allowed and it must be last; minItems/maxItems require variadic=true.
+      Typed defaults and choices that are not representable by their declared type fail with exit 3.
       Missing source or baseline paths return 2. Present but unreadable, malformed, unsupported, invalid-UTF-8,
       or oversized source/baseline files return 3. Suppression/configuration and output failures return 2.
 

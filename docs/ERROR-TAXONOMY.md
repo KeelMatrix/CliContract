@@ -13,3 +13,5 @@ This table is the public error and exit-code contract. The built help text and t
 | Unexpected internal failure | `UNEXPECTED_ERROR` | 4 | An error outside the bounded input, baseline, invocation, or output contract occurred. |
 
 The adapter is offline. Unsupported versions, malformed documents, duplicate keys, invalid recognized fields, ambiguous accepted invocations, and unsupported canonical manifests are present-input or baseline failures and therefore return exit `3`. Missing paths are the only source/baseline path failures that return exit `2`.
+
+`OPENCLI_DEFAULT` and `OPENCLI_CHOICE` are bounded exit-`3` validation diagnostics. They mean a default or constrained choice is not representable by its declared type; for example, a fractional value cannot be an `integer`. Such values are rejected before snapshotting, so `validate`, `snapshot`, `check`, and `diff` cannot accept a structurally non-reflexive description.

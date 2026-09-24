@@ -15,4 +15,5 @@ This file records user-visible changes to KeelMatrix CliContract.
 - Fail-closed packed-tool and symbol-package archive validation.
 - Alpha.14 command-key parsing now follows the tagged modifier grammar, and tagged logical validation covers groups, positional ordering, variadic flags, duplicate accepted names, `$FILE` prerequisites, and typed defaults.
 - Canonical manifests enforce accepted-invocation uniqueness after both source normalization and manifest parsing; exact numeric domains no longer use a decimal-range boundary.
+- Typed constrained choices and defaults now fail closed when they are not representable by their declared type, and exact numeric domain logic is shared across validation, canonicalization, and compatibility comparison to preserve self-reflexivity.
 - Public error documentation now distinguishes missing source/baseline paths (exit `2`) from present invalid or unreadable source/baseline files (exit `3`), with a shared taxonomy table.

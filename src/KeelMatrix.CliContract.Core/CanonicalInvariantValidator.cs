@@ -72,8 +72,10 @@ internal static class CanonicalInvariantValidator
                 throw new NormalizationException("OPENCLI_VARIADIC", "Only one variadic positional argument is allowed and it must be last.");
             }
 
+            ValidateType(argument);
             ValidateArity(argument);
             ValidateDefault(argument, false);
+            ValidateChoices(argument);
             ValidateSources(argument.AlternativeSources, hasFileSource);
         }
 
@@ -88,6 +90,7 @@ internal static class CanonicalInvariantValidator
                 }
             }
 
+            ValidateType(option);
             if (option.Variadic && option.Required == true)
             {
                 throw new NormalizationException("OPENCLI_VARIADIC", "A variadic flag cannot be marked as required.");
@@ -95,6 +98,7 @@ internal static class CanonicalInvariantValidator
 
             ValidateArity(option);
             ValidateDefault(option, true);
+            ValidateChoices(option);
             ValidateSources(option.AlternativeSources, hasFileSource);
         }
     }
@@ -132,20 +136,38 @@ internal static class CanonicalInvariantValidator
     private static void ValidateDefault(CanonicalParameter parameter, bool option)
     {
         if (!option || parameter.DefaultValue is null) return;
-        var type = NormalizeType(parameter.Type);
-        var value = parameter.DefaultValue;
-        var valid = type switch
-        {
-            "string" => value is JsonValue stringValue && stringValue.GetValueKind() is System.Text.Json.JsonValueKind.String or System.Text.Json.JsonValueKind.Number or System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False,
-            "number" => ExactNumber.TryParse(value, allowNumericString: false, out _),
-            "integer" => ExactNumber.TryParse(value, allowNumericString: false, out var integer) && integer.IsInteger,
-            "boolean" => value is JsonValue booleanValue && booleanValue.GetValueKind() is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False,
-            _ => false
-        };
-
-        if (!valid)
+        var type = TypedDomain.NormalizeType(parameter.Type);
+        if (!TypedDomain.Accepts(type, parameter.DefaultValue))
         {
             throw new NormalizationException("OPENCLI_DEFAULT", $"The default value is not representable by the declared {type} flag type.");
+        }
+    }
+
+    private static void ValidateType(CanonicalParameter parameter)
+    {
+        if (!TypedDomain.IsSupportedType(parameter.Type))
+        {
+            throw new NormalizationException("INVALID_BASELINE", "A canonical parameter type is unsupported.");
+        }
+    }
+
+    private static void ValidateChoices(CanonicalParameter parameter)
+    {
+        var type = TypedDomain.NormalizeType(parameter.Type);
+        foreach (var value in parameter.AllowedValues)
+        {
+            if (!TypedDomain.Accepts(type, value))
+            {
+                throw new NormalizationException("OPENCLI_CHOICE", $"A choice value is not representable by the declared {type} parameter type.");
+            }
+        }
+
+        foreach (var choice in parameter.Choices)
+        {
+            if (!TypedDomain.Accepts(type, choice.Value))
+            {
+                throw new NormalizationException("OPENCLI_CHOICE", $"A choice value is not representable by the declared {type} parameter type.");
+            }
         }
     }
 
@@ -218,5 +240,4 @@ internal static class CanonicalInvariantValidator
         foreach (var child in root.Subcommands.SelectMany(Flatten)) yield return child;
     }
 
-    private static string NormalizeType(string? type) => type?.Trim().ToLowerInvariant() switch { null or "" => "string", var value => value };
 }
