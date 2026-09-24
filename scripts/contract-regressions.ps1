@@ -111,7 +111,7 @@ try {
     Write-Utf8 $trailingPath $trailingArguments
     Assert-Case 'trailing-optional-argument' (Invoke-Tool @('diff', $oldArgumentsPath, $trailingPath, '--no-telemetry')) 0 'KMCLI003'
 
-    $action = $valid.Replace('"commands":{"tool"', '"commands":{"tool"').Replace('"flags"', '"kind":"action","flags"')
+    $action = $valid.Replace('"commands":{"tool":{"flags":[{"name":"region","type":"string"}]}}', '"commands":{"tool":{"kind":"action"}}')
     $group = $action.Replace('"kind":"action"', '"kind":"group"')
     $actionPath = Join-Path $temp 'action.json'
     $groupPath = Join-Path $temp 'group.json'
