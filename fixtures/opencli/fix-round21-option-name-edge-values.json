@@ -1,0 +1,21 @@
+{
+  "opencliVersion": "1.0.0-alpha.14",
+  "info": { "title": "Tool", "binary": "tool", "version": "1" },
+  "global": {
+    "flags": [
+      { "name": "global bad name", "type": "string", "aliases": [" global alias ", "---"] }
+    ]
+  },
+  "commands": {
+    "tool": {
+      "flags": [
+      { "name": "root bad name", "type": "string", "aliases": [" root alias ", "é"] }
+      ]
+    },
+    "tool run": {
+      "flags": [
+        { "name": "command bad name", "type": "string", "aliases": [" command alias ", "!@#"] }
+      ]
+    }
+  }
+}

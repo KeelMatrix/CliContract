@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$started = Get-Date
 $candidatePath = (Resolve-Path -LiteralPath $PackagePath).Path
 $candidateHash = (Get-FileHash -LiteralPath $candidatePath -Algorithm SHA256).Hash
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-smoke-' + [Guid]::NewGuid().ToString('N'))
@@ -107,7 +108,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Installed tool could not check the tagged alpha.14 command-key fixture against itself.' }
     Write-Output 'CASE=official-alpha14-command-key-grammar exit=0'
 
-    foreach ($fixture in @('valid-whitespace-source.json', 'valid-whitespace-binary.json')) {
+    foreach ($fixture in @('valid-whitespace-source.json', 'valid-whitespace-binary.json', 'fix-round21-option-name-edge-values.json')) {
         $fixturePath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot ('..\fixtures\opencli\' + $fixture))).Path
         $fixtureName = [IO.Path]::GetFileNameWithoutExtension($fixture)
         $fixtureBaseline = Join-Path $temp ($fixtureName + '.canonical.json')
@@ -121,6 +122,29 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Installed tool could not diff $fixtureName whitespace source fixture against itself." }
     }
     Write-Output 'CASE=whitespace-source-fixtures-consumer validate_snapshot_check_diff=PASS'
+
+    $optionNameScopeCases = @(
+        @{ Name = 'global-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"---","type":"string","aliases":[" global alias "]}]},"commands":{"tool":{}}}' },
+        @{ Name = 'root-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"---","type":"string","aliases":[" root alias "]}]}}}' },
+        @{ Name = 'command-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run":{"flags":[{"name":"---","type":"string","aliases":[" command alias "]}]}}}' },
+        @{ Name = 'global-option-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"value","type":"string","aliases":["---"]}]},"commands":{"tool":{}}}' },
+        @{ Name = 'root-option-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["---"]}]}}}' },
+        @{ Name = 'command-option-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run":{"flags":[{"name":"value","type":"string","aliases":["---"]}]}}}' }
+    )
+    foreach ($case in $optionNameScopeCases) {
+        $sourcePath = Join-Path $temp ($case.Name + '.json')
+        $baselinePath = Join-Path $temp ($case.Name + '.canonical.json')
+        [IO.File]::WriteAllText($sourcePath, $case.Text, [Text.UTF8Encoding]::new($false))
+        & $tool validate $sourcePath --input opencli --no-telemetry | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Installed tool rejected $($case.Name) source." }
+        & $tool snapshot $sourcePath --input opencli --output $baselinePath --no-telemetry | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Installed tool could not snapshot $($case.Name) source." }
+        & $tool check $sourcePath --input opencli --baseline $baselinePath --no-telemetry | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Installed tool could not check $($case.Name) source against itself." }
+        & $tool diff $sourcePath $sourcePath --input opencli --no-telemetry | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Installed tool could not diff $($case.Name) source against itself." }
+    }
+    Write-Output 'CASE=option-name-edge-class-consumer global_root_command_names_and_aliases=PASS'
 
     function Assert-ToolError {
         param(
@@ -380,7 +404,8 @@ try {
     Assert-ToolError -Label 'output write' -ExpectedExit 2 -ExpectedCode 'OUTPUT_NOT_WRITABLE' -Arguments @('snapshot', $old, '--output', $temp, '--format', 'json', '--no-telemetry')
     Assert-ToolError -Label 'output write text' -ExpectedExit 2 -ExpectedCode 'OUTPUT_NOT_WRITABLE' -Arguments @('snapshot', $old, '--output', $temp, '--format', 'text', '--no-telemetry')
     if ($SelfTest) { Write-Output "PACKAGE_CACHE_NEGATIVE=PASS ordinary_cache_sha256=$seedHash fresh_install_sha256=$installedHash" }
-    Write-Output "PACKAGE_CONSUMER_SMOKE=PASS source=local-exclusive-candidate candidate_sha256=$candidateHash installed_sha256=$installedHash fresh_nuget_packages=$freshPackages config=$nugetConfig"
+    $durationMs = [math]::Round(((Get-Date) - $started).TotalMilliseconds)
+    Write-Output "PACKAGE_CONSUMER_SMOKE=PASS source=local-exclusive-candidate candidate_sha256=$candidateHash installed_sha256=$installedHash duration_ms=$durationMs fresh_nuget_packages=$freshPackages config=$nugetConfig"
 }
 finally {
     if ($pushed) { Pop-Location }

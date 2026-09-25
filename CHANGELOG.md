@@ -6,6 +6,7 @@ This file records user-visible changes to KeelMatrix CliContract.
 
 ### Fixed
 
+- Preserve the complete alpha.14 option-name class: the canonical invariant now uses the normalizer's shared `--` + `TrimStart('-')` construction rule, including whitespace-containing and dash-only names and aliases at global, root, and command scope. Add a closed source-field edge matrix and installed-package round-trip guard.
 - Preserve nonempty whitespace-only alpha.14 source strings through canonical manifests while continuing to reject empty and duplicate aliases.
 - Canonical baseline validation now rejects every tested alpha.14-unrepresentable state in the source-producibility sweep, including empty contact/install presence, non-letter command segments, exact parameter types, required metadata fields, license/example required fields, and the existing arity, source, domain, status, file-source, and exit-code invariants; `check` and `diff` return bounded exit `3` for each invalid baseline.
 

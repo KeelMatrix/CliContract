@@ -50,7 +50,7 @@ try {
     Write-Utf8 $richSourcePath $richSource
     Assert-Case 'rich-baseline' (Invoke-Tool @('snapshot', $richSourcePath, '--input', 'opencli', '--output', $richBaselinePath, '--no-telemetry')) 0 'SNAPSHOT'
 
-    $whitespaceFixtures = @('valid-whitespace-source.json', 'valid-whitespace-binary.json')
+    $whitespaceFixtures = @('valid-whitespace-source.json', 'valid-whitespace-binary.json', 'fix-round21-option-name-edge-values.json')
     foreach ($fixture in $whitespaceFixtures) {
         $fixturePath = Join-Path $root ('fixtures/opencli/' + $fixture)
         $fixtureName = [IO.Path]::GetFileNameWithoutExtension($fixture)
@@ -61,6 +61,25 @@ try {
         Assert-Case "$fixtureName-diff" (Invoke-Tool @('diff', $fixturePath, $fixturePath, '--input', 'opencli', '--no-telemetry')) 0 'COMPATIBLE'
     }
     Write-Output 'CASE=whitespace-source-fixtures validate_snapshot_check_diff=PASS'
+
+    $optionNameScopeCases = @(
+        @{ Name = 'global-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"---","type":"string","aliases":[" global alias "]}]},"commands":{"tool":{}}}' },
+        @{ Name = 'root-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"---","type":"string","aliases":[" root alias "]}]}}}' },
+        @{ Name = 'command-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run":{"flags":[{"name":"---","type":"string","aliases":[" command alias "]}]}}}' },
+        @{ Name = 'global-option-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"value","type":"string","aliases":["---"]}]},"commands":{"tool":{}}}' },
+        @{ Name = 'root-option-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["---"]}]}}}' },
+        @{ Name = 'command-option-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run":{"flags":[{"name":"value","type":"string","aliases":["---"]}]}}}' }
+    )
+    foreach ($case in $optionNameScopeCases) {
+        $sourcePath = Join-Path $temp ($case.Name + '.json')
+        $baselinePath = Join-Path $temp ($case.Name + '.canonical.json')
+        Write-Utf8 $sourcePath $case.Text
+        Assert-Case "$($case.Name)-validate" (Invoke-Tool @('validate', $sourcePath, '--input', 'opencli', '--no-telemetry')) 0 'VALID'
+        Assert-Case "$($case.Name)-snapshot" (Invoke-Tool @('snapshot', $sourcePath, '--input', 'opencli', '--output', $baselinePath, '--no-telemetry')) 0 'SNAPSHOT'
+        Assert-Case "$($case.Name)-check" (Invoke-Tool @('check', $sourcePath, '--input', 'opencli', '--baseline', $baselinePath, '--no-telemetry')) 0 'COMPATIBLE'
+        Assert-Case "$($case.Name)-diff" (Invoke-Tool @('diff', $sourcePath, $sourcePath, '--input', 'opencli', '--no-telemetry')) 0 'COMPATIBLE'
+    }
+    Write-Output 'CASE=option-name-edge-class global_root_command_names_and_aliases=PASS'
 
     foreach ($case in @(
         @{ Name = 'invalid-empty-source-value'; File = 'invalid-empty-source-value.json'; Code = 'OPENCLI_INFO' },

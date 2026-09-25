@@ -4,18 +4,7 @@ namespace KeelMatrix.CliContract.Core;
 
 internal static class CanonicalInvariantValidator
 {
-    private static readonly string[] ExitCodeStatuses =
-    [
-        "BAD_USER_INPUT_ERROR",
-        "UNAUTHENTICATED_ERROR",
-        "UNAUTHORIZED_ERROR",
-        "CANCELED_ERROR",
-        "INTERNAL_CLI_ERROR",
-        "NOT_IMPLEMENTED_ERROR",
-        "OK"
-    ];
-
-    public static void Validate(CanonicalManifest manifest)
+    public static void Validate(CanonicalManifest manifest, NormalizationLimits? limits = null)
     {
         if (manifest.SchemaVersion != CanonicalManifestReader.SupportedSchemaVersion ||
             !string.Equals(manifest.Adapter, "opencli", StringComparison.Ordinal) ||
@@ -51,6 +40,7 @@ internal static class CanonicalInvariantValidator
 
         ValidateEffectiveOptionCollisions(manifest, commands);
         ValidateCommandInvocations(manifest, commands, byPath);
+        Normalizer.ValidateCanonicalSource(manifest, limits ?? new NormalizationLimits());
     }
 
     private static void ValidateCommandTree(CanonicalCommand root, IReadOnlyList<CanonicalCommand> commands, Dictionary<string, CanonicalCommand> byPath)
@@ -93,7 +83,7 @@ internal static class CanonicalInvariantValidator
         }
 
         var segments = path.Split(" / ", StringSplitOptions.None);
-        if (segments.Length == 0 || segments[0] != "root" || segments.Skip(1).Any(segment => string.IsNullOrWhiteSpace(segment) || segment.Any(char.IsWhiteSpace) || segment.Contains('/') || !char.IsAsciiLetter(segment[0])))
+        if (segments.Length == 0 || segments[0] != "root" || segments.Skip(1).Any(segment => !SourceContractRules.IsCommandSegment(segment)))
         {
             throw new NormalizationException("INVALID_BASELINE", "A canonical command path has an invalid hierarchy.");
         }
@@ -131,7 +121,7 @@ internal static class CanonicalInvariantValidator
         var formats = new HashSet<string>(StringComparer.Ordinal);
         foreach (var source in config?.FileSources ?? [])
         {
-            if (source.Format is not ("json" or "toml" or "yaml") || !formats.Add(source.Format) || string.IsNullOrWhiteSpace(source.Path))
+            if (!SourceContractRules.IsSupportedFileFormat(source.Format) || !formats.Add(source.Format) || !SourceContractRules.IsNonWhitespace(source.Path))
             {
                 throw new NormalizationException("INVALID_BASELINE", "Canonical file sources must have unique supported formats and nonempty paths.");
             }
@@ -149,7 +139,7 @@ internal static class CanonicalInvariantValidator
         var seen = new HashSet<int>();
         foreach (var exitCode in exitCodes)
         {
-            if (!seen.Add(exitCode.Code) || !ExitCodeStatuses.Contains(exitCode.Status, StringComparer.Ordinal) || exitCode.Summary.Length == 0)
+            if (!seen.Add(exitCode.Code) || !SourceContractRules.IsSupportedExitCodeStatus(exitCode.Status) || !SourceContractRules.IsNonEmpty(exitCode.Summary))
             {
                 throw new NormalizationException("INVALID_BASELINE", $"The canonical {subject} exit-code collection is not source-producible.");
             }
@@ -229,14 +219,14 @@ internal static class CanonicalInvariantValidator
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var option in options)
         {
-            if (!names.Add(OptionIdentity(option.Name)) || option.Aliases.Any(alias => !names.Add(OptionIdentity(alias))))
+            if (!names.Add(SourceContractRules.OptionIdentity(option.Name)) || option.Aliases.Any(alias => !names.Add(SourceContractRules.OptionIdentity(alias))))
             {
                 throw new NormalizationException("OPENCLI_DUPLICATE_PARAMETER", $"The canonical option collection at {commandPath} contains duplicate accepted invocation names.");
             }
 
-            if (!option.Name.StartsWith("--", StringComparison.Ordinal) || option.Name.Length == 2 || option.Name[2] == '-' || option.Name.Any(char.IsWhiteSpace))
+            if (!SourceContractRules.IsNormalizedOptionName(option.Name))
             {
-                throw new NormalizationException("INVALID_BASELINE", "A canonical option name must use the normalized --name form.");
+                throw new NormalizationException("INVALID_BASELINE", "A canonical option name must be produced by the source normalizer.");
             }
 
             ValidateStringCollection(option.Aliases, "option aliases", requireSorted: true);
@@ -270,8 +260,8 @@ internal static class CanonicalInvariantValidator
             throw new NormalizationException("OPENCLI_VARIADIC", "A variadic flag cannot be marked as required.");
         }
 
-        if (option && (parameter.Type is null || !IsExactSourceType(parameter.Type)) ||
-            !option && parameter.Type is not null && !IsExactSourceType(parameter.Type))
+        if (option && (parameter.Type is null || !SourceContractRules.IsSupportedType(parameter.Type)) ||
+            !option && parameter.Type is not null && !SourceContractRules.IsSupportedType(parameter.Type))
         {
             throw new NormalizationException("INVALID_BASELINE", "A canonical parameter type is unsupported.");
         }
@@ -322,7 +312,7 @@ internal static class CanonicalInvariantValidator
     {
         foreach (var source in sources)
         {
-            if (source.Type is not ("$ENV" or "$FILE") || source.Property.Length == 0 || source.Type == "$FILE" && !hasFileSource)
+            if (!SourceContractRules.IsSupportedAlternativeSourceType(source.Type) || !SourceContractRules.IsNonEmpty(source.Property) || source.Type == "$FILE" && !hasFileSource)
             {
                 throw new NormalizationException("OPENCLI_DEFAULT_SOURCE", "A canonical alternative source is invalid or lacks global file configuration.");
             }
@@ -343,16 +333,12 @@ internal static class CanonicalInvariantValidator
     }
 
     private static HashSet<string> OptionNames(IEnumerable<CanonicalOption> options) =>
-        options.SelectMany(option => new[] { option.Name }.Concat(option.Aliases)).Select(OptionIdentity).ToHashSet(StringComparer.Ordinal);
-
-    private static string OptionIdentity(string name) => name.TrimStart('-');
-
-    private static bool IsExactSourceType(string? type) => type is "string" or "number" or "integer" or "boolean";
+        options.SelectMany(option => new[] { option.Name }.Concat(option.Aliases)).Select(SourceContractRules.OptionIdentity).ToHashSet(StringComparer.Ordinal);
 
     private static void ValidateStringCollection(IEnumerable<string> values, string subject, bool requireSorted)
     {
         var array = values.ToArray();
-        if (array.Any(value => value.Length == 0) || array.Distinct(StringComparer.Ordinal).Count() != array.Length)
+        if (array.Any(value => !SourceContractRules.IsNonEmpty(value)) || array.Distinct(StringComparer.Ordinal).Count() != array.Length)
         {
             throw new NormalizationException("INVALID_BASELINE", $"Canonical {subject} contain an empty or duplicated value.");
         }
@@ -365,7 +351,7 @@ internal static class CanonicalInvariantValidator
 
     private static void RequireNonEmpty(string? value, string message)
     {
-        if (value is null || value.Length == 0) throw new NormalizationException("INVALID_BASELINE", message);
+        if (!SourceContractRules.IsNonEmpty(value)) throw new NormalizationException("INVALID_BASELINE", message);
     }
 
     private static void ValidateCommandInvocations(CanonicalManifest manifest, IReadOnlyList<CanonicalCommand> commands, Dictionary<string, CanonicalCommand> byPath)

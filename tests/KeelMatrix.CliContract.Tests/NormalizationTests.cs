@@ -62,6 +62,51 @@ public sealed class NormalizationTests
     }
 
     [Fact]
+    public void Alpha14OptionNamesPreserveWhitespaceAndTrimmedDashOnlyFormsAtEveryScope()
+    {
+        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "fix-round21-option-name-edge-values.json")));
+
+        Assert.Equal("--global bad name", manifest.GlobalOptions.Single().Name);
+        Assert.Equal("--root bad name", manifest.Root.Options.Single().Name);
+        Assert.Equal("--command bad name", manifest.Root.Subcommands.Single().Options.Single().Name);
+        Assert.Equal([" global alias ", "---"], manifest.GlobalOptions.Single().Aliases);
+        Assert.Equal([" root alias ", "é"], manifest.Root.Options.Single().Aliases);
+        Assert.Equal([" command alias ", "!@#"], manifest.Root.Subcommands.Single().Options.Single().Aliases);
+
+        var serialized = Normalizer.Serialize(manifest);
+        Assert.Equal(serialized, Normalizer.Serialize(CanonicalManifestReader.Read(serialized)));
+    }
+
+    [Theory]
+    [InlineData("global")]
+    [InlineData("root")]
+    [InlineData("command")]
+    public void Alpha14DashesOnlyOptionNamesAndAliasesRemainSourceProducibleAtEveryScope(string scope)
+    {
+        var nameDocument = OpenCliDocument(scope switch
+        {
+            "global" => "{\"global\":{\"flags\":[{\"name\":\"---\",\"type\":\"string\"}]},\"commands\":{\"tool\":{}}}",
+            "root" => "{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"---\",\"type\":\"string\"}]}}}",
+            _ => "{\"commands\":{\"tool run\":{\"flags\":[{\"name\":\"---\",\"type\":\"string\"}]}}}"
+        });
+        var aliasDocument = OpenCliDocument(scope switch
+        {
+            "global" => "{\"global\":{\"flags\":[{\"name\":\"value\",\"type\":\"string\",\"aliases\":[\"---\"]}]},\"commands\":{\"tool\":{}}}",
+            "root" => "{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"string\",\"aliases\":[\"---\"]}]}}}",
+            _ => "{\"commands\":{\"tool run\":{\"flags\":[{\"name\":\"value\",\"type\":\"string\",\"aliases\":[\"---\"]}]}}}"
+        });
+
+        foreach (var document in new[] { nameDocument, aliasDocument })
+        {
+            var manifest = Normalizer.Normalize("opencli", document);
+            var option = (scope == "global" ? manifest.GlobalOptions : scope == "root" ? manifest.Root.Options : manifest.Root.Subcommands.Single().Options).Single();
+            Assert.Equal(document == nameDocument ? "--" : "--value", option.Name);
+            if (document == aliasDocument) Assert.Equal(["---"], option.Aliases);
+            Assert.Equal(Normalizer.Serialize(manifest), Normalizer.Serialize(CanonicalManifestReader.Read(Normalizer.Serialize(manifest))));
+        }
+    }
+
+    [Fact]
     public void PinnedAlpha14ConformanceCorpusMatchesItsOracle()
     {
         var corpus = JsonNode.Parse(File.ReadAllText(Fixture("opencli", "alpha14-conformance-corpus.json")))!.AsArray();

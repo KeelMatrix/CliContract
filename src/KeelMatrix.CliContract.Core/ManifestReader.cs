@@ -83,7 +83,7 @@ public static class CanonicalManifestReader
             GlobalOptions = ReadParameters(value["GlobalOptions"], true, limits).Cast<CanonicalOption>().ToArray(),
             Root = root
         };
-        CanonicalInvariantValidator.Validate(manifest);
+        CanonicalInvariantValidator.Validate(manifest, limits);
         return manifest;
     }
 

@@ -28,15 +28,6 @@ public static class Normalizer
     private static readonly string[] ContactTextProperties = ["name", "email", "url"];
     private static readonly string[] InstallTextProperties = ["name", "command", "url", "description"];
     private static readonly string[] ExitCodeTextProperties = ["status", "summary", "description"];
-    private static readonly string[] ExitCodeStatuses = [
-        "BAD_USER_INPUT_ERROR",
-        "UNAUTHENTICATED_ERROR",
-        "UNAUTHORIZED_ERROR",
-        "CANCELED_ERROR",
-        "INTERNAL_CLI_ERROR",
-        "NOT_IMPLEMENTED_ERROR",
-        "OK"];
-
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -59,7 +50,7 @@ public static class Normalizer
                 var document = ParseOpenCliDocument(input, bounded);
                 ValidateOpenCliDocument(document, bounded);
                 var manifest = NormalizeOpenCli(document, bounded);
-                CanonicalInvariantValidator.Validate(manifest);
+                CanonicalInvariantValidator.Validate(manifest, bounded);
                 return manifest;
             }
 
@@ -78,6 +69,17 @@ public static class Normalizer
     public static string Serialize(CanonicalManifest manifest)
     {
         return JsonSerializer.Serialize(manifest, JsonOptions) + "\n";
+    }
+
+    internal static void ValidateCanonicalSource(CanonicalManifest manifest, NormalizationLimits limits)
+    {
+        var source = SourceContractProjection.Create(manifest);
+        ValidateOpenCliDocument(source, limits);
+        var normalized = NormalizeOpenCli(source, limits);
+        if (!string.Equals(Serialize(manifest), Serialize(normalized), StringComparison.Ordinal))
+        {
+            throw new NormalizationException("INVALID_BASELINE", "The canonical manifest is not exactly source-producible.");
+        }
     }
 
     private static JsonNode ParseOpenCliDocument(string input, NormalizationLimits limits)
@@ -753,7 +755,7 @@ public static class Normalizer
         }
 
         var type = typeNode.GetValue<string>();
-        if (type is not ("string" or "number" or "integer" or "boolean"))
+        if (!SourceContractRules.IsSupportedType(type))
         {
             throw new NormalizationException(required ? "OPENCLI_FLAG_TYPE" : "OPENCLI_TYPE", "The type field must be string, number, integer, or boolean.");
         }
@@ -809,7 +811,7 @@ public static class Normalizer
             ValidateObject(source, "alternative source", limits, ["type", "property"], static (value, bounded) =>
             {
                 var type = RequiredStringValue(value["type"], "OPENCLI_DEFAULT_SOURCE");
-                if (type is not ("$ENV" or "$FILE"))
+                if (!SourceContractRules.IsSupportedAlternativeSourceType(type))
                 {
                     throw new NormalizationException("OPENCLI_DEFAULT_SOURCE", "The alternative source type must be $ENV or $FILE.");
                 }
@@ -855,7 +857,7 @@ public static class Normalizer
             if (config.ContainsKey(property))
             {
                 var path = RequiredString(config, property, "OPENCLI_GLOBAL", limits);
-                if (string.IsNullOrWhiteSpace(path))
+                if (!SourceContractRules.IsNonWhitespace(path))
                 {
                     throw new NormalizationException("OPENCLI_GLOBAL", "A global config file path must be nonempty.");
                 }
@@ -886,7 +888,7 @@ public static class Normalizer
                 }
 
                 if (value["status"] is not JsonValue status || status.GetValueKind() != JsonValueKind.String ||
-                    !ExitCodeStatuses.Contains(status.GetValue<string>(), StringComparer.Ordinal))
+                    !SourceContractRules.IsSupportedExitCodeStatus(status.GetValue<string>()))
                 {
                     throw new NormalizationException("OPENCLI_EXIT_CODE", "An exit code status is invalid.");
                 }
@@ -1295,8 +1297,10 @@ public static class Normalizer
             var alternativeSources = option
                 ? ReadAlternativeSources(OptionalProperty(parameter, "alternativeSources", "OPENCLI_DEFAULT_SOURCES"), limits)
                 : [];
-            var normalizedName = option ? "--" + name.TrimStart('-') : name;
-            if (!names.Add(normalizedName))
+            var normalizedName = option ? SourceContractRules.NormalizeOptionName(name) : name;
+            var aliases = option ? Strings(parameter["aliases"], limits).OrderBy(x => x, StringComparer.Ordinal).ToArray() : [];
+            var nameIdentity = option ? SourceContractRules.OptionIdentity(normalizedName) : normalizedName;
+            if (!names.Add(nameIdentity) || aliases.Any(alias => !names.Add(SourceContractRules.OptionIdentity(alias))))
             {
                 throw new NormalizationException("OPENCLI_DUPLICATE_PARAMETER", "An OpenCLI parameter collection contains duplicate normalized names.");
             }
@@ -1322,7 +1326,7 @@ public static class Normalizer
                 yield return new CanonicalOption
                 {
                     Name = normalizedName,
-                    Aliases = Strings(parameter["aliases"], limits).OrderBy(x => x, StringComparer.Ordinal).ToArray(),
+                    Aliases = aliases,
                     Summary = common.Summary,
                     Description = common.Description,
                     Type = common.Type,
@@ -1456,7 +1460,7 @@ public static class Normalizer
         }
 
         var value = node.GetValue<string>();
-        if (value.Length == 0)
+        if (!SourceContractRules.IsNonEmpty(value))
         {
             throw new NormalizationException(code, $"The required '{property}' field is missing or invalid.");
         }
@@ -1501,7 +1505,7 @@ public static class Normalizer
         if (node is null) return [];
         var array = node as JsonArray ?? throw new NormalizationException("COLLECTION_TYPE", "The aliases field must be an array.");
         if (array.Count > limits.MaxCollectionItems) throw new NormalizationException("COLLECTION_TOO_LARGE", "An alias collection exceeds the configured item limit.");
-        return array.Select(item =>
+        var values = array.Select(item =>
         {
             if (item is not JsonValue || item.GetValueKind() != JsonValueKind.String)
             {
@@ -1509,13 +1513,19 @@ public static class Normalizer
             }
 
             var value = BoundedString(item.GetValue<string>(), limits);
-            if (value.Length == 0)
+            if (!SourceContractRules.IsNonEmpty(value))
             {
                 throw new NormalizationException("INVALID_STRING", "The aliases field must contain non-empty strings.");
             }
 
             return value;
         }).ToArray();
+        if (values.Distinct(StringComparer.Ordinal).Count() != values.Length)
+        {
+            throw new NormalizationException("INVALID_BASELINE", "The aliases field must not contain duplicates.");
+        }
+
+        return values;
     }
 
     private static bool? OptionalBoolean(JsonObject objectNode, string property)
@@ -1610,7 +1620,7 @@ public static class Normalizer
         {
             var source = RequireObject(item, "OPENCLI_DEFAULT_SOURCE");
             var type = RequiredString(source, "type", "OPENCLI_DEFAULT_SOURCE", limits);
-            if (type is not "$ENV" and not "$FILE")
+            if (!SourceContractRules.IsSupportedAlternativeSourceType(type))
             {
                 throw new NormalizationException("OPENCLI_DEFAULT_SOURCE", "The alternative source type must be $ENV or $FILE.");
             }

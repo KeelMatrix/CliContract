@@ -51,7 +51,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 Assert-NativeSuccess 'Release artifact allowlist'
 & pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath $package -SelfTest
 Assert-NativeSuccess 'Package inspection'
-& pwsh -NoProfile -File ./scripts/package-consumer-smoke.ps1 -PackagePath $package -SelfTest
-Assert-NativeSuccess 'Package consumer smoke'
+& pwsh -NoProfile -File ./scripts/source-producibility-guard.ps1 -PackagePath $package
+Assert-NativeSuccess 'Source-producibility guard and package consumer smoke'
 $elapsed = (Get-Date) - $started
 Write-Output ("LOCAL_GATE=PASS duration_ms={0}" -f [Math]::Round($elapsed.TotalMilliseconds))
