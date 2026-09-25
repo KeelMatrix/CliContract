@@ -33,7 +33,7 @@ Assert-NativeSuccess 'User-facing wording scan'
 Assert-NativeSuccess 'Error taxonomy documentation check'
 & pwsh -NoProfile -File ./scripts/validate-sensitive-paths.ps1 -SelfTest
 Assert-NativeSuccess 'Sensitive-path ingress safety'
-& pwsh -NoProfile -File ./scripts/scan-history-wording.ps1
+& pwsh -NoProfile -File ./scripts/scan-history-wording.ps1 -SelfTest
 Assert-NativeSuccess 'Reachable history wording scan'
 & pwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -SelfTest
 Assert-NativeSuccess 'Release contract self-test'

@@ -6,6 +6,9 @@ This file records user-visible changes to KeelMatrix CliContract.
 
 ### Added
 
+- Canonical manifest schema version `2` preserves global options separately from root-local options, materializes derived command groups, and compares inherited option surfaces at every command.
+- Canonical baseline reading now enforces the complete source-producible alpha.14 invariant and returns bounded exit `3` for malformed-but-valid baseline states.
+- CI history checks now require complete reachable history, with a deterministic earlier-commit regression test; first-release freshness checks record package, repository, product, and first-party diff-surface reviews.
 - OpenCLI `1.0.0-alpha.14` snapshot, validation, diff, and baseline-check commands.
 - Deterministic versioned canonical manifests with bounded offline parsing and exact cross-JSON/YAML finite-number canonicalization, including trailing-dot exponent mantissas.
 - Stable compatibility diagnostics, JSON/text output, explicit suppressions, and CI exit codes.

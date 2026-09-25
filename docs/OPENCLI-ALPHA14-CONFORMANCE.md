@@ -31,3 +31,13 @@ No tagged validation case is omitted. Cases that the tagged validator expresses 
 `fixtures/opencli/alpha14-conformance-corpus.json` covers valid and rejected JSON documents for schema fields, extensions, command identity, command-key modifiers, groups, positional ordering, variadic arguments and flags, duplicate accepted option names, typed defaults, declared-type constrained choices, `$ENV`/`$FILE` prerequisites, exact numeric values, unknown versions, and offline reference rejection. The committed `numeric-integer-domain-fraction.json` and `.yaml` fixtures prove that a fractional choice on an integer parameter is rejected with bounded `OPENCLI_CHOICE` exit-`3` behavior in both source formats. JSON/YAML byte-equivalence and self-reflexive canonical round trips are checked separately using the numeric, petstore, pleasantries, and regression fixtures.
 
 The extension case deliberately contains `$ref`, `$dynamicRef`, and `include` inside an opaque `x-*` subtree. Those values are metadata and are never interpreted or fetched.
+
+## Canonical semantic families
+
+The alpha.14 codec's command-key trie is represented explicitly in canonical schema version `2`. Missing ancestors and a missing root are materialized as derived `group` nodes; explicit group declarations are equivalent to their derived form, while an explicit action becoming a derived group is a callable-surface break. Parent aliases and descendant paths are preserved through the materialized trie.
+
+`global.flags` are stored as `GlobalOptions`, separate from root-command-local `Root.Options`. Compatibility compares inherited global options plus each command's local options at every command path. Scope moves exercise option add/remove behavior and all represented option attributes, and collisions between inherited and local accepted names are rejected.
+
+The representative source fixture [`fixtures/opencli/fix-round17-scope-and-trie.json`](../fixtures/opencli/fix-round17-scope-and-trie.json) combines an inherited global option, an explicit aliased group, a derived root, and a descendant action. The regression script snapshots and self-compares it as part of the fixture corpus.
+
+`CanonicalManifestReader` enforces the complete source-version-aware invariant before comparison. Hostile but valid JSON canonical baselines for duplicate source formats or exit codes, invalid paths and hierarchy, invalid sources, argument-only fields, unsupported status, impossible arity, malformed names, contradictory domains, and global/local collisions are bounded baseline errors (exit `3`), never unexpected failures.

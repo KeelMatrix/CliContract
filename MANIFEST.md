@@ -1,22 +1,26 @@
 # Canonical Manifest
 
-CliContract writes canonical manifest schema version `1`. The manifest is a KeelMatrix-owned representation and is not an OpenCLI structure dump.
+CliContract writes canonical manifest schema version `2`. The manifest is a KeelMatrix-owned representation and is not an OpenCLI structure dump. Unknown canonical schema versions fail closed.
 
 ## Top-level shape
 
 ```json
 {
-  "SchemaVersion": 1,
+  "SchemaVersion": 2,
   "Adapter": "opencli",
   "SourceVersion": "1.0.0-alpha.14",
   "Info": { "Title": "Example CLI", "Summary": null, "Description": null, "Binary": "example", "Version": "1.0.0", "License": null, "Contact": null, "Install": [] },
   "GlobalExitCodes": [],
   "GlobalConfig": null,
+  "GlobalOptions": [],
   "Root": { "Path": "root", "Aliases": [], "Hidden": false, "ExitCodes": [], "Examples": [], "Arguments": [], "Options": [], "Subcommands": [] }
 }
 ```
 
 `Info` preserves the validated metadata from the source, including scalar URL values in `Contact.Url`, `License.Url`, and `Install[].Url`. `Info.Binary` is invocation identity and is compared as breaking when renamed; other represented `Info` fields, license/contact metadata, and install guidance produce `KMCLI005` informational findings when changed. URLs remain data and are never fetched. `GlobalExitCodes` and command `ExitCodes` preserve code, status, summary, and description; represented changes are warnings. `GlobalConfig.FileSources` contains the supported `json`, `toml`, and `yaml` file-source paths sorted by format; the source object's member order is not represented. Commands contain `Path`, `Kind` (`action` or `group`), sorted `Aliases`, optional `Summary`, `Description`, `Status`, `Hidden`, `ExitCodes`, and `Examples`, plus `Arguments`, `Options`, and `Subcommands`. Parameters contain `Name`, optional `Summary`, `Description`, `Type`, `Required`, `ArityMinimum`, `ArityMaximum`, `Variadic`, `Hint`, `Hidden`, scalar `AllowedValues`, structured `Choices`, scalar `DefaultValue`, ordered `AlternativeSources`, and optional `Status`; represented choice descriptions produce `KMCLI005` informational findings. Arguments additionally contain `Passthrough`, which defaults to false. Options additionally contain sorted `Aliases`.
+`GlobalOptions` contains only `global.flags`; `Root.Options` contains only flags declared on the root command. Global options are inherited by every command for compatibility comparison, while root-local options are accepted only at the root. A global accepted name may not collide with a local accepted name on any command. Global and local scope are therefore preserved rather than merged.
+
+The command collection is a materialized logical trie. Missing ancestors, including a missing `root`, are represented as derived `group` commands. A derived group is not callable; an explicit `action` that becomes a derived group is a breaking callable-surface change. Removing a redundant explicit `group` declaration is compatible when the same derived group remains. Command add/remove findings describe callable commands, not declaration records. Explicit aliases on parents and descendants remain part of the accepted invocation graph.
 
 The current serializer includes null optional values so null and omission have one stable representation. Unknown manifest fields and versions are rejected. The only accepted `Adapter` is `opencli` with `SourceVersion` `1.0.0-alpha.14`.
 
@@ -30,7 +34,7 @@ The current serializer includes null optional values so null and omission have o
 - OpenCLI command keys use the pinned alpha.14 grammar: modifiers beginning with non-letter syntax (`--`, `<...>`, `{...}`, and `[...]`) terminate the logical command-key prefix and never become canonical command segments.
 - Non-variadic parameters never carry item bounds. At most one variadic positional argument is accepted, and it must be last; `minItems` and `maxItems` are preserved only for variadic parameters.
 - Group commands contain no command-local arguments or flags; required positionals cannot follow optional positionals; variadic flags cannot be required; and `$FILE` sources require a configured global JSON, TOML, or YAML file source.
-- Option accepted names and command accepted invocation paths are unique after normalization, including global/root merges, aliases, sibling commands, and descendants below aliases. The same invariant is enforced after source normalization and canonical-manifest parsing.
+- Option accepted names and command accepted invocation paths are unique after normalization, including inherited globals, root-local options, aliases, sibling commands, and descendants below aliases. The same invariant is enforced after source normalization and canonical-manifest parsing.
 - Option names use a `--` prefix in the manifest.
 - Omitted OpenCLI booleans use their documented defaults; null/default/alternative-source distinctions are preserved according to the supported adapter contract.
 - JSON escaping and indentation are produced by the stable .NET JSON serializer; no machine path or source-document metadata is retained.
@@ -43,10 +47,10 @@ Typed defaults and constrained choices are validated against their declared para
 
 ## Version policy
 
-The manifest schema version is independent of the upstream OpenCLI version. A future incompatible manifest or source version must receive an explicit implementation and versioned contract; the current tool fails closed rather than best-effort parsing it. Baselines and current descriptions must use the same manifest and supported source versions.
+The manifest schema version is independent of the upstream OpenCLI version. Version `2` separates global options from root-local options and materializes derived command groups. A future incompatible manifest or source version must receive an explicit implementation and versioned contract; the current tool fails closed rather than best-effort parsing it. Baselines and current descriptions must use the same manifest and supported source versions.
 
 ## Unsupported constructs
 
-The v1 adapter does not interpret runtime behavior, execute commands, scrape help, or fetch remote references. Represented informational metadata is preserved in `Info` and compared as non-gating `KMCLI005` findings; `Info.Binary` remains invocation compatibility semantics. See [`COMPATIBILITY-RULES.md`](COMPATIBILITY-RULES.md) for the complete contract boundary.
+The adapter does not interpret runtime behavior, execute commands, scrape help, or fetch remote references. Represented informational metadata is preserved in `Info` and compared as non-gating `KMCLI005` findings; `Info.Binary` remains invocation compatibility semantics. See [`COMPATIBILITY-RULES.md`](COMPATIBILITY-RULES.md) for the complete contract boundary.
 
 For the CLI failure-role contract, see [`docs/ERROR-TAXONOMY.md`](docs/ERROR-TAXONOMY.md): missing source/baseline paths return exit `2`, while present invalid or unreadable source/baseline files return exit `3`.

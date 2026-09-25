@@ -552,7 +552,7 @@ public sealed class NormalizationTests
     }
 
     [Fact]
-    public void OpenCliPreservesGlobalFlagsAtRoot()
+    public void OpenCliPreservesGlobalFlagsSeparatelyFromRootLocalOptions()
     {
         var input = OpenCliDocument("""
         {
@@ -562,12 +562,13 @@ public sealed class NormalizationTests
         """);
 
         var manifest = Normalizer.Normalize("opencli", input);
-        Assert.Equal(["--debug", "--timeout"], manifest.Root.Options.Select(option => option.Name));
+        Assert.Equal(["--debug", "--timeout"], manifest.GlobalOptions.Select(option => option.Name));
+        Assert.Empty(manifest.Root.Options);
 
         var withoutTimeout = input.Replace(",{\"name\":\"timeout\",\"type\":\"integer\"}", String.Empty, StringComparison.Ordinal);
         var changed = Normalizer.Normalize("opencli", withoutTimeout);
         Assert.NotEqual(Normalizer.Serialize(manifest), Normalizer.Serialize(changed));
-        Assert.DoesNotContain(changed.Root.Options, option => option.Name == "--timeout");
+        Assert.DoesNotContain(changed.GlobalOptions, option => option.Name == "--timeout");
     }
 
     [Fact]
@@ -722,7 +723,7 @@ public sealed class NormalizationTests
         var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "regression-fixtures.json")));
         var command = manifest.Root.Subcommands.Single();
 
-        Assert.Equal(["--debug", "--output-format"], manifest.Root.Options.Select(option => option.Name));
+        Assert.Equal(["--debug", "--output-format"], manifest.GlobalOptions.Select(option => option.Name));
         Assert.Equal(["environment", "region"], command.Arguments.Select(argument => argument.Name));
         Assert.False(command.Arguments[1].Required);
         Assert.Equal(["$ENV", "$FILE"], command.Options.Single(option => option.Name == "--retries").AlternativeSources.Select(source => source.Type));
@@ -730,12 +731,12 @@ public sealed class NormalizationTests
     }
 
     [Fact]
-    public void OfficialGlobalFlagsFixtureNormalizesRootOptionsAndSources()
+    public void OfficialGlobalFlagsFixtureNormalizesInheritedOptionsAndSources()
     {
         var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "globalflags-cli.ocs.yaml")));
 
-        Assert.Contains(manifest.Root.Options, option => option.Name == "--debug");
-        var outputFormat = manifest.Root.Options.Single(option => option.Name == "--output-format");
+        Assert.Contains(manifest.GlobalOptions, option => option.Name == "--debug");
+        var outputFormat = manifest.GlobalOptions.Single(option => option.Name == "--output-format");
         Assert.Equal(["$ENV", "$FILE"], outputFormat.AlternativeSources.Select(source => source.Type));
         Assert.Equal(["json", "text"], outputFormat.AllowedValues.Select(value => value.GetValue<string>()));
     }
@@ -756,7 +757,7 @@ public sealed class NormalizationTests
     {
         var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "petstore-cli.ocs.json")));
 
-        Assert.Contains(manifest.Root.Options, option => option.Name == "--help");
+        Assert.Contains(manifest.GlobalOptions, option => option.Name == "--help");
         var login = manifest.Root.Subcommands.Single(command => command.Path == "root / user / login");
         Assert.Equal(["$ENV", "$FILE"], login.Options.Single(option => option.Name == "--username").AlternativeSources.Select(source => source.Type));
         Assert.Contains(manifest.Root.Subcommands, command => command.Path == "root / pet / upload-image");
@@ -775,7 +776,7 @@ public sealed class NormalizationTests
         Assert.DoesNotContain(paths, path => path.Contains("--", StringComparison.Ordinal));
         Assert.DoesNotContain(paths, path => path.Contains('<') || path.Contains('[') || path.Contains('{'));
         Assert.DoesNotContain(paths, path => path.EndsWith("arguments", StringComparison.Ordinal));
-        Assert.Equal(23, paths.Count);
+        Assert.Equal(24, paths.Count);
     }
 
     [Fact]
@@ -843,6 +844,7 @@ public sealed class NormalizationTests
         var manifest = Normalizer.Normalize("opencli", OpenCliDocument("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"value\",\"type\":\"integer\",\"choices\":[{\"value\":1}]}]}}}"));
         var document = JsonNode.Parse(Normalizer.Serialize(manifest))!.AsObject();
         document["Root"]!["Options"]![0]!["Choices"]![0]!["Value"] = JsonValue.Create(1.25);
+        document["Root"]!["Options"]![0]!["AllowedValues"]![0] = JsonValue.Create(1.25);
 
         var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
 
@@ -856,6 +858,44 @@ public sealed class NormalizationTests
 
         Assert.Empty(CompatibilityAnalyzer.Compare(manifest, manifest).Findings);
         Assert.Empty(CompatibilityAnalyzer.Compare(CanonicalManifestReader.Read(Normalizer.Serialize(manifest)), manifest).Findings);
+    }
+
+    [Fact]
+    public void CanonicalManifestReaderRejectsEveryHostileSourceImpossibleState()
+    {
+        var mutations = new (string Name, Action<JsonObject> Mutate)[]
+        {
+            ("duplicate-file-format", document => ((JsonArray)document["GlobalConfig"]!["FileSources"]!).Add(((JsonArray)document["GlobalConfig"]!["FileSources"]!)[0]!.DeepClone())),
+            ("empty-file-path", document => document["GlobalConfig"]!["FileSources"]![0]!["Path"] = ""),
+            ("duplicate-global-exit-code", document => ((JsonArray)document["GlobalExitCodes"]!).Add(((JsonArray)document["GlobalExitCodes"]!)[0]!.DeepClone())),
+            ("duplicate-command-exit-code", document => ((JsonArray)document["Root"]!["ExitCodes"]!).Add(((JsonArray)document["Root"]!["ExitCodes"]!)[0]!.DeepClone())),
+            ("missing-info-title", document => document["Info"]!["Title"] = null),
+            ("invalid-command-path", document => document["Root"]!["Subcommands"]![0]!["Path"] = "root /"),
+            ("invalid-source-type", document => document["GlobalOptions"]![0]!["AlternativeSources"]![0]!["Type"] = "$BAD"),
+            ("empty-source-property", document => document["GlobalOptions"]![0]!["AlternativeSources"]![0]!["Property"] = ""),
+            ("file-source-without-config", document => document["GlobalConfig"] = null),
+            ("argument-default", document => document["Root"]!["Subcommands"]![0]!["Arguments"]![0]!["DefaultValue"] = "not-allowed"),
+            ("unrepresentable-status", document => document["Root"]!["Status"] = "DEPRECATED"),
+            ("invalid-arity", document => document["GlobalOptions"]![0]!["ArityMinimum"] = 2),
+            ("invalid-option-name", document => document["GlobalOptions"]![0]!["Name"] = "verbose"),
+            ("invalid-option-alias", document => document["GlobalOptions"]![0]!["Aliases"]![0] = "bad alias"),
+            ("contradictory-domains", document => document["GlobalOptions"]![0]!["AllowedValues"]![0] = "other"),
+            ("group-local-option", document => { document["Root"]!["Kind"] = "group"; }),
+            ("invalid-exit-status", document => document["GlobalExitCodes"]![0]!["Status"] = "DEPRECATED")
+        };
+
+        foreach (var (name, mutate) in mutations)
+        {
+            var baseline = JsonNode.Parse(Normalizer.Serialize(Normalizer.Normalize("opencli", HostileCanonicalSeed())))!.AsObject();
+            mutate(baseline);
+
+            var error = Record.Exception(() => CanonicalManifestReader.Read(baseline.ToJsonString()));
+
+            Assert.True(error is NormalizationException, name);
+            var normalizationError = (NormalizationException)error!;
+            Assert.NotEqual("UNEXPECTED_ERROR", normalizationError.Code);
+            Assert.False(string.IsNullOrWhiteSpace(normalizationError.Message), name);
+        }
     }
 
     [Theory]
@@ -874,6 +914,7 @@ public sealed class NormalizationTests
     [InlineData("example-cli-reordered.json")]
     [InlineData("example-cli.yaml")]
     [InlineData("fix-round10.yaml")]
+    [InlineData("fix-round17-scope-and-trie.json")]
     [InlineData("global-config-order-a.json")]
     [InlineData("global-config-order-a.yaml")]
     [InlineData("global-config-order-b.json")]
@@ -1001,6 +1042,20 @@ public sealed class NormalizationTests
         };
         return document.ToJsonString();
     }
+
+    private static string HostileCanonicalSeed() => OpenCliDocument("""
+        {
+          "global": {
+            "config": {"json": "config.json"},
+            "exitCodes": [{"code": 0, "status": "OK", "summary": "ok"}],
+            "flags": [{"name": "verbose", "type": "string", "aliases": ["v"], "alternativeSources": [{"type": "$ENV", "property": "VERBOSE"}, {"type": "$FILE", "property": "$.verbose"}], "choices": [{"value": "yes"}]}]
+          },
+          "commands": {
+            "tool": {"exitCodes": [{"code": 0, "status": "OK", "summary": "ok"}], "flags": [{"name": "local", "type": "boolean"}]},
+            "tool run <target>": {"args": [{"name": "target", "type": "string"}]}
+          }
+        }
+        """);
 
     private static string NumericYamlDocument(string scalar) => $$"""
         opencliVersion: 1.0.0-alpha.14

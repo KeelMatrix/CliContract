@@ -4,12 +4,13 @@ namespace KeelMatrix.CliContract.Core;
 
 public sealed class CanonicalManifest
 {
-    public int SchemaVersion { get; init; } = 1;
+    public int SchemaVersion { get; init; } = 2;
     public required string Adapter { get; init; }
     public required string SourceVersion { get; init; }
     public CanonicalInfo Info { get; init; } = new();
     public CanonicalExitCode[] GlobalExitCodes { get; init; } = [];
     public CanonicalGlobalConfig? GlobalConfig { get; init; }
+    public CanonicalOption[] GlobalOptions { get; init; } = [];
     public required CanonicalCommand Root { get; init; }
 }
 

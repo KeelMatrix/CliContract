@@ -44,6 +44,36 @@ try {
     Assert-Case 'validate-rejects-baseline' (Invoke-Tool @('validate', $source, '--baseline', (Join-Path $temp 'missing.json'), '--no-telemetry')) 2 'UNSUPPORTED_OPTION'
     Assert-Case 'check-rejects-output' (Invoke-Tool @('check', $source, '--baseline', $baselinePath, '--output', (Join-Path $temp 'ignored.json'), '--no-telemetry')) 2 'UNSUPPORTED_OPTION'
 
+    $richSource = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"config":{"json":"config.json"},"exitCodes":[{"code":0,"status":"OK","summary":"ok"}],"flags":[{"name":"verbose","type":"string","alternativeSources":[{"type":"$ENV","property":"VERBOSE"},{"type":"$FILE","property":"$.verbose"}],"choices":[{"value":"yes"}]}]},"commands":{"tool":{"exitCodes":[{"code":0,"status":"OK","summary":"ok"}],"flags":[{"name":"local","type":"boolean"}]},"tool run <target>":{"args":[{"name":"target","type":"string"}]}}}'
+    $richSourcePath = Join-Path $temp 'rich-source.json'
+    $richBaselinePath = Join-Path $temp 'rich-baseline.canonical.json'
+    Write-Utf8 $richSourcePath $richSource
+    Assert-Case 'rich-baseline' (Invoke-Tool @('snapshot', $richSourcePath, '--input', 'opencli', '--output', $richBaselinePath, '--no-telemetry')) 0 'SNAPSHOT'
+
+    function Write-CanonicalMutation([string] $Name, [scriptblock] $Mutation) {
+        $document = [System.Text.Json.Nodes.JsonNode]::Parse([IO.File]::ReadAllText($richBaselinePath))
+        & $Mutation $document
+        $path = Join-Path $temp ($Name + '.canonical.json')
+        Write-Utf8 $path $document.ToJsonString()
+        return $path
+    }
+
+    $hostileCanonicalCases = @(
+        @{ Name = 'duplicate-global-file-format'; Mutate = { param($document) $sources = $document['GlobalConfig']['FileSources'].AsArray(); $sources.Add($sources[0].DeepClone()) } },
+        @{ Name = 'duplicate-global-exit-code'; Mutate = { param($document) $codes = $document['GlobalExitCodes'].AsArray(); $codes.Add($codes[0].DeepClone()) } },
+        @{ Name = 'duplicate-command-exit-code'; Mutate = { param($document) $codes = $document['Root']['ExitCodes'].AsArray(); $codes.Add($codes[0].DeepClone()) } },
+        @{ Name = 'invalid-alternative-source'; Mutate = { param($document) $document['GlobalOptions'][0]['AlternativeSources'][0]['Type'] = '$BAD' } },
+        @{ Name = 'argument-default'; Mutate = { param($document) $document['Root']['Subcommands'][0]['Arguments'][0]['DefaultValue'] = 'not-allowed' } },
+        @{ Name = 'unrepresentable-status'; Mutate = { param($document) $document['Root']['Status'] = 'DEPRECATED' } },
+        @{ Name = 'contradictory-domain'; Mutate = { param($document) $document['GlobalOptions'][0]['AllowedValues'][0] = 'other' } }
+    )
+    foreach ($case in $hostileCanonicalCases) {
+        $casePath = Write-CanonicalMutation $case.Name $case.Mutate
+        Assert-Case ("$($case.Name)-check") (Invoke-Tool @('check', $richSourcePath, '--baseline', $casePath, '--no-telemetry')) 3 $null
+        Assert-Case ("$($case.Name)-diff") (Invoke-Tool @('diff', $casePath, $richBaselinePath, '--no-telemetry')) 3 $null
+    }
+    Write-Output 'HOSTILE_CANONICAL_BASELINES=PASS check_exit=3 diff_exit=3'
+
     $mixedDomain = $valid.Replace('"type":"string"', '"type":"string","choices":[{"value":"red"},{"value":"blue"}]').Replace('"region"', '"colour"')
     $mixedDomainCurrent = $mixedDomain.Replace('[{"value":"red"},{"value":"blue"}]', '[{"value":"red"},{"value":"green"}]')
     $mixedDomainPath = Join-Path $temp 'mixed-domain-old.json'
@@ -196,6 +226,7 @@ try {
         'example-cli-reordered.json',
         'example-cli.yaml',
         'fix-round10.yaml',
+        'fix-round17-scope-and-trie.json',
         'global-config-order-a.json',
         'global-config-order-a.yaml',
         'global-config-order-b.json',

@@ -6,7 +6,7 @@ namespace KeelMatrix.CliContract.Core;
 
 public static class CanonicalManifestReader
 {
-    public const int SupportedSchemaVersion = 1;
+    public const int SupportedSchemaVersion = 2;
 
     public static CanonicalManifest Read(string input, NormalizationLimits? limits = null)
     {
@@ -57,7 +57,7 @@ public static class CanonicalManifestReader
 
     private static CanonicalManifest ParseManifest(JsonObject value, NormalizationLimits limits)
     {
-        EnsureProperties(value, ["SchemaVersion", "Adapter", "SourceVersion", "Info", "GlobalExitCodes", "GlobalConfig", "Root"], "manifest");
+        EnsureProperties(value, ["SchemaVersion", "Adapter", "SourceVersion", "Info", "GlobalExitCodes", "GlobalConfig", "GlobalOptions", "Root"], "manifest");
         var schemaVersion = RequiredInt(value, "SchemaVersion");
         if (schemaVersion != SupportedSchemaVersion)
         {
@@ -80,6 +80,7 @@ public static class CanonicalManifestReader
             Info = value.ContainsKey("Info") ? ParseInfo(value["Info"], limits) : new(),
             GlobalExitCodes = ReadExitCodes(value["GlobalExitCodes"], limits),
             GlobalConfig = value.ContainsKey("GlobalConfig") && value["GlobalConfig"] is not null ? ParseGlobalConfig(value["GlobalConfig"], limits) : null,
+            GlobalOptions = ReadParameters(value["GlobalOptions"], true, limits).Cast<CanonicalOption>().ToArray(),
             Root = root
         };
         CanonicalInvariantValidator.Validate(manifest);
@@ -113,11 +114,11 @@ public static class CanonicalManifestReader
         EnsureProperties(value, ["Title", "Summary", "Description", "Binary", "Version", "License", "Contact", "Install"], "info");
         return new CanonicalInfo
         {
-            Title = ReadNullableString(value, "Title", limits),
+            Title = RequiredString(value, "Title", limits),
             Summary = ReadNullableString(value, "Summary", limits),
             Description = ReadNullableString(value, "Description", limits),
-            Binary = ReadNullableString(value, "Binary", limits),
-            Version = ReadNullableString(value, "Version", limits),
+            Binary = RequiredString(value, "Binary", limits),
+            Version = RequiredString(value, "Version", limits),
             License = value.ContainsKey("License") && value["License"] is not null ? ParseLicense(value["License"], limits) : null,
             Contact = value.ContainsKey("Contact") && value["Contact"] is not null ? ParseContact(value["Contact"], limits) : null,
             Install = value.ContainsKey("Install") ? ReadInstalls(value["Install"], limits) : []

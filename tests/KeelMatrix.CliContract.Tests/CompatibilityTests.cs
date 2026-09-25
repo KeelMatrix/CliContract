@@ -194,13 +194,15 @@ public sealed class CompatibilityTests
         {
             Adapter = "opencli",
             SourceVersion = Normalizer.OpenCliVersion,
+            Info = new CanonicalInfo { Title = "Tool", Binary = "tool", Version = "1" },
             Root = new CanonicalCommand
             {
                 Path = "root",
+                Kind = "group",
                 Subcommands =
                 [
-                    new CanonicalCommand { Path = "root / run" },
-                    new CanonicalCommand { Path = "root / run" }
+                    new CanonicalCommand { Path = "root / run", Kind = "group" },
+                    new CanonicalCommand { Path = "root / run", Kind = "group" }
                 ]
             }
         };
@@ -363,6 +365,99 @@ public sealed class CompatibilityTests
     }
 
     [Fact]
+    public void GlobalOptionScopeIsComparedAcrossEveryCommandInBothDirections()
+    {
+        var global = NormalizeWithInfo("""
+            {"global":{"flags":[{"name":"verbose","type":"boolean"}]},"commands":{"tool":{},"tool sub":{}}}
+            """, "tool");
+        var rootLocal = NormalizeWithInfo("""
+            {"commands":{"tool":{"flags":[{"name":"verbose","type":"boolean"}]},"tool sub":{}}}
+            """, "tool");
+
+        var narrowed = CompatibilityAnalyzer.Compare(global, rootLocal).Findings;
+        var broadened = CompatibilityAnalyzer.Compare(rootLocal, global).Findings;
+
+        Assert.Contains(narrowed, finding => finding.Code == "KMCLI101" && finding.Path == "root / sub / --verbose");
+        Assert.Contains(broadened, finding => finding.Code == "KMCLI002" && finding.Path == "root / sub / --verbose");
+        Assert.DoesNotContain(narrowed, finding => finding.Code == "KMCLI103");
+        Assert.DoesNotContain(broadened, finding => finding.Code == "KMCLI103");
+    }
+
+    [Fact]
+    public void MovingAnOptionBetweenScopesStillComparesAllRepresentedAttributes()
+    {
+        var baseline = NormalizeWithInfo("""
+            {"global":{"config":{"json":"config.json"},"flags":[{"name":"value","type":"string","aliases":["v"],"default":"old","alternativeSources":[{"type":"$ENV","property":"VALUE"}],"summary":"old","hidden":false}]},"commands":{"tool":{},"tool sub":{}}}
+            """, "tool");
+        var current = NormalizeWithInfo("""
+            {"commands":{"tool":{"flags":[{"name":"value","type":"integer","aliases":["x"],"required":true,"default":1,"alternativeSources":[{"type":"$ENV","property":"NEW_VALUE"}],"summary":"new","hidden":true}]},"tool sub":{}}}
+            """, "tool");
+
+        var findings = CompatibilityAnalyzer.Compare(baseline, current).Findings;
+
+        Assert.Contains(findings, finding => finding.Code == "KMCLI104");
+        Assert.Contains(findings, finding => finding.Code == "KMCLI105");
+        Assert.Contains(findings, finding => finding.Code == "KMCLI107");
+        Assert.Contains(findings, finding => finding.Code == "KMCLI201");
+        Assert.Contains(findings, finding => finding.Code == "KMCLI204");
+        Assert.Contains(findings, finding => finding.Code == "KMCLI005");
+        Assert.Contains(findings, finding => finding.Code == "KMCLI006");
+        Assert.Contains(findings, finding => finding.Code == "KMCLI101" && finding.Path == "root / sub / --value");
+    }
+
+    [Fact]
+    public void GlobalAndLocalAcceptedOptionNameCollisionFailsClosed()
+    {
+        var input = NormalizeWithInfo("""
+            {"global":{"flags":[{"name":"verbose","type":"boolean"}]},"commands":{"tool":{"flags":[{"name":"other","type":"boolean"}]}}}
+            """, "tool");
+
+        var document = JsonNode.Parse(Normalizer.Serialize(input))!.AsObject();
+        document["Root"]!["Options"]![0]!["Aliases"] = new JsonArray("verbose");
+        var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        Assert.Equal("OPENCLI_DUPLICATE_PARAMETER", error.Code);
+    }
+
+    [Fact]
+    public void ImplicitDerivedGroupsPreserveAndRemoveCallableSurfaceCorrectly()
+    {
+        var explicitAction = NormalizeWithInfo("""
+            {"commands":{"tool":{"kind":"action"},"tool parent":{"kind":"action"},"tool parent sub":{}}}
+            """, "tool");
+        var implicitGroup = NormalizeWithInfo("""
+            {"commands":{"tool parent sub":{}}}
+            """, "tool");
+        var explicitGroup = NormalizeWithInfo("""
+            {"commands":{"tool":{"kind":"group"},"tool parent":{"kind":"group"},"tool parent sub":{}}}
+            """, "tool");
+
+        var actionRemoved = CompatibilityAnalyzer.Compare(explicitAction, implicitGroup).Findings;
+        var redundantGroupRemoved = CompatibilityAnalyzer.Compare(explicitGroup, implicitGroup).Findings;
+        var redundantGroupAdded = CompatibilityAnalyzer.Compare(implicitGroup, explicitGroup).Findings;
+
+        Assert.Contains(actionRemoved, finding => finding.Code == "KMCLI111" && finding.Category == "breaking" && finding.Path == "root / parent");
+        Assert.DoesNotContain(actionRemoved, finding => finding.Code == "KMCLI103" && finding.Path == "root / parent");
+        Assert.DoesNotContain(redundantGroupRemoved, finding => finding.Code is "KMCLI001" or "KMCLI103" or "KMCLI111");
+        Assert.DoesNotContain(redundantGroupAdded, finding => finding.Code is "KMCLI001" or "KMCLI103" or "KMCLI111");
+    }
+
+    [Fact]
+    public void ExplicitParentAliasesFlowThroughMaterializedDerivedParents()
+    {
+        var aliasedParent = NormalizeWithInfo("""
+            {"commands":{"tool parent":{"aliases":["p"],"kind":"group"},"tool parent sub":{}}}
+            """, "tool");
+        var derivedParent = NormalizeWithInfo("""
+            {"commands":{"tool parent sub":{}}}
+            """, "tool");
+
+        var findings = CompatibilityAnalyzer.Compare(aliasedParent, derivedParent).Findings;
+
+        Assert.Contains(findings, finding => finding.Code == "KMCLI104" && finding.Path == "root / parent / sub");
+    }
+
+    [Fact]
     public void DefaultSourcesAndGlobalFileConfigurationAreWarningsIncludingOrderChanges()
     {
         var baseline = NormalizeWithGlobal("""{"commands":{"tool":{"flags":[{"name":"format","type":"string","alternativeSources":[{"type":"$ENV","property":"FORMAT"},{"type":"$FILE","property":"$.format"}]}]}}}""", "FORMAT", "$.format", "config.json");
@@ -391,7 +486,7 @@ public sealed class CompatibilityTests
         var roundTrip = CanonicalManifestReader.Read(serialized);
 
         Assert.Equal(serialized, Normalizer.Serialize(roundTrip));
-        var unsupported = serialized.Replace("\"SchemaVersion\": 1", "\"SchemaVersion\": 2", StringComparison.Ordinal);
+        var unsupported = serialized.Replace("\"SchemaVersion\": 2", "\"SchemaVersion\": 3", StringComparison.Ordinal);
         var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(unsupported));
         Assert.Equal("UNSUPPORTED_MANIFEST_VERSION", error.Code);
     }

@@ -45,7 +45,7 @@ public static class CompatibilityAnalyzer
         CompareRootInvocationNames(baseline, current, findings);
         CompareExitCodes(baseline.GlobalExitCodes, current.GlobalExitCodes, "root", findings);
         CompareGlobalConfig(baseline.GlobalConfig, current.GlobalConfig, findings);
-        CompareCommand(baseline.Root, current.Root, findings);
+        CompareCommand(baseline.Root, current.Root, baseline.GlobalOptions, current.GlobalOptions, findings);
 
         var matchedCurrentCommands = new HashSet<CanonicalCommand>();
         foreach (var baselineCommand in baselineGraph.Commands.OrderBy(command => command.Path, StringComparer.Ordinal))
@@ -59,7 +59,10 @@ public static class CompatibilityAnalyzer
 
             if (candidates.Length == 0)
             {
-                findings.Add(new CompatibilityFinding("KMCLI103", "breaking", baselineCommand.Path, "Removed command."));
+                if (IsRunnable(baselineCommand))
+                {
+                    findings.Add(new CompatibilityFinding("KMCLI103", "breaking", baselineCommand.Path, "Removed callable command."));
+                }
                 continue;
             }
 
@@ -71,14 +74,17 @@ public static class CompatibilityAnalyzer
             var currentCommand = candidates[0];
             matchedCurrentCommands.Add(currentCommand);
             CompareInvocationNames(oldInvocations, currentGraph.GetInvocations(currentCommand), baselineCommand.Path, "callable alias", "KMCLI104", "KMCLI004", findings);
-            CompareCommand(baselineCommand, currentCommand, findings);
+            CompareCommand(baselineCommand, currentCommand, baseline.GlobalOptions, current.GlobalOptions, findings);
         }
 
         foreach (var currentCommand in currentGraph.Commands
                      .Where(command => !matchedCurrentCommands.Contains(command))
                      .OrderBy(command => command.Path, StringComparer.Ordinal))
         {
-            findings.Add(new CompatibilityFinding("KMCLI001", "info", currentCommand.Path, "Added command."));
+            if (IsRunnable(currentCommand))
+            {
+                findings.Add(new CompatibilityFinding("KMCLI001", "info", currentCommand.Path, "Added callable command."));
+            }
         }
 
         return new CompatibilityResult(findings);
@@ -202,7 +208,7 @@ public static class CompatibilityAnalyzer
         }
     }
 
-    private static void CompareCommand(CanonicalCommand baseline, CanonicalCommand current, List<CompatibilityFinding> findings)
+    private static void CompareCommand(CanonicalCommand baseline, CanonicalCommand current, IReadOnlyList<CanonicalOption> baselineGlobalOptions, IReadOnlyList<CanonicalOption> currentGlobalOptions, List<CompatibilityFinding> findings)
     {
         var path = baseline.Path;
         var baselineKind = baseline.Kind ?? "action";
@@ -223,15 +229,17 @@ public static class CompatibilityAnalyzer
         CompareStatus(baseline.Status, current.Status, path, findings);
         CompareExitCodes(baseline.ExitCodes, current.ExitCodes, path, findings);
         CompareExamples(baseline.Examples, current.Examples, path, findings);
-        CompareOptions(baseline, current, findings);
+        CompareOptions(baseline, current, baselineGlobalOptions, currentGlobalOptions, findings);
         CompareArguments(baseline, current, findings);
     }
 
-    private static void CompareOptions(CanonicalCommand baseline, CanonicalCommand current, List<CompatibilityFinding> findings)
+    private static void CompareOptions(CanonicalCommand baseline, CanonicalCommand current, IReadOnlyList<CanonicalOption> baselineGlobalOptions, IReadOnlyList<CanonicalOption> currentGlobalOptions, List<CompatibilityFinding> findings)
     {
-        var currentMap = ToUniqueOptionMap(current.Options, current.Path);
+        var baselineOptions = EffectiveOptions(baseline, baselineGlobalOptions);
+        var currentOptions = EffectiveOptions(current, currentGlobalOptions);
+        var currentMap = ToUniqueOptionMap(currentOptions, current.Path);
         var matched = new HashSet<CanonicalOption>();
-        foreach (var oldOption in baseline.Options.OrderBy(option => option.Name, StringComparer.Ordinal))
+        foreach (var oldOption in baselineOptions.OrderBy(option => option.Name, StringComparer.Ordinal))
         {
             var candidates = OptionInvocationNames(oldOption)
                 .Where(currentMap.ContainsKey)
@@ -256,7 +264,7 @@ public static class CompatibilityAnalyzer
             CompareParameter(oldOption, newOption, optionPath, "option", findings);
         }
 
-        foreach (var newOption in current.Options.Where(option => !matched.Contains(option)).OrderBy(option => option.Name, StringComparer.Ordinal))
+        foreach (var newOption in currentOptions.Where(option => !matched.Contains(option)).OrderBy(option => option.Name, StringComparer.Ordinal))
         {
             var path = current.Path + " / " + newOption.Name;
             var required = newOption.Required == true;
@@ -331,6 +339,11 @@ public static class CompatibilityAnalyzer
         yield return option.Name;
         foreach (var alias in option.Aliases) yield return alias;
     }
+
+    private static CanonicalOption[] EffectiveOptions(CanonicalCommand command, IReadOnlyList<CanonicalOption> globalOptions) =>
+        globalOptions.Concat(command.Options).ToArray();
+
+    private static bool IsRunnable(CanonicalCommand command) => string.Equals(command.Kind ?? "action", "action", StringComparison.Ordinal);
 
     private static void CompareParameter(CanonicalParameter baseline, CanonicalParameter current, string path, string kind, List<CompatibilityFinding> findings)
     {

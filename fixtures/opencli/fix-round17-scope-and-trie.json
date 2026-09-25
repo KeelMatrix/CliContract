@@ -1,0 +1,31 @@
+{
+  "opencliVersion": "1.0.0-alpha.14",
+  "info": {
+    "title": "Scope and trie fixture",
+    "binary": "tool",
+    "version": "1"
+  },
+  "global": {
+    "flags": [
+      {
+        "name": "verbose",
+        "type": "boolean",
+        "aliases": ["v"]
+      }
+    ]
+  },
+  "commands": {
+    "tool parent": {
+      "kind": "group",
+      "aliases": ["p"]
+    },
+    "tool parent run <target>": {
+      "args": [
+        {
+          "name": "target",
+          "required": true
+        }
+      ]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # CliContract Compatibility Rules
 
-This document defines the v1 change-classification contract for KeelMatrix CliContract. It applies to OpenCLI `1.0.0-alpha.14` JSON and YAML input and canonical manifest schema version `1`.
+This document defines the v1 change-classification contract for KeelMatrix CliContract. It applies to OpenCLI `1.0.0-alpha.14` JSON and YAML input and canonical manifest schema version `2`.
 
 ## Categories and failure policy
 
@@ -14,7 +14,7 @@ This document defines the v1 change-classification contract for KeelMatrix CliCo
 
 | Code | Category | Change |
 | --- | --- | --- |
-| `KMCLI001` | info | Command added |
+| `KMCLI001` | info | Callable command added |
 | `KMCLI002` | info | Optional option added |
 | `KMCLI003` | info | Optional argument added |
 | `KMCLI004` | info | Alias added |
@@ -22,7 +22,7 @@ This document defines the v1 change-classification contract for KeelMatrix CliCo
 | `KMCLI006` | info | Represented hidden/help example metadata changed |
 | `KMCLI101` | breaking | Option removed |
 | `KMCLI102` | breaking | Argument removed |
-| `KMCLI103` | breaking | Command removed |
+| `KMCLI103` | breaking | Callable command removed |
 | `KMCLI104` | breaking/info | Alias removed or added; removal is breaking, addition is informational |
 | `KMCLI105` | breaking | Optional parameter became required |
 | `KMCLI106` | breaking | Accepted arity narrowed |
@@ -80,7 +80,7 @@ The adapter accepts the pinned OpenCLI `1.0.0-alpha.14` field set below. Every r
 | parameter `choices[].value` | (a) | Constrained accepted domain |
 | argument `passthrough` | (a) | Accepted post-`--` forms |
 | command `kind` | (a) | Runnable action/group state |
-| `global.flags` | (a) | Root options and accepted invocations |
+| `global.flags` | (a) | Inherited global options and accepted invocations; stored in `GlobalOptions` |
 | `global.config` (`json`, `toml`, `yaml`) | (b) | Preserved and compared as a configuration warning |
 | `info.title`, `info.summary`, `info.description`, `info.version` | (b) | Preserved and compared as `KMCLI005` informational metadata |
 | `info.install` and install fields `name`, `command`, `url`, `description` | (b) | Preserved and compared as `KMCLI005` informational installation guidance |
@@ -94,11 +94,13 @@ The adapter accepts the pinned OpenCLI `1.0.0-alpha.14` field set below. Every r
 | `choices[].description` | (b) | Preserved and compared as `KMCLI005` informational choice help text |
 | Any `x-*` extension and its contents | (c) | Accepted and ignored for compatibility; an identical document with only an `x-*` change has no compatibility finding |
 
-This matrix is implemented by the canonical contract and consumed by normalization and comparison. In particular, command comparison uses the accepted invocation-name graph, all type transitions use the accepted lexical-domain relation, represented exit-code changes are warnings, and every represented class-(b) metadata/help field produces a stable finding when it changes.
+This matrix is implemented by the canonical contract and consumed by normalization and comparison. In particular, command comparison uses the accepted invocation-name graph, all type transitions use the accepted lexical-domain relation, represented exit-code changes are warnings, and every represented class-(b) metadata/help field produces a stable finding when it changes. Canonical schema version `2` keeps `GlobalOptions` separate from root-local `Root.Options`; comparison evaluates the effective inherited-plus-local option surface at every command.
 
 ## Semantics
 
-The analyzer compares the accepted invocation-name graph (a trie of primary names and aliases at every command segment), options by their accepted long-name graph, and arguments by name and positional slot. A rename without the old alias is breaking; retaining the old name preserves the old invocation, including descendants below a renamed group. Alias removal is breaking only when an accepted invocation is actually removed. Source declaration order does not affect command, option, alias, or choice collections. Argument declaration order remains in the canonical manifest because positional order is part of the contract; reordering or inserting an argument before or between existing slots produces breaking finding `KMCLI109`, while a trailing optional argument is informational. Different command keys that normalize to the same logical path are rejected with `OPENCLI_DUPLICATE_COMMAND_PATH` rather than being merged or dropped.
+The analyzer compares the accepted invocation-name graph (a materialized trie of primary names and aliases at every command segment), options by their accepted long-name graph, and arguments by name and positional slot. A rename without the old alias is breaking; retaining the old name preserves the old invocation, including descendants below a renamed group. Alias removal is breaking only when an accepted invocation is actually removed. Source declaration order does not affect command, option, alias, or choice collections. Argument declaration order remains in the canonical manifest because positional order is part of the contract; reordering or inserting an argument before or between existing slots produces breaking finding `KMCLI109`, while a trailing optional argument is informational. Different command keys that normalize to the same logical path are rejected with `OPENCLI_DUPLICATE_COMMAND_PATH` rather than being merged or dropped. Missing command ancestors are derived `group` nodes; explicit group-to-derived-group equivalence is compatible, while an action-to-derived-group transition is breaking. Callable command diagnostics are based on runnable actions, not declaration-record presence.
+
+Global options apply to every command. Root-local options apply only to the root command. Moving an option between those scopes is compared as a change to the effective surface of every affected command, in both directions, including requiredness, arity, type and choices, defaults, alternative sources, aliases, and represented help/hidden metadata. A global accepted name and a command-local accepted name colliding on the same command is invalid canonical state and returns exit `3`.
 
 Breaking rules are command/option/argument removal, callable alias removal, binary invocation rename, action-to-group transitions, optional-to-required changes, arity narrowing, required type narrowing, allowed-value removal from an explicitly constrained current domain, allowed-value domain narrowing, and loss of accepted post-`--` argument forms when `passthrough` changes from true to false. Adding an optional command/option/argument or alias is informational. Adding a required parameter is breaking. Enabling argument passthrough is informational. Default changes, alternative-source type/property/order changes, and global file-source configuration changes are warnings. Changes to represented `info` metadata, install guidance, command/parameter summary or description/help, examples/visibility metadata, and choice descriptions are informational by default and use `KMCLI005` or `KMCLI006` as listed in the catalog. Deprecation/status changes are warnings only when represented by the supported format.
 
@@ -106,7 +108,7 @@ Type/domain widening does not produce a breaking finding. The accepted-domain re
 
 ## Supported upstream boundary
 
-The adapter requires `opencliVersion: 1.0.0-alpha.14`, required `info.title`, `info.binary`, and `info.version`, and validates all recognized in-contract fields plus the pinned schema's required structure. The binary is invocation identity: every command key must begin with `info.binary`, and a binary rename is breaking. Command `kind` is preserved as runnable state; omitted kind is normalized as an action, and action-to-group is breaking. Informational `info` and install metadata are preserved in `CanonicalManifest.Info` and compared as `KMCLI005` info findings; binary is compatibility semantics. Global file-source configuration and global/command exit codes are preserved canonically. Argument `passthrough` is normalized with a default of false and is compatibility semantics because it controls how accepted forms after `--` are interpreted. Help metadata, examples, hidden state, defaults, alternative sources, exit-code metadata, and choice descriptions remain represented so their changes produce the documented stable findings instead of being discarded. `x-*` extensions are accepted and ignored. Unknown non-extension fields on the root, command, argument, flag, choice, and other recognized schema objects fail closed. Invalid recognized values fail closed.
+The adapter requires `opencliVersion: 1.0.0-alpha.14`, required `info.title`, `info.binary`, and `info.version`, and validates all recognized in-contract fields plus the pinned schema's required structure. The binary is invocation identity: every command key must begin with `info.binary`, and a binary rename is breaking. Command `kind` is preserved as runnable state; omitted kind is normalized as an action for explicit commands, while omitted ancestors and root are materialized as derived groups. Informational `info` and install metadata are preserved in `CanonicalManifest.Info` and compared as `KMCLI005` info findings; binary is compatibility semantics. Global file-source configuration and global/command exit codes are preserved canonically. Argument `passthrough` is normalized with a default of false and is compatibility semantics because it controls how accepted forms after `--` are interpreted. Help metadata, examples, hidden state, defaults, alternative sources, exit-code metadata, and choice descriptions remain represented so their changes produce the documented stable findings instead of being discarded. `x-*` extensions are accepted and ignored. Unknown non-extension fields on the root, command, argument, flag, choice, and other recognized schema objects fail closed. Invalid recognized values fail closed.
 
 The pinned conformance corpus is [`fixtures/opencli/alpha14-conformance-corpus.json`](fixtures/opencli/alpha14-conformance-corpus.json), with its tagged-test inventory in [`docs/OPENCLI-ALPHA14-CONFORMANCE.md`](docs/OPENCLI-ALPHA14-CONFORMANCE.md). It covers official valid structure, recognized fields, opaque extensions, arguments, flags, variadic bounds, aliases, choices, defaults, alternative sources, command kind, binary identity, exit codes, config, unknown versions, and invalid combinations. Unit tests execute its validity oracle and separately compare equivalent JSON and YAML documents. The repository does not invoke a remote validator at runtime; the local `ocli` executable was not available during this refresh, so differential validation is intentionally not a release prerequisite.
 
@@ -116,7 +118,7 @@ Finite JSON numbers and recognized YAML integer/float spellings are compared by 
 
 ## Failure and privacy behavior
 
-Unknown upstream or canonical manifest versions are rejected explicitly. JSON duplicate keys, duplicate normalized parameter names, malformed JSON/YAML, YAML anchors/aliases, excessive size/depth/node/string/collection limits, invalid recognized fields, and incompatible baselines are errors, never compatible results. The described CLI is never started.
+Unknown upstream or canonical manifest versions are rejected explicitly. The canonical reader also rejects every state outside the source-producible alpha.14 contract before compatibility comparison: duplicate source formats or exit codes, invalid paths and hierarchy, invalid option/alias forms, impossible arity/default/source combinations, contradictory choice domains, unsupported status/deprecation values, and global/local option collisions. JSON duplicate keys, duplicate normalized parameter names, malformed JSON/YAML, YAML anchors/aliases, excessive size/depth/node/string/collection limits, invalid recognized fields, and incompatible baselines are errors, never compatible results. The described CLI is never started.
 
 The tool never fetches a network resource and makes no network access while parsing or comparing. Remote schema references that would require resolution, including `$ref`, `$dynamicRef`, `$recursiveRef`, includes, and remote document references, fail closed with `OPENCLI_REMOTE_REFERENCE` (CLI exit code `3`). In contrast, reference-looking values inside opaque `x-*` extension subtrees are accepted as metadata and never interpreted. Schema-valid scalar URL values in informational OpenCLI metadata, including `info.contact.url`, `info.license.url`, and `info.install.url`, are accepted and preserved verbatim in `CanonicalManifest.Info`. These values are data only and are never fetched. The optional post-comparison telemetry request is separate from schema parsing and comparison and is disabled by the documented opt-out and development/CI controls.
 

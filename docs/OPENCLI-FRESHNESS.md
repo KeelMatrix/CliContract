@@ -16,3 +16,12 @@ The .NET 10 SDK now exposes `--cli-schema`, which emits a .NET-specific command-
 The deliberate shipping boundary remains OpenCLI-only, alpha.14-pinned, offline, and schema-driven. A .NET CLI-schema or System.CommandLine adapter would require a separate versioned mapping and compatibility contract, so neither is accepted or advertised by this release line. No network fetch or external validator is part of core behavior.
 
 The alpha.14 adapter now ports the tagged command-key grammar and complete logical validation family, including group-local-field rejection, positional ordering, variadic flag requiredness, accepted-name uniqueness, `$FILE` prerequisites, typed defaults, and declared-type constrained choices. Opaque `x-*` extension contents are accepted without reference scanning. Exact finite numbers and integer detection are shared by canonicalization, typed validation, and compatibility-domain membership, including values outside `decimal` range; valid numeric fixtures are self-reflexive after canonical round trip. The tagged-test inventory is [`docs/OPENCLI-ALPHA14-CONFORMANCE.md`](OPENCLI-ALPHA14-CONFORMANCE.md), and the public file-role error contract is [`docs/ERROR-TAXONOMY.md`](ERROR-TAXONOMY.md): missing source/baseline paths return exit `2`, present invalid or unreadable source/baseline files return exit `3`, suppression/configuration and output failures return exit `2`, and unexpected failures return exit `4`.
+
+## First-release freshness checks — 2026-09-25
+
+The following exact-name and product-surface checks complete the first-release record. They are dated facts from the standards/product refresh above; this repository does not perform live network lookups in its shipping path.
+
+- Newly published CLI compatibility products: the 2026-09-24 release-history review found no newly published product that changes the OpenCLI-only compatibility boundary. Recheck before publication if the release is delayed.
+- First-party OpenCLI compatibility diff: the reviewed first-party OpenCLI tooling exposes validation (`ocli check`) but no first-party compatibility-diff command was identified.
+- Exact NuGet/package-ID collision: `KeelMatrix.CliContract` was checked as the exact package identifier during the 2026-09-24 refresh; no exact collision was recorded.
+- Exact GitHub/name collision: `KeelMatrix/CliContract` was checked as the exact repository name during the 2026-09-24 refresh; no exact collision was recorded.

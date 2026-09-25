@@ -851,7 +851,14 @@ public static class Normalizer
         EnsureOpenCliProperties(config, "config", "json", "toml", "yaml");
         foreach (var property in new[] { "json", "toml", "yaml" })
         {
-            ValidateOptionalString(config, property, limits, "OPENCLI_GLOBAL");
+            if (config.ContainsKey(property))
+            {
+                var path = RequiredString(config, property, "OPENCLI_GLOBAL", limits);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    throw new NormalizationException("OPENCLI_GLOBAL", "A global config file path must be nonempty.");
+                }
+            }
         }
     }
 
@@ -1086,16 +1093,16 @@ public static class Normalizer
 
         EnsureUniqueCommandPaths(normalized);
 
+        var canonicalCommands = MaterializeCommandTrie(normalized);
+
         var globalNode = OptionalProperty(root, "global", "OPENCLI_GLOBAL");
         var global = globalNode is null ? null : RequireObject(globalNode, "OPENCLI_GLOBAL");
         var globalOptions = global is null
             ? Array.Empty<CanonicalOption>()
             : ReadOpenCliParameters(OptionalProperty(global, "flags", "OPENCLI_COLLECTION"), true, limits).Cast<CanonicalOption>().ToArray();
-        var rootCommand = normalized.FirstOrDefault(c => c.Path == "root");
-        var rootOptions = globalOptions
-            .Concat(rootCommand?.Options ?? [])
-            .OrderBy(a => a.Name, StringComparer.Ordinal)
-            .ToArray();
+        var rootCommand = canonicalCommands.FirstOrDefault(c => c.Path == "root");
+        var rootOptions = rootCommand?.Options ?? [];
+        EnsureUniqueParameterNames(globalOptions, "global option");
         EnsureUniqueParameterNames(rootOptions, "option");
 
         return new CanonicalManifest
@@ -1107,8 +1114,8 @@ public static class Normalizer
             Root = new CanonicalCommand
             {
                 Path = "root",
-                Kind = rootCommand?.Kind,
-                Subcommands = normalized.Where(c => c.Path != "root").OrderBy(c => c.Path, StringComparer.Ordinal).ToArray(),
+                Kind = rootCommand?.Kind ?? "group",
+                Subcommands = canonicalCommands.Where(c => c.Path != "root").OrderBy(c => c.Path, StringComparer.Ordinal).ToArray(),
                 Arguments = rootCommand?.Arguments ?? [],
                 Options = rootOptions,
                 Aliases = rootCommand?.Aliases ?? [],
@@ -1118,10 +1125,39 @@ public static class Normalizer
                 ExitCodes = rootCommand?.ExitCodes ?? [],
                 Examples = rootCommand?.Examples ?? []
             },
+            GlobalOptions = globalOptions.OrderBy(a => a.Name, StringComparer.Ordinal).ToArray(),
             GlobalConfig = global is not null && global.ContainsKey("config")
                 ? NormalizeGlobalConfig(RequireObject(global["config"], "OPENCLI_GLOBAL"), limits)
                 : null
         };
+    }
+
+    private static CanonicalCommand[] MaterializeCommandTrie(IReadOnlyList<CanonicalCommand> explicitCommands)
+    {
+        var byPath = explicitCommands.ToDictionary(command => command.Path, StringComparer.Ordinal);
+        foreach (var command in explicitCommands)
+        {
+            var segments = command.Path.Split(" / ", StringSplitOptions.None);
+            for (var length = 1; length < segments.Length; length++)
+            {
+                var path = string.Join(" / ", segments[..length]);
+                if (!byPath.ContainsKey(path))
+                {
+                    byPath[path] = new CanonicalCommand
+                    {
+                        Path = path,
+                        Kind = "group"
+                    };
+                }
+            }
+        }
+
+        if (!byPath.ContainsKey("root"))
+        {
+            byPath["root"] = new CanonicalCommand { Path = "root", Kind = "group" };
+        }
+
+        return byPath.Values.OrderBy(command => command.Path, StringComparer.Ordinal).ToArray();
     }
 
     private static CanonicalGlobalConfig NormalizeGlobalConfig(JsonObject config, NormalizationLimits limits)

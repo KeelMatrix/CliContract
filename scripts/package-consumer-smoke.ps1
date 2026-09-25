@@ -166,6 +166,63 @@ try {
     $breaking | Out-Host
     if ($breakingExit -ne 1 -or -not (($breaking -join "`n") -match 'KMCLI101')) { throw 'Removed-option packed-tool diff did not return stable exit 1/KMCLI101.' }
 
+    $hostileSource = Join-Path $temp 'hostile-source.json'
+    $hostileBaseline = Join-Path $temp 'hostile-baseline.json'
+    $hostileCanonical = Join-Path $temp 'hostile-canonical.json'
+    $hostileSourceText = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"config":{"json":"config.json"},"flags":[{"name":"value","type":"string","alternativeSources":[{"type":"$ENV","property":"VALUE"},{"type":"$FILE","property":"$.value"}]}]},"commands":{"tool":{}}}'
+    [IO.File]::WriteAllText($hostileSource, $hostileSourceText, [Text.UTF8Encoding]::new($false))
+    & $tool snapshot $hostileSource --output $hostileBaseline --no-telemetry | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw 'Packed tool could not create the hostile-baseline seed.' }
+    $hostileDocument = [System.Text.Json.Nodes.JsonNode]::Parse([IO.File]::ReadAllText($hostileBaseline))
+    $hostileSources = $hostileDocument['GlobalConfig']['FileSources'].AsArray()
+    $hostileSources.Add($hostileSources[0].DeepClone())
+    [IO.File]::WriteAllText($hostileCanonical, $hostileDocument.ToJsonString(), [Text.UTF8Encoding]::new($false))
+    Assert-ToolError -Label 'hostile canonical baseline check' -ExpectedExit 3 -ExpectedCode 'INVALID_BASELINE' -Arguments @('check', $hostileSource, '--baseline', $hostileCanonical, '--no-telemetry')
+    Assert-ToolError -Label 'hostile canonical baseline diff' -ExpectedExit 3 -ExpectedCode 'INVALID_BASELINE' -Arguments @('diff', $hostileCanonical, $hostileBaseline, '--no-telemetry')
+    Write-Output 'CASE=hostile-canonical-baseline-consumer check_exit=3 diff_exit=3'
+
+    $globalScopeOld = Join-Path $temp 'global-scope-old.json'
+    $globalScopeNew = Join-Path $temp 'global-scope-new.json'
+    $globalScopeSchema = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"verbose","type":"boolean"}]},"commands":{"tool":{},"tool sub":{}}}'
+    $rootLocalScopeSchema = $globalScopeSchema.Replace('"global":{"flags":[{"name":"verbose","type":"boolean"}]},', '').Replace('"tool":{}', '"tool":{"flags":[{"name":"verbose","type":"boolean"}]}')
+    [IO.File]::WriteAllText($globalScopeOld, $globalScopeSchema, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($globalScopeNew, $rootLocalScopeSchema, [Text.UTF8Encoding]::new($false))
+    $globalScope = & $tool diff $globalScopeOld $globalScopeNew --format text --no-telemetry 2>&1
+    $globalScopeExit = $LASTEXITCODE
+    $globalScope | Out-Host
+    if ($globalScopeExit -ne 1 -or -not (($globalScope -join "`n") -match 'KMCLI101') -or (($globalScope -join "`n") -notmatch 'root / sub / --verbose')) {
+        throw 'Global-to-root-local scope removal on the packed tool did not report the descendant callable surface.'
+    }
+    $globalScopeReverse = & $tool diff $globalScopeNew $globalScopeOld --format text --no-telemetry 2>&1
+    $globalScopeReverseExit = $LASTEXITCODE
+    $globalScopeReverse | Out-Host
+    if ($globalScopeReverseExit -ne 0 -and $globalScopeReverseExit -ne 1) { throw 'Root-local-to-global scope comparison failed unexpectedly.' }
+    if (($globalScopeReverse -join "`n") -notmatch 'KMCLI002|KMCLI101') { throw 'Root-local-to-global scope comparison did not report the accepted descendant option change.' }
+    Write-Output "CASE=global-local-scope-consumer removed_exit=$globalScopeExit reverse_exit=$globalScopeReverseExit"
+
+    $derivedGroupOld = Join-Path $temp 'derived-group-old.json'
+    $derivedGroupNew = Join-Path $temp 'derived-group-new.json'
+    $explicitGroupSchema = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"kind":"group"},"tool parent":{"kind":"group","aliases":["p"]},"tool parent sub":{}}}'
+    $implicitGroupSchema = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool parent sub":{}}}'
+    [IO.File]::WriteAllText($derivedGroupOld, $explicitGroupSchema, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($derivedGroupNew, $implicitGroupSchema, [Text.UTF8Encoding]::new($false))
+    $derivedGroup = & $tool diff $derivedGroupOld $derivedGroupNew --format text --no-telemetry 2>&1
+    $derivedGroupExit = $LASTEXITCODE
+    $derivedGroup | Out-Host
+    if ($derivedGroupExit -ne 1 -or (($derivedGroup -join "`n") -notmatch 'KMCLI104')) { throw 'Explicit parent alias removal through a derived group was not reported.' }
+    Write-Output "CASE=derived-group-alias-consumer exit=$derivedGroupExit"
+
+    $actionParent = Join-Path $temp 'action-parent.json'
+    $implicitParent = Join-Path $temp 'implicit-parent.json'
+    $actionParentSchema = $explicitGroupSchema.Replace('"tool":{"kind":"group"}', '"tool":{"kind":"action"}')
+    [IO.File]::WriteAllText($actionParent, $actionParentSchema, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($implicitParent, $implicitGroupSchema, [Text.UTF8Encoding]::new($false))
+    $actionToDerived = & $tool diff $actionParent $implicitParent --format text --no-telemetry 2>&1
+    $actionToDerivedExit = $LASTEXITCODE
+    $actionToDerived | Out-Host
+    if ($actionToDerivedExit -ne 1 -or (($actionToDerived -join "`n") -notmatch 'KMCLI111')) { throw 'Action-to-derived-group removal was not reported as a callable-surface break.' }
+    Write-Output "CASE=action-to-derived-group-consumer exit=$actionToDerivedExit"
+
     $mixedOld = Join-Path $temp 'mixed-old.json'
     $mixedNew = Join-Path $temp 'mixed-new.json'
     $mixedOldText = $schema.Replace('"region","type":"string"', '"colour","type":"string","choices":[{"value":"red"},{"value":"blue"}]')
@@ -238,6 +295,11 @@ try {
     [IO.File]::WriteAllText($invalidBaseline, 'not canonical json', [Text.UTF8Encoding]::new($false))
     Assert-ToolError -Label 'malformed baseline' -ExpectedExit 3 -ExpectedCode 'INVALID_BASELINE' -Arguments @('check', $old, '--baseline', $invalidBaseline, '--format', 'json', '--no-telemetry')
     Assert-ToolError -Label 'malformed baseline text' -ExpectedExit 3 -ExpectedCode 'INVALID_BASELINE' -Arguments @('check', $old, '--baseline', $invalidBaseline, '--format', 'text', '--no-telemetry')
+    $unsupportedCanonicalBaseline = Join-Path $temp 'unsupported-canonical-baseline.json'
+    $unsupportedCanonicalText = (Get-Content -Raw -LiteralPath $baseline).Replace('"SchemaVersion": 2', '"SchemaVersion": 99')
+    [IO.File]::WriteAllText($unsupportedCanonicalBaseline, $unsupportedCanonicalText, [Text.UTF8Encoding]::new($false))
+    Assert-ToolError -Label 'unsupported canonical baseline' -ExpectedExit 3 -ExpectedCode 'UNSUPPORTED_MANIFEST_VERSION' -Arguments @('check', $old, '--baseline', $unsupportedCanonicalBaseline, '--format', 'json', '--no-telemetry')
+    Assert-ToolError -Label 'unsupported canonical baseline diff' -ExpectedExit 3 -ExpectedCode 'UNSUPPORTED_MANIFEST_VERSION' -Arguments @('diff', $unsupportedCanonicalBaseline, $baseline, '--format', 'json', '--no-telemetry')
     $missingIgnore = Join-Path $temp 'missing-ignore.json'
     Assert-ToolError -Label 'missing suppression' -ExpectedExit 2 -ExpectedCode 'IGNORE_NOT_FOUND' -Arguments @('diff', $old, $new, '--ignore', $missingIgnore, '--format', 'text', '--no-telemetry')
     Assert-ToolError -Label 'missing suppression json' -ExpectedExit 2 -ExpectedCode 'IGNORE_NOT_FOUND' -Arguments @('diff', $old, $new, '--ignore', $missingIgnore, '--format', 'json', '--no-telemetry')
