@@ -849,6 +849,7 @@ public static class Normalizer
         }
 
         EnsureOpenCliProperties(config, "config", "json", "toml", "yaml");
+        var hasFileSource = false;
         foreach (var property in new[] { "json", "toml", "yaml" })
         {
             if (config.ContainsKey(property))
@@ -858,7 +859,14 @@ public static class Normalizer
                 {
                     throw new NormalizationException("OPENCLI_GLOBAL", "A global config file path must be nonempty.");
                 }
+
+                hasFileSource = true;
             }
+        }
+
+        if (!hasFileSource)
+        {
+            throw new NormalizationException("OPENCLI_GLOBAL", "The global config object must define at least one file source.");
         }
     }
 
@@ -1625,7 +1633,7 @@ public static class Normalizer
         return CanonicalizeScalar(node);
     }
 
-    private static string ScalarSortKey(JsonNode node)
+    internal static string ScalarSortKey(JsonNode node)
     {
         return node.GetValueKind() switch
         {

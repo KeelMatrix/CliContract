@@ -100,6 +100,11 @@ internal static class CanonicalInvariantValidator
 
     private static void ValidateFileSources(CanonicalGlobalConfig? config)
     {
+        if (config is not null && config.FileSources.Length == 0)
+        {
+            throw new NormalizationException("INVALID_BASELINE", "A canonical global config must contain at least one file source.");
+        }
+
         var formats = new HashSet<string>(StringComparer.Ordinal);
         foreach (var source in config?.FileSources ?? [])
         {
@@ -160,12 +165,27 @@ internal static class CanonicalInvariantValidator
 
     private static void ValidateArgumentCollection(IEnumerable<CanonicalArgument> arguments, string commandPath, bool hasFileSource)
     {
+        var array = arguments.ToArray();
         var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var argument in arguments)
+        var seenOptional = false;
+        var variadicCount = 0;
+        for (var index = 0; index < array.Length; index++)
         {
+            var argument = array[index];
             if (!names.Add(argument.Name))
             {
                 throw new NormalizationException("OPENCLI_DUPLICATE_PARAMETER", "A canonical argument collection contains duplicate names.");
+            }
+
+            if (seenOptional && argument.Required == true)
+            {
+                throw new NormalizationException("OPENCLI_ARGUMENT_ORDER", "A required positional argument cannot follow an optional positional argument.");
+            }
+
+            seenOptional |= argument.Required != true;
+            if (argument.Variadic && (++variadicCount > 1 || index != array.Length - 1))
+            {
+                throw new NormalizationException("OPENCLI_VARIADIC", "Only one variadic positional argument is allowed and it must be last.");
             }
 
             ValidateParameter(argument, commandPath, option: false, hasFileSource);
@@ -210,9 +230,9 @@ internal static class CanonicalInvariantValidator
             throw new NormalizationException("INVALID_BASELINE", "Alpha.14 canonical parameters cannot carry status or deprecation state.");
         }
 
-        if (parameter.Required is null || !parameter.Variadic && (parameter.ArityMinimum is null || parameter.ArityMaximum != 1) ||
-            parameter.ArityMinimum is < 0 or > 1 || parameter.ArityMaximum is < 0 ||
-            parameter.ArityMinimum.HasValue && parameter.ArityMaximum.HasValue && parameter.ArityMinimum > parameter.ArityMaximum)
+        if (parameter.Required is null || parameter.ArityMinimum is null || parameter.ArityMinimum < 0 ||
+            parameter.ArityMaximum is < 0 || parameter.ArityMinimum.HasValue && parameter.ArityMaximum.HasValue && parameter.ArityMinimum > parameter.ArityMaximum ||
+            !parameter.Variadic && (parameter.ArityMinimum != (parameter.Required == true ? 1 : 0) || parameter.ArityMaximum != 1))
         {
             throw new NormalizationException("OPENCLI_ARITY", "Canonical parameter requiredness and arity are not source-producible.");
         }
@@ -253,6 +273,12 @@ internal static class CanonicalInvariantValidator
 
     private static void ValidateChoices(CanonicalParameter parameter)
     {
+        var choiceKeys = parameter.Choices.Select(choice => Normalizer.ScalarSortKey(choice.Value)).ToArray();
+        if (!choiceKeys.SequenceEqual(choiceKeys.OrderBy(key => key, StringComparer.Ordinal)))
+        {
+            throw new NormalizationException("INVALID_BASELINE", "Canonical choices must be ordered by scalar value.");
+        }
+
         var type = TypedDomain.NormalizeType(parameter.Type);
         foreach (var choice in parameter.Choices)
         {

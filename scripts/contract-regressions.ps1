@@ -65,7 +65,14 @@ try {
         @{ Name = 'invalid-alternative-source'; Mutate = { param($document) $document['GlobalOptions'][0]['AlternativeSources'][0]['Type'] = '$BAD' } },
         @{ Name = 'argument-default'; Mutate = { param($document) $document['Root']['Subcommands'][0]['Arguments'][0]['DefaultValue'] = 'not-allowed' } },
         @{ Name = 'unrepresentable-status'; Mutate = { param($document) $document['Root']['Status'] = 'DEPRECATED' } },
-        @{ Name = 'contradictory-domain'; Mutate = { param($document) $document['GlobalOptions'][0]['AllowedValues'][0] = 'other' } }
+        @{ Name = 'contradictory-domain'; Mutate = { param($document) $document['GlobalOptions'][0]['AllowedValues'][0] = 'other' } },
+        @{ Name = 'required-true-zero-arity'; Mutate = { param($document) $document['GlobalOptions'][0]['Required'] = $true; $document['GlobalOptions'][0]['ArityMinimum'] = 0 } },
+        @{ Name = 'optional-one-arity'; Mutate = { param($document) $document['GlobalOptions'][0]['Required'] = $false; $document['GlobalOptions'][0]['ArityMinimum'] = 1 } },
+        @{ Name = 'required-variadic-option'; Mutate = { param($document) $document['GlobalOptions'][0]['Required'] = $true; $document['GlobalOptions'][0]['Variadic'] = $true } },
+        @{ Name = 'reversed-choice-order'; Mutate = { param($document) $document['GlobalOptions'][0]['Choices'] = [System.Text.Json.Nodes.JsonNode]::Parse('[{"Value":"yes"},{"Value":"no"}]'); $document['GlobalOptions'][0]['AllowedValues'] = [System.Text.Json.Nodes.JsonNode]::Parse('["yes","no"]') } },
+        @{ Name = 'empty-global-config-wrapper'; Mutate = { param($document) $document['GlobalConfig']['FileSources'] = [System.Text.Json.Nodes.JsonArray]::new() } },
+        @{ Name = 'required-argument-zero-arity'; Mutate = { param($document) $command = @($document['Root']['Subcommands'].AsArray() | Where-Object { $_['Path'].ToString() -eq 'root / run' })[0]; $command['Arguments'][0]['Required'] = $true; $command['Arguments'][0]['ArityMinimum'] = 0 } },
+        @{ Name = 'reversed-variadic-bounds'; Mutate = { param($document) $document['GlobalOptions'][0]['Variadic'] = $true; $document['GlobalOptions'][0]['ArityMinimum'] = 3; $document['GlobalOptions'][0]['ArityMaximum'] = 2 } }
     )
     foreach ($case in $hostileCanonicalCases) {
         $casePath = Write-CanonicalMutation $case.Name $case.Mutate

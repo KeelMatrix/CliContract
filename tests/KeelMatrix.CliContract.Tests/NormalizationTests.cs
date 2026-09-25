@@ -83,6 +83,7 @@ public sealed class NormalizationTests
     [InlineData("invalid-install-anyof.json", "OPENCLI_INSTALL")]
     [InlineData("invalid-example-content.json", "OPENCLI_COMMAND")]
     [InlineData("invalid-global-config-empty.json", "OPENCLI_GLOBAL")]
+    [InlineData("invalid-global-config-extension-only.json", "OPENCLI_GLOBAL")]
     [InlineData("invalid-exit-code-required.json", "OPENCLI_EXIT_CODE")]
     [InlineData("invalid-exit-code-status.json", "OPENCLI_EXIT_CODE")]
     public void OpenCliSchemaRequiredShapesFailClosed(string fixture, string expectedCode)
@@ -896,6 +897,157 @@ public sealed class NormalizationTests
             Assert.NotEqual("UNEXPECTED_ERROR", normalizationError.Code);
             Assert.False(string.IsNullOrWhiteSpace(normalizationError.Message), name);
         }
+    }
+
+    [Theory]
+    [InlineData(false, false, 0, 1, true, "")]
+    [InlineData(true, false, 1, 1, true, "")]
+    [InlineData(false, false, 1, 1, false, "OPENCLI_ARITY")]
+    [InlineData(true, false, 0, 1, false, "OPENCLI_ARITY")]
+    [InlineData(false, false, 0, 0, false, "OPENCLI_ARITY")]
+    [InlineData(false, false, 0, null, false, "OPENCLI_ARITY")]
+    [InlineData(false, false, null, 1, false, "OPENCLI_ARITY")]
+    [InlineData(false, true, 0, null, true, "")]
+    [InlineData(false, true, 0, 0, true, "")]
+    [InlineData(false, true, 1, null, true, "")]
+    [InlineData(false, true, 0, 3, true, "")]
+    [InlineData(false, true, 3, 3, true, "")]
+    [InlineData(false, true, 3, 2, false, "OPENCLI_ARITY")]
+    [InlineData(false, true, null, 3, false, "OPENCLI_ARITY")]
+    [InlineData(false, true, -1, 3, false, "OPENCLI_ARITY")]
+    [InlineData(false, true, 0, -1, false, "OPENCLI_ARITY")]
+    [InlineData(true, true, 0, null, false, "OPENCLI_VARIADIC")]
+    [InlineData(true, true, 1, 3, false, "OPENCLI_VARIADIC")]
+    public void CanonicalManifestReaderEnforcesOptionArityMatrix(bool required, bool variadic, int? minimum, int? maximum, bool accepted, string expectedCode)
+    {
+        var document = JsonNode.Parse(Normalizer.Serialize(Normalizer.Normalize("opencli", HostileCanonicalSeed())))!.AsObject();
+        var option = document["GlobalOptions"]![0]!.AsObject();
+        option["Required"] = required;
+        option["Variadic"] = variadic;
+        option["ArityMinimum"] = minimum;
+        option["ArityMaximum"] = maximum;
+
+        var error = Record.Exception(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        if (accepted)
+        {
+            Assert.Null(error);
+        }
+        else
+        {
+            var normalizationError = Assert.IsType<NormalizationException>(error);
+            Assert.Equal(expectedCode, normalizationError.Code);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false, 0, 1, true)]
+    [InlineData(true, false, 1, 1, true)]
+    [InlineData(true, false, 0, 1, false)]
+    [InlineData(false, false, 1, 1, false)]
+    [InlineData(false, false, 0, 0, false)]
+    [InlineData(false, false, null, 1, false)]
+    [InlineData(false, true, 0, null, true)]
+    [InlineData(false, true, 0, 0, true)]
+    [InlineData(false, true, 1, 3, true)]
+    [InlineData(false, true, 3, null, true)]
+    [InlineData(true, true, 0, null, true)]
+    [InlineData(true, true, 0, 0, true)]
+    [InlineData(true, true, 1, 3, true)]
+    [InlineData(true, true, 3, 2, false)]
+    [InlineData(false, true, -1, 3, false)]
+    [InlineData(false, true, 0, -1, false)]
+    public void CanonicalManifestReaderEnforcesArgumentArityMatrix(bool required, bool variadic, int? minimum, int? maximum, bool accepted)
+    {
+        var document = JsonNode.Parse(Normalizer.Serialize(Normalizer.Normalize("opencli", HostileCanonicalSeed())))!.AsObject();
+        var command = document["Root"]!["Subcommands"]!.AsArray().Single(node => node!["Path"]!.GetValue<string>() == "root / run");
+        var argument = command!["Arguments"]![0]!.AsObject();
+        argument["Required"] = required;
+        argument["Variadic"] = variadic;
+        argument["ArityMinimum"] = minimum;
+        argument["ArityMaximum"] = maximum;
+
+        var error = Record.Exception(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        if (accepted)
+        {
+            Assert.Null(error);
+        }
+        else
+        {
+            var normalizationError = Assert.IsType<NormalizationException>(error);
+            Assert.Equal("OPENCLI_ARITY", normalizationError.Code);
+        }
+    }
+
+    [Fact]
+    public void CanonicalManifestReaderRejectsReversedChoices()
+    {
+        var document = JsonNode.Parse(Normalizer.Serialize(Normalizer.Normalize("opencli", HostileCanonicalSeed())))!.AsObject();
+        var option = document["GlobalOptions"]![0]!.AsObject();
+        option["Choices"] = JsonNode.Parse("[{\"Value\":\"yes\"},{\"Value\":\"no\"}]");
+        option["AllowedValues"] = JsonNode.Parse("[\"yes\",\"no\"]");
+
+        var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        Assert.Equal("INVALID_BASELINE", error.Code);
+    }
+
+    [Fact]
+    public void CanonicalManifestReaderRejectsEmptyGlobalConfigWrapper()
+    {
+        var document = JsonNode.Parse(Normalizer.Serialize(Normalizer.Normalize("opencli", HostileCanonicalSeed())))!.AsObject();
+        document["GlobalConfig"]!["FileSources"] = new JsonArray();
+
+        var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        Assert.Equal("INVALID_BASELINE", error.Code);
+    }
+
+    [Fact]
+    public void ExtensionOnlyGlobalConfigIsNotSourceProducible()
+    {
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", OpenCliDocument("""
+            {"global":{"config":{"x-note":"ignored"}},"commands":{"tool":{}}}
+            """)));
+
+        Assert.Equal("OPENCLI_GLOBAL", error.Code);
+    }
+
+    [Fact]
+    public void CanonicalManifestReaderRejectsArgumentOrderingAndVariadicPlacement()
+    {
+        var document = JsonNode.Parse(Normalizer.Serialize(Normalizer.Normalize("opencli", HostileCanonicalSeed())))!.AsObject();
+        var command = document["Root"]!["Subcommands"]!.AsArray().Single(node => node!["Path"]!.GetValue<string>() == "root / run");
+        var arguments = command!["Arguments"]!.AsArray();
+        var optional = arguments[0]!.DeepClone()!.AsObject();
+        optional["Name"] = "optional";
+        optional["Required"] = false;
+        optional["Variadic"] = false;
+        optional["ArityMinimum"] = 0;
+        optional["ArityMaximum"] = 1;
+        var required = arguments[0]!.DeepClone()!.AsObject();
+        required["Name"] = "required";
+        required["Required"] = true;
+        required["Variadic"] = false;
+        required["ArityMinimum"] = 1;
+        required["ArityMaximum"] = 1;
+        var reorderedArguments = new JsonArray { optional, required };
+        command["Arguments"] = reorderedArguments;
+
+        var orderingError = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        Assert.Equal("OPENCLI_ARGUMENT_ORDER", orderingError.Code);
+
+        optional["Variadic"] = true;
+        optional["ArityMinimum"] = 0;
+        optional["ArityMaximum"] = null;
+        var variadicArguments = new JsonArray { optional.DeepClone(), required.DeepClone() };
+        command["Arguments"] = variadicArguments;
+
+        var placementError = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        Assert.Equal("OPENCLI_VARIADIC", placementError.Code);
     }
 
     [Theory]

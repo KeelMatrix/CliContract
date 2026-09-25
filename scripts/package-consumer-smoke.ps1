@@ -169,7 +169,7 @@ try {
     $hostileSource = Join-Path $temp 'hostile-source.json'
     $hostileBaseline = Join-Path $temp 'hostile-baseline.json'
     $hostileCanonical = Join-Path $temp 'hostile-canonical.json'
-    $hostileSourceText = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"config":{"json":"config.json"},"flags":[{"name":"value","type":"string","alternativeSources":[{"type":"$ENV","property":"VALUE"},{"type":"$FILE","property":"$.value"}]}]},"commands":{"tool":{}}}'
+    $hostileSourceText = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"config":{"json":"config.json"},"flags":[{"name":"value","type":"string","alternativeSources":[{"type":"$ENV","property":"VALUE"},{"type":"$FILE","property":"$.value"}]}]},"commands":{"tool":{},"tool run <target>":{"args":[{"name":"target","type":"string"}]}}}'
     [IO.File]::WriteAllText($hostileSource, $hostileSourceText, [Text.UTF8Encoding]::new($false))
     & $tool snapshot $hostileSource --output $hostileBaseline --no-telemetry | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'Packed tool could not create the hostile-baseline seed.' }
@@ -180,6 +180,25 @@ try {
     Assert-ToolError -Label 'hostile canonical baseline check' -ExpectedExit 3 -ExpectedCode 'INVALID_BASELINE' -Arguments @('check', $hostileSource, '--baseline', $hostileCanonical, '--no-telemetry')
     Assert-ToolError -Label 'hostile canonical baseline diff' -ExpectedExit 3 -ExpectedCode 'INVALID_BASELINE' -Arguments @('diff', $hostileCanonical, $hostileBaseline, '--no-telemetry')
     Write-Output 'CASE=hostile-canonical-baseline-consumer check_exit=3 diff_exit=3'
+
+    $hostileContractCases = @(
+        @{ Name = 'required-true-zero-arity'; Code = 'OPENCLI_ARITY'; Mutate = { param($document) $document['GlobalOptions'][0]['Required'] = $true; $document['GlobalOptions'][0]['ArityMinimum'] = 0 } },
+        @{ Name = 'optional-one-arity'; Code = 'OPENCLI_ARITY'; Mutate = { param($document) $document['GlobalOptions'][0]['Required'] = $false; $document['GlobalOptions'][0]['ArityMinimum'] = 1 } },
+        @{ Name = 'required-variadic-option'; Code = 'OPENCLI_VARIADIC'; Mutate = { param($document) $document['GlobalOptions'][0]['Required'] = $true; $document['GlobalOptions'][0]['Variadic'] = $true } },
+        @{ Name = 'reversed-choice-order'; Code = 'INVALID_BASELINE'; Mutate = { param($document) $document['GlobalOptions'][0]['Choices'] = [System.Text.Json.Nodes.JsonNode]::Parse('[{"Value":"yes"},{"Value":"no"}]'); $document['GlobalOptions'][0]['AllowedValues'] = [System.Text.Json.Nodes.JsonNode]::Parse('["yes","no"]') } },
+        @{ Name = 'empty-global-config-wrapper'; Code = 'INVALID_BASELINE'; Mutate = { param($document) $document['GlobalConfig']['FileSources'] = [System.Text.Json.Nodes.JsonArray]::new() } },
+        @{ Name = 'required-argument-zero-arity'; Code = 'OPENCLI_ARITY'; Mutate = { param($document) $command = @($document['Root']['Subcommands'].AsArray() | Where-Object { $_['Path'].ToString() -eq 'root / run' })[0]; $command['Arguments'][0]['Required'] = $true; $command['Arguments'][0]['ArityMinimum'] = 0 } },
+        @{ Name = 'reversed-variadic-bounds'; Code = 'OPENCLI_ARITY'; Mutate = { param($document) $document['GlobalOptions'][0]['Variadic'] = $true; $document['GlobalOptions'][0]['ArityMinimum'] = 3; $document['GlobalOptions'][0]['ArityMaximum'] = 2 } }
+    )
+    foreach ($case in $hostileContractCases) {
+        $mutated = [System.Text.Json.Nodes.JsonNode]::Parse([IO.File]::ReadAllText($hostileBaseline))
+        & $case.Mutate $mutated
+        $mutatedPath = Join-Path $temp ($case.Name + '-consumer.canonical.json')
+        [IO.File]::WriteAllText($mutatedPath, $mutated.ToJsonString(), [Text.UTF8Encoding]::new($false))
+        Assert-ToolError -Label ("$($case.Name) consumer check") -ExpectedExit 3 -ExpectedCode $case.Code -Arguments @('check', $hostileSource, '--baseline', $mutatedPath, '--no-telemetry')
+        Assert-ToolError -Label ("$($case.Name) consumer diff") -ExpectedExit 3 -ExpectedCode $case.Code -Arguments @('diff', $mutatedPath, $hostileBaseline, '--no-telemetry')
+    }
+    Write-Output 'CASE=family3-canonical-baselines-consumer check_exit=3 diff_exit=3'
 
     $globalScopeOld = Join-Path $temp 'global-scope-old.json'
     $globalScopeNew = Join-Path $temp 'global-scope-new.json'
