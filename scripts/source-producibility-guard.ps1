@@ -11,7 +11,7 @@ $temp = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-source-guard-' + [Gui
 New-Item -ItemType Directory -Path $temp | Out-Null
 
 try {
-    & dotnet test tests/KeelMatrix.CliContract.Tests/KeelMatrix.CliContract.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~SourceProducibilityGuardTests --nologo
+    & dotnet test tests/KeelMatrix.CliContract.Tests/KeelMatrix.CliContract.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~SourceProducibilityGuardTests --nologo --logger "console;verbosity=detailed"
     if ($LASTEXITCODE -ne 0) { throw 'The source-producibility edge matrix failed.' }
     Write-Output 'CASE=source-field-edge-matrix PASS'
 
