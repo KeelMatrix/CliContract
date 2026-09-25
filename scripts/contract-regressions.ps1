@@ -62,6 +62,28 @@ try {
         @{ Name = 'duplicate-global-file-format'; Mutate = { param($document) $sources = $document['GlobalConfig']['FileSources'].AsArray(); $sources.Add($sources[0].DeepClone()) } },
         @{ Name = 'duplicate-global-exit-code'; Mutate = { param($document) $codes = $document['GlobalExitCodes'].AsArray(); $codes.Add($codes[0].DeepClone()) } },
         @{ Name = 'duplicate-command-exit-code'; Mutate = { param($document) $codes = $document['Root']['ExitCodes'].AsArray(); $codes.Add($codes[0].DeepClone()) } },
+        @{ Name = 'contact-empty'; Mutate = { param($document) $document['Info']['Contact'] = [System.Text.Json.Nodes.JsonNode]::Parse('{}') } },
+        @{ Name = 'contact-name-null'; Mutate = { param($document) $document['Info']['Contact'] = [System.Text.Json.Nodes.JsonNode]::Parse('{"Name":null}') } },
+        @{ Name = 'contact-email-null'; Mutate = { param($document) $document['Info']['Contact'] = [System.Text.Json.Nodes.JsonNode]::Parse('{"Email":null}') } },
+        @{ Name = 'contact-url-null'; Mutate = { param($document) $document['Info']['Contact'] = [System.Text.Json.Nodes.JsonNode]::Parse('{"Url":null}') } },
+        @{ Name = 'contact-name-email-null'; Mutate = { param($document) $document['Info']['Contact'] = [System.Text.Json.Nodes.JsonNode]::Parse('{"Name":null,"Email":null}') } },
+        @{ Name = 'contact-name-url-null'; Mutate = { param($document) $document['Info']['Contact'] = [System.Text.Json.Nodes.JsonNode]::Parse('{"Name":null,"Url":null}') } },
+        @{ Name = 'contact-email-url-null'; Mutate = { param($document) $document['Info']['Contact'] = [System.Text.Json.Nodes.JsonNode]::Parse('{"Email":null,"Url":null}') } },
+        @{ Name = 'contact-all-null'; Mutate = { param($document) $document['Info']['Contact'] = [System.Text.Json.Nodes.JsonNode]::Parse('{"Name":null,"Email":null,"Url":null}') } },
+        @{ Name = 'install-empty'; Mutate = { param($document) $document['Info']['Install'] = [System.Text.Json.Nodes.JsonNode]::Parse('[{}]') } },
+        @{ Name = 'install-without-name'; Mutate = { param($document) $document['Info']['Install'] = [System.Text.Json.Nodes.JsonNode]::Parse('[{"Command":"tool install"}]') } },
+        @{ Name = 'install-without-command-or-url'; Mutate = { param($document) $document['Info']['Install'] = [System.Text.Json.Nodes.JsonNode]::Parse('[{"Name":"source"}]') } },
+        @{ Name = 'install-command-null'; Mutate = { param($document) $document['Info']['Install'] = [System.Text.Json.Nodes.JsonNode]::Parse('[{"Name":"source","Command":null}]') } },
+        @{ Name = 'install-url-null'; Mutate = { param($document) $document['Info']['Install'] = [System.Text.Json.Nodes.JsonNode]::Parse('[{"Name":"source","Url":null}]') } },
+        @{ Name = 'license-empty-name'; Mutate = { param($document) $document['Info']['License'] = [System.Text.Json.Nodes.JsonNode]::Parse('{"Name":"","SpdxId":"MIT","Url":null}') } },
+        @{ Name = 'empty-example-content'; Mutate = { param($document) $document['Root']['Subcommands'][0]['Examples'] = [System.Text.Json.Nodes.JsonNode]::Parse('[{"Title":null,"Content":""}]') } },
+        @{ Name = 'command-path-123'; Mutate = { param($document) $document['Root']['Subcommands'][0]['Path'] = 'root / 123' } },
+        @{ Name = 'command-path-dash'; Mutate = { param($document) $document['Root']['Subcommands'][0]['Path'] = 'root / -flag' } },
+        @{ Name = 'command-path-underscore'; Mutate = { param($document) $document['Root']['Subcommands'][0]['Path'] = 'root / _cmd' } },
+        @{ Name = 'command-path-env'; Mutate = { param($document) $document['Root']['Subcommands'][0]['Path'] = 'root / $ENV' } },
+        @{ Name = 'command-path-unicode'; Mutate = { param($document) $document['Root']['Subcommands'][0]['Path'] = 'root / écmd' } },
+        @{ Name = 'command-path-adjacent-number'; Mutate = { param($document) $document['Root']['Subcommands'][0]['Path'] = 'root / 123abc' } },
+        @{ Name = 'command-path-adjacent-dash'; Mutate = { param($document) $document['Root']['Subcommands'][0]['Path'] = 'root / -flag2' } },
         @{ Name = 'invalid-alternative-source'; Mutate = { param($document) $document['GlobalOptions'][0]['AlternativeSources'][0]['Type'] = '$BAD' } },
         @{ Name = 'argument-default'; Mutate = { param($document) $document['Root']['Subcommands'][0]['Arguments'][0]['DefaultValue'] = 'not-allowed' } },
         @{ Name = 'unrepresentable-status'; Mutate = { param($document) $document['Root']['Status'] = 'DEPRECATED' } },
@@ -167,6 +189,18 @@ try {
         Assert-Case $name (Invoke-Tool @('validate', $path, '--input', 'auto', '--no-telemetry')) 3 $expectedText
     }
 
+    foreach ($case in @(
+        @{ Name = 'fixture-invalid-contact'; File = 'invalid-contact-anyof.json'; Code = 'OPENCLI_INFO' },
+        @{ Name = 'fixture-invalid-install'; File = 'invalid-install-anyof.json'; Code = 'OPENCLI_INSTALL' },
+        @{ Name = 'fixture-invalid-license'; File = 'invalid-license-missing-name.json'; Code = 'OPENCLI_INFO' }
+    )) {
+        $path = Join-Path $root ('fixtures/opencli/' + $case.File)
+        Assert-Case ("$($case.Name)-validate") (Invoke-Tool @('validate', $path, '--input', 'opencli', '--no-telemetry')) 3 $case.Code
+        Assert-Case ("$($case.Name)-snapshot") (Invoke-Tool @('snapshot', $path, '--input', 'opencli', '--output', (Join-Path $temp ($case.Name + '.canonical.json')), '--no-telemetry')) 3 $case.Code
+        Assert-Case ("$($case.Name)-check") (Invoke-Tool @('check', $path, '--baseline', $baselinePath, '--input', 'opencli', '--no-telemetry')) 3 $case.Code
+        Assert-Case ("$($case.Name)-diff") (Invoke-Tool @('diff', $path, $path, '--input', 'opencli', '--no-telemetry')) 3 $case.Code
+    }
+
     $contactUrl = 'https://metadata.example.invalid/contact?source=OpenCLI%2F1.0.0-alpha.14'
     $licenseUrl = 'https://metadata.example.invalid/license'
     $installUrl = 'https://metadata.example.invalid/install?channel=stable'
@@ -248,6 +282,7 @@ try {
         'petstore-cli.ocs.yaml',
         'pleasantries-cli.ocs.yaml',
         'regression-fixtures.json',
+        'round19-source-producibility.json',
         'valid-argument-passthrough.json',
         'valid-argument-passthrough-false.json'
     )

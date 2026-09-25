@@ -606,6 +606,9 @@ internal static class CliApplication
       never gate either --fail-on threshold.
 
     Validation boundary:
+      Accepted canonical baselines must be source-producible alpha.14 states: required metadata and contact/install
+      presence, ASCII-letter command segments and materialized hierarchy, exact parameter types, valid sources,
+      unique file-source/exit-code values, and canonical choice domains are checked before comparison.
       One variadic positional argument is allowed and it must be last; minItems/maxItems require variadic=true.
       Typed defaults and choices that are not representable by their declared type fail with exit 3.
       Missing source or baseline paths return 2. Present but unreadable, malformed, unsupported, invalid-UTF-8,

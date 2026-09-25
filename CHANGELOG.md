@@ -4,8 +4,11 @@ This file records user-visible changes to KeelMatrix CliContract.
 
 ## [Unreleased]
 
-### Added
+### Fixed
 
+- Canonical baseline validation now rejects every tested alpha.14-unrepresentable state in the source-producibility sweep, including empty contact/install presence, non-letter command segments, exact parameter types, required metadata fields, license/example required fields, and the existing arity, source, domain, status, file-source, and exit-code invariants; `check` and `diff` return bounded exit `3` for each invalid baseline.
+
+### Added
 - Canonical manifest schema version `2` preserves global options separately from root-local options, materializes derived command groups, and compares inherited option surfaces at every command.
 - Canonical baseline reading now enforces the complete source-producible alpha.14 invariant—including requiredness-derived non-variadic arity, the variadic required/min/max matrix, scalar choice order, and non-empty global file-source configuration—and returns bounded exit `3` for malformed-but-valid baseline states.
 - CI history checks now require complete reachable history, with a deterministic earlier-commit regression test; first-release freshness checks record package, repository, product, and first-party diff-surface reviews.

@@ -1,0 +1,20 @@
+{
+  "opencliVersion": "1.0.0-alpha.14",
+  "info": {
+    "title": "Round 19 source states",
+    "binary": "tool",
+    "version": "1",
+    "contact": { "email": "support@example.invalid" }
+  },
+  "install": [
+    { "name": "command", "command": "tool install" },
+    { "name": "url", "url": "https://example.invalid/install" }
+  ],
+  "commands": {
+    "tool alpha 123": {},
+    "tool beta -flag": {},
+    "tool gamma _cmd": {},
+    "tool delta $ENV": {},
+    "tool epsilon écmd": {}
+  }
+}

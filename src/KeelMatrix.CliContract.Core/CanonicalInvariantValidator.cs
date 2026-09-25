@@ -27,6 +27,7 @@ internal static class CanonicalInvariantValidator
         RequireNonEmpty(manifest.Info.Title, "The canonical info title is required.");
         RequireNonEmpty(manifest.Info.Binary, "The canonical info binary is required.");
         RequireNonEmpty(manifest.Info.Version, "The canonical info version is required.");
+        ValidateInfo(manifest.Info);
 
         var commands = Flatten(manifest.Root).ToArray();
         var byPath = new Dictionary<string, CanonicalCommand>(StringComparer.Ordinal);
@@ -92,9 +93,31 @@ internal static class CanonicalInvariantValidator
         }
 
         var segments = path.Split(" / ", StringSplitOptions.None);
-        if (segments.Length == 0 || segments[0] != "root" || segments.Any(segment => string.IsNullOrWhiteSpace(segment) || segment.Any(char.IsWhiteSpace) || segment.Contains('/')))
+        if (segments.Length == 0 || segments[0] != "root" || segments.Skip(1).Any(segment => string.IsNullOrWhiteSpace(segment) || segment.Any(char.IsWhiteSpace) || segment.Contains('/') || !char.IsAsciiLetter(segment[0])))
         {
             throw new NormalizationException("INVALID_BASELINE", "A canonical command path has an invalid hierarchy.");
+        }
+    }
+
+    private static void ValidateInfo(CanonicalInfo info)
+    {
+        if (info.License is not null)
+        {
+            RequireNonEmpty(info.License.Name, "The canonical license name is required.");
+        }
+
+        if (info.Contact is not null && info.Contact.Name is null && info.Contact.Email is null && info.Contact.Url is null)
+        {
+            throw new NormalizationException("INVALID_BASELINE", "A canonical contact must contain a name, email, or URL.");
+        }
+
+        foreach (var install in info.Install)
+        {
+            RequireNonEmpty(install.Name, "A canonical install method name is required.");
+            if (install.Command is null && install.Url is null)
+            {
+                throw new NormalizationException("INVALID_BASELINE", "A canonical install method must contain a command or URL.");
+            }
         }
     }
 
@@ -153,6 +176,7 @@ internal static class CanonicalInvariantValidator
 
         ValidateStringCollection(command.Aliases, "command aliases", requireSorted: true);
         ValidateExitCodes(command.ExitCodes, command.Path);
+        ValidateExamples(command.Examples);
 
         if (command.Kind == "group" && (command.Arguments.Length > 0 || command.Options.Length > 0))
         {
@@ -189,6 +213,14 @@ internal static class CanonicalInvariantValidator
             }
 
             ValidateParameter(argument, commandPath, option: false, hasFileSource);
+        }
+    }
+
+    private static void ValidateExamples(IEnumerable<CanonicalExample> examples)
+    {
+        foreach (var example in examples)
+        {
+            RequireNonEmpty(example.Content, "A canonical example content value is required.");
         }
     }
 
@@ -242,7 +274,8 @@ internal static class CanonicalInvariantValidator
             throw new NormalizationException("OPENCLI_VARIADIC", "A variadic flag cannot be marked as required.");
         }
 
-        if (option && !TypedDomain.IsSupportedType(parameter.Type) || !option && parameter.Type is not null && !TypedDomain.IsSupportedType(parameter.Type))
+        if (option && (parameter.Type is null || !IsExactSourceType(parameter.Type)) ||
+            !option && parameter.Type is not null && !IsExactSourceType(parameter.Type))
         {
             throw new NormalizationException("INVALID_BASELINE", "A canonical parameter type is unsupported.");
         }
@@ -317,6 +350,8 @@ internal static class CanonicalInvariantValidator
         options.SelectMany(option => new[] { option.Name }.Concat(option.Aliases)).Select(OptionIdentity).ToHashSet(StringComparer.Ordinal);
 
     private static string OptionIdentity(string name) => name.TrimStart('-');
+
+    private static bool IsExactSourceType(string? type) => type is "string" or "number" or "integer" or "boolean";
 
     private static void ValidateStringCollection(IEnumerable<string> values, string subject, bool requireSorted)
     {

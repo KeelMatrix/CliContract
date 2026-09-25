@@ -23,6 +23,17 @@ public sealed class NormalizationTests
     }
 
     [Fact]
+    public void Alpha14SourcePathTerminatorAndMetadataPartialsRemainRepresentable()
+    {
+        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "round19-source-producibility.json")));
+
+        Assert.Equal(["root / alpha", "root / beta", "root / delta", "root / epsilon", "root / gamma"], manifest.Root.Subcommands.Select(command => command.Path));
+        Assert.Equal("support@example.invalid", manifest.Info.Contact!.Email);
+        Assert.Equal("tool install", manifest.Info.Install[0].Command);
+        Assert.Equal("https://example.invalid/install", manifest.Info.Install[1].Url);
+    }
+
+    [Fact]
     public void PinnedAlpha14ConformanceCorpusMatchesItsOracle()
     {
         var corpus = JsonNode.Parse(File.ReadAllText(Fixture("opencli", "alpha14-conformance-corpus.json")))!.AsArray();
@@ -872,6 +883,11 @@ public sealed class NormalizationTests
             ("duplicate-command-exit-code", document => ((JsonArray)document["Root"]!["ExitCodes"]!).Add(((JsonArray)document["Root"]!["ExitCodes"]!)[0]!.DeepClone())),
             ("missing-info-title", document => document["Info"]!["Title"] = null),
             ("invalid-command-path", document => document["Root"]!["Subcommands"]![0]!["Path"] = "root /"),
+            ("invalid-command-segment", document => document["Root"]!["Subcommands"]![0]!["Path"] = "root / 123"),
+            ("contact-all-null", document => document["Info"]!["Contact"] = new JsonObject { ["Name"] = null, ["Email"] = null, ["Url"] = null }),
+            ("install-without-command-or-url", document => document["Info"]!["Install"] = new JsonArray(new JsonObject { ["Name"] = "source", ["Command"] = null, ["Url"] = null, ["Description"] = null })),
+            ("license-empty-name", document => document["Info"]!["License"] = new JsonObject { ["Name"] = "", ["SpdxId"] = "MIT", ["Url"] = null }),
+            ("empty-example-content", document => document["Root"]!["Subcommands"]![0]!["Examples"] = new JsonArray(new JsonObject { ["Title"] = null, ["Content"] = "" })),
             ("invalid-source-type", document => document["GlobalOptions"]![0]!["AlternativeSources"]![0]!["Type"] = "$BAD"),
             ("empty-source-property", document => document["GlobalOptions"]![0]!["AlternativeSources"]![0]!["Property"] = ""),
             ("file-source-without-config", document => document["GlobalConfig"] = null),
@@ -897,6 +913,103 @@ public sealed class NormalizationTests
             Assert.NotEqual("UNEXPECTED_ERROR", normalizationError.Code);
             Assert.False(string.IsNullOrWhiteSpace(normalizationError.Message), name);
         }
+    }
+
+    [Theory]
+    [InlineData("123")]
+    [InlineData("-flag")]
+    [InlineData("_cmd")]
+    [InlineData("$ENV")]
+    [InlineData("écmd")]
+    [InlineData("123abc")]
+    [InlineData("-flag2")]
+    public void CanonicalManifestReaderRejectsCommandSegmentsAlpha14CannotProduce(string segment)
+    {
+        var document = JsonNode.Parse(Normalizer.Serialize(Normalizer.Normalize("opencli", HostileCanonicalSeed())))!.AsObject();
+        var command = document["Root"]!["Subcommands"]!.AsArray().Single(node => node!["Path"]!.GetValue<string>() == "root / run");
+        command!["Path"] = "root / " + segment;
+
+        var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        Assert.Equal("INVALID_BASELINE", error.Code);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"Name\":null}")]
+    [InlineData("{\"Email\":null}")]
+    [InlineData("{\"Url\":null}")]
+    [InlineData("{\"Name\":null,\"Email\":null}")]
+    [InlineData("{\"Name\":null,\"Url\":null}")]
+    [InlineData("{\"Email\":null,\"Url\":null}")]
+    [InlineData("{\"Name\":null,\"Email\":null,\"Url\":null}")]
+    public void CanonicalManifestReaderRejectsEveryContactAnyOfVariant(string contactJson)
+    {
+        var document = JsonNode.Parse(Normalizer.Serialize(Normalizer.Normalize("opencli", HostileCanonicalSeed())))!.AsObject();
+        document["Info"]!["Contact"] = JsonNode.Parse(contactJson);
+
+        var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        Assert.Equal("INVALID_BASELINE", error.Code);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"Name\":\"source\"}")]
+    [InlineData("{\"Name\":\"source\",\"Command\":null}")]
+    [InlineData("{\"Name\":\"source\",\"Url\":null}")]
+    [InlineData("{\"Name\":\"\",\"Command\":\"tool install\"}")]
+    public void CanonicalManifestReaderRejectsEveryInstallPresenceVariant(string installJson)
+    {
+        var document = JsonNode.Parse(Normalizer.Serialize(Normalizer.Normalize("opencli", HostileCanonicalSeed())))!.AsObject();
+        document["Info"]!["Install"] = new JsonArray(JsonNode.Parse(installJson));
+
+        var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        Assert.Equal("INVALID_BASELINE", error.Code);
+    }
+
+    [Fact]
+    public void CanonicalManifestReaderAcceptsSourceProducedContactAndInstallPartialStates()
+    {
+        foreach (var contact in new[]
+        {
+            new JsonObject { ["Name"] = "Support", ["Email"] = null, ["Url"] = null },
+            new JsonObject { ["Name"] = null, ["Email"] = "support@example.invalid", ["Url"] = null },
+            new JsonObject { ["Name"] = null, ["Email"] = null, ["Url"] = "https://example.invalid/contact" }
+        })
+        {
+            var document = JsonNode.Parse(Normalizer.Serialize(Normalizer.Normalize("opencli", HostileCanonicalSeed())))!.AsObject();
+            document["Info"]!["Contact"] = contact;
+
+            _ = CanonicalManifestReader.Read(document.ToJsonString());
+        }
+
+        foreach (var install in new[]
+        {
+            new JsonObject { ["Name"] = "source", ["Command"] = "tool install", ["Url"] = null, ["Description"] = null },
+            new JsonObject { ["Name"] = "source", ["Command"] = null, ["Url"] = "https://example.invalid/install", ["Description"] = null }
+        })
+        {
+            var document = JsonNode.Parse(Normalizer.Serialize(Normalizer.Normalize("opencli", HostileCanonicalSeed())))!.AsObject();
+            document["Info"]!["Install"] = new JsonArray(install);
+
+            _ = CanonicalManifestReader.Read(document.ToJsonString());
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("STRING")]
+    [InlineData(" string ")]
+    public void CanonicalManifestReaderRequiresExactAlpha14ParameterTypes(string? type)
+    {
+        var document = JsonNode.Parse(Normalizer.Serialize(Normalizer.Normalize("opencli", HostileCanonicalSeed())))!.AsObject();
+        document["GlobalOptions"]![0]!["Type"] = type;
+
+        var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        Assert.Equal("INVALID_BASELINE", error.Code);
     }
 
     [Theory]
