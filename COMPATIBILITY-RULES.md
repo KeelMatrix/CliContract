@@ -114,6 +114,10 @@ The pinned conformance corpus is [`fixtures/opencli/alpha14-conformance-corpus.j
 
 The adapter supports nested commands, root/global flags, aliases, positional arguments, requiredness, represented arity, scalar choices, scalar defaults, `$ENV`/`$FILE` alternative sources, summaries, descriptions, and bounded Unicode text. It does not claim support for deprecation/status because alpha.14 does not represent that contract field.
 
+### Source-string presence and whitespace
+
+The alpha.14 adapter treats a source-shaped string as present when it is nonempty. It does not trim or treat whitespace-only text as missing: whitespace is preserved verbatim in canonical metadata, help/example text, install and license names, parameter names, aliases, and alternative-source properties. Empty required strings and empty aliases remain invalid, and duplicate aliases remain invalid. This rule aligns source normalization with canonical-manifest validation. It does not relax structural grammar: command paths, normalized `--` option names, and global config file paths retain their existing constraints.
+
 Finite JSON numbers and recognized YAML integer/float spellings are compared by exact numeric value. Recognized YAML floats include trailing-dot exponent mantissas such as `5.e2` and signed/exponent-sign variants. YAML `.inf` and `.nan` spellings are outside the JSON-number boundary: explicit `!!float` forms fail with `OPENCLI_NUMBER` and exit code `3`, while untagged forms remain strings.
 
 ## Failure and privacy behavior

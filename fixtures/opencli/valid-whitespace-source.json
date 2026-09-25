@@ -1,0 +1,39 @@
+{
+  "opencliVersion": "1.0.0-alpha.14",
+  "info": {
+    "title": "   ",
+    "binary": "tool",
+    "version": "   ",
+    "license": { "name": "\t" }
+  },
+  "global": {
+    "config": { "json": "config.json" },
+    "exitCodes": [
+      { "code": 0, "status": "OK", "summary": "   " }
+    ]
+  },
+  "install": [
+    { "name": "  ", "command": "tool install" }
+  ],
+  "commands": {
+    "tool": {
+      "aliases": ["   "],
+      "args": [
+        { "name": "  " }
+      ],
+      "flags": [
+        {
+          "name": "value",
+          "type": "string",
+          "aliases": ["\t"],
+          "alternativeSources": [
+            { "type": "$ENV", "property": "   " }
+          ]
+        }
+      ],
+      "examples": [
+        { "content": "   " }
+      ]
+    }
+  }
+}

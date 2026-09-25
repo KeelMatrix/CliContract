@@ -34,6 +34,34 @@ public sealed class NormalizationTests
     }
 
     [Fact]
+    public void Alpha14WhitespaceStringsRemainSourceProducibleAndRoundTrip()
+    {
+        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "valid-whitespace-source.json")));
+
+        Assert.Equal("   ", manifest.Info.Title);
+        Assert.Equal("\t", manifest.Info.License!.Name);
+        Assert.Equal("  ", manifest.Info.Install[0].Name);
+        Assert.Equal("   ", manifest.GlobalExitCodes[0].Summary);
+        Assert.Equal("   ", manifest.Root.Examples[0].Content);
+        Assert.Equal("   ", manifest.Root.Aliases[0]);
+        Assert.Equal("\t", manifest.Root.Options[0].Aliases[0]);
+        Assert.Equal("  ", manifest.Root.Arguments[0].Name);
+        Assert.Equal("   ", manifest.Root.Options[0].AlternativeSources[0].Property);
+
+        var serialized = Normalizer.Serialize(manifest);
+        Assert.Equal(serialized, Normalizer.Serialize(CanonicalManifestReader.Read(serialized)));
+    }
+
+    [Fact]
+    public void Alpha14WhitespaceBinaryRemainsSourceProducible()
+    {
+        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "valid-whitespace-binary.json")));
+
+        Assert.Equal("   ", manifest.Info.Binary);
+        Assert.Equal(manifest.Info.Binary, CanonicalManifestReader.Read(Normalizer.Serialize(manifest)).Info.Binary);
+    }
+
+    [Fact]
     public void PinnedAlpha14ConformanceCorpusMatchesItsOracle()
     {
         var corpus = JsonNode.Parse(File.ReadAllText(Fixture("opencli", "alpha14-conformance-corpus.json")))!.AsArray();
@@ -93,6 +121,8 @@ public sealed class NormalizationTests
     [InlineData("invalid-contact-anyof.json", "OPENCLI_INFO")]
     [InlineData("invalid-install-anyof.json", "OPENCLI_INSTALL")]
     [InlineData("invalid-example-content.json", "OPENCLI_COMMAND")]
+    [InlineData("invalid-empty-source-value.json", "OPENCLI_INFO")]
+    [InlineData("invalid-empty-alias.json", "INVALID_STRING")]
     [InlineData("invalid-global-config-empty.json", "OPENCLI_GLOBAL")]
     [InlineData("invalid-global-config-extension-only.json", "OPENCLI_GLOBAL")]
     [InlineData("invalid-exit-code-required.json", "OPENCLI_EXIT_CODE")]
@@ -102,6 +132,14 @@ public sealed class NormalizationTests
         var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", fixture))));
 
         Assert.Equal(expectedCode, error.Code);
+    }
+
+    [Fact]
+    public void DuplicateSourceAliasesRemainRejected()
+    {
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "invalid-duplicate-alias.json"))));
+
+        Assert.Equal("INVALID_BASELINE", error.Code);
     }
 
     [Fact]
@@ -895,7 +933,7 @@ public sealed class NormalizationTests
             ("unrepresentable-status", document => document["Root"]!["Status"] = "DEPRECATED"),
             ("invalid-arity", document => document["GlobalOptions"]![0]!["ArityMinimum"] = 2),
             ("invalid-option-name", document => document["GlobalOptions"]![0]!["Name"] = "verbose"),
-            ("invalid-option-alias", document => document["GlobalOptions"]![0]!["Aliases"]![0] = "bad alias"),
+            ("invalid-option-alias", document => document["GlobalOptions"]![0]!["Aliases"]![0] = ""),
             ("contradictory-domains", document => document["GlobalOptions"]![0]!["AllowedValues"]![0] = "other"),
             ("group-local-option", document => { document["Root"]!["Kind"] = "group"; }),
             ("invalid-exit-status", document => document["GlobalExitCodes"]![0]!["Status"] = "DEPRECATED")

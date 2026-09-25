@@ -149,7 +149,7 @@ internal static class CanonicalInvariantValidator
         var seen = new HashSet<int>();
         foreach (var exitCode in exitCodes)
         {
-            if (!seen.Add(exitCode.Code) || !ExitCodeStatuses.Contains(exitCode.Status, StringComparer.Ordinal) || string.IsNullOrWhiteSpace(exitCode.Summary))
+            if (!seen.Add(exitCode.Code) || !ExitCodeStatuses.Contains(exitCode.Status, StringComparer.Ordinal) || exitCode.Summary.Length == 0)
             {
                 throw new NormalizationException("INVALID_BASELINE", $"The canonical {subject} exit-code collection is not source-producible.");
             }
@@ -252,10 +252,6 @@ internal static class CanonicalInvariantValidator
     private static void ValidateParameter(CanonicalParameter parameter, string commandPath, bool option, bool hasFileSource)
     {
         RequireNonEmpty(parameter.Name, "A canonical parameter name is required.");
-        if (parameter.Name.Any(char.IsWhiteSpace))
-        {
-            throw new NormalizationException("INVALID_BASELINE", "Canonical parameter names cannot contain whitespace.");
-        }
 
         if (parameter.Status is not null)
         {
@@ -326,7 +322,7 @@ internal static class CanonicalInvariantValidator
     {
         foreach (var source in sources)
         {
-            if (source.Type is not ("$ENV" or "$FILE") || string.IsNullOrWhiteSpace(source.Property) || source.Type == "$FILE" && !hasFileSource)
+            if (source.Type is not ("$ENV" or "$FILE") || source.Property.Length == 0 || source.Type == "$FILE" && !hasFileSource)
             {
                 throw new NormalizationException("OPENCLI_DEFAULT_SOURCE", "A canonical alternative source is invalid or lacks global file configuration.");
             }
@@ -356,9 +352,9 @@ internal static class CanonicalInvariantValidator
     private static void ValidateStringCollection(IEnumerable<string> values, string subject, bool requireSorted)
     {
         var array = values.ToArray();
-        if (array.Any(string.IsNullOrWhiteSpace) || array.Any(value => value.Any(char.IsWhiteSpace)) || array.Distinct(StringComparer.Ordinal).Count() != array.Length)
+        if (array.Any(value => value.Length == 0) || array.Distinct(StringComparer.Ordinal).Count() != array.Length)
         {
-            throw new NormalizationException("INVALID_BASELINE", $"Canonical {subject} contain an empty, duplicated, or whitespace-containing value.");
+            throw new NormalizationException("INVALID_BASELINE", $"Canonical {subject} contain an empty or duplicated value.");
         }
 
         if (requireSorted && !array.SequenceEqual(array.OrderBy(value => value, StringComparer.Ordinal)))
@@ -369,7 +365,7 @@ internal static class CanonicalInvariantValidator
 
     private static void RequireNonEmpty(string? value, string message)
     {
-        if (string.IsNullOrWhiteSpace(value)) throw new NormalizationException("INVALID_BASELINE", message);
+        if (value is null || value.Length == 0) throw new NormalizationException("INVALID_BASELINE", message);
     }
 
     private static void ValidateCommandInvocations(CanonicalManifest manifest, IReadOnlyList<CanonicalCommand> commands, Dictionary<string, CanonicalCommand> byPath)

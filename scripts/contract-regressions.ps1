@@ -50,6 +50,32 @@ try {
     Write-Utf8 $richSourcePath $richSource
     Assert-Case 'rich-baseline' (Invoke-Tool @('snapshot', $richSourcePath, '--input', 'opencli', '--output', $richBaselinePath, '--no-telemetry')) 0 'SNAPSHOT'
 
+    $whitespaceFixtures = @('valid-whitespace-source.json', 'valid-whitespace-binary.json')
+    foreach ($fixture in $whitespaceFixtures) {
+        $fixturePath = Join-Path $root ('fixtures/opencli/' + $fixture)
+        $fixtureName = [IO.Path]::GetFileNameWithoutExtension($fixture)
+        $fixtureBaseline = Join-Path $temp ($fixtureName + '.canonical.json')
+        Assert-Case "$fixtureName-validate" (Invoke-Tool @('validate', $fixturePath, '--input', 'opencli', '--no-telemetry')) 0 'VALID'
+        Assert-Case "$fixtureName-snapshot" (Invoke-Tool @('snapshot', $fixturePath, '--input', 'opencli', '--output', $fixtureBaseline, '--no-telemetry')) 0 'SNAPSHOT'
+        Assert-Case "$fixtureName-check" (Invoke-Tool @('check', $fixturePath, '--input', 'opencli', '--baseline', $fixtureBaseline, '--no-telemetry')) 0 'COMPATIBLE'
+        Assert-Case "$fixtureName-diff" (Invoke-Tool @('diff', $fixturePath, $fixturePath, '--input', 'opencli', '--no-telemetry')) 0 'COMPATIBLE'
+    }
+    Write-Output 'CASE=whitespace-source-fixtures validate_snapshot_check_diff=PASS'
+
+    foreach ($case in @(
+        @{ Name = 'invalid-empty-source-value'; File = 'invalid-empty-source-value.json'; Code = 'OPENCLI_INFO' },
+        @{ Name = 'invalid-empty-alias'; File = 'invalid-empty-alias.json'; Code = 'INVALID_STRING' },
+        @{ Name = 'invalid-duplicate-alias'; File = 'invalid-duplicate-alias.json'; Code = 'INVALID_BASELINE' }
+    )) {
+        $fixturePath = Join-Path $root ('fixtures/opencli/' + $case.File)
+        $fixtureBaseline = Join-Path $temp ($case.Name + '.canonical.json')
+        Assert-Case "$($case.Name)-validate" (Invoke-Tool @('validate', $fixturePath, '--input', 'opencli', '--no-telemetry')) 3 $case.Code
+        Assert-Case "$($case.Name)-snapshot" (Invoke-Tool @('snapshot', $fixturePath, '--input', 'opencli', '--output', $fixtureBaseline, '--no-telemetry')) 3 $case.Code
+        Assert-Case "$($case.Name)-check" (Invoke-Tool @('check', $fixturePath, '--input', 'opencli', '--baseline', $richBaselinePath, '--no-telemetry')) 3 $case.Code
+        Assert-Case "$($case.Name)-diff" (Invoke-Tool @('diff', $fixturePath, $fixturePath, '--input', 'opencli', '--no-telemetry')) 3 $case.Code
+    }
+    Write-Output 'CASE=whitespace-source-negative-fixtures validate_snapshot_check_diff=PASS'
+
     function Write-CanonicalMutation([string] $Name, [scriptblock] $Mutation) {
         $document = [System.Text.Json.Nodes.JsonNode]::Parse([IO.File]::ReadAllText($richBaselinePath))
         & $Mutation $document

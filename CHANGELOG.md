@@ -6,6 +6,7 @@ This file records user-visible changes to KeelMatrix CliContract.
 
 ### Fixed
 
+- Preserve nonempty whitespace-only alpha.14 source strings through canonical manifests while continuing to reject empty and duplicate aliases.
 - Canonical baseline validation now rejects every tested alpha.14-unrepresentable state in the source-producibility sweep, including empty contact/install presence, non-letter command segments, exact parameter types, required metadata fields, license/example required fields, and the existing arity, source, domain, status, file-source, and exit-code invariants; `check` and `diff` return bounded exit `3` for each invalid baseline.
 
 ### Added

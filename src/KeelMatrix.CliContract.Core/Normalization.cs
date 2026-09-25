@@ -1508,7 +1508,13 @@ public static class Normalizer
                 throw new NormalizationException("INVALID_STRING", "The aliases field must contain only strings.");
             }
 
-            return BoundedString(item.GetValue<string>(), limits);
+            var value = BoundedString(item.GetValue<string>(), limits);
+            if (value.Length == 0)
+            {
+                throw new NormalizationException("INVALID_STRING", "The aliases field must contain non-empty strings.");
+            }
+
+            return value;
         }).ToArray();
     }
 

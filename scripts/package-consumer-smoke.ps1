@@ -107,6 +107,21 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Installed tool could not check the tagged alpha.14 command-key fixture against itself.' }
     Write-Output 'CASE=official-alpha14-command-key-grammar exit=0'
 
+    foreach ($fixture in @('valid-whitespace-source.json', 'valid-whitespace-binary.json')) {
+        $fixturePath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot ('..\fixtures\opencli\' + $fixture))).Path
+        $fixtureName = [IO.Path]::GetFileNameWithoutExtension($fixture)
+        $fixtureBaseline = Join-Path $temp ($fixtureName + '.canonical.json')
+        & $tool validate $fixturePath --input opencli --no-telemetry | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Installed tool rejected $fixtureName whitespace source fixture." }
+        & $tool snapshot $fixturePath --input opencli --output $fixtureBaseline --no-telemetry | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Installed tool could not snapshot $fixtureName whitespace source fixture." }
+        & $tool check $fixturePath --input opencli --baseline $fixtureBaseline --no-telemetry | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Installed tool could not check $fixtureName whitespace source fixture." }
+        & $tool diff $fixturePath $fixturePath --input opencli --no-telemetry | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Installed tool could not diff $fixtureName whitespace source fixture against itself." }
+    }
+    Write-Output 'CASE=whitespace-source-fixtures-consumer validate_snapshot_check_diff=PASS'
+
     function Assert-ToolError {
         param(
             [string] $Label,
@@ -122,6 +137,20 @@ try {
             throw "Packed-tool $Label error contract failed: exit=$actualExit output=$joined"
         }
     }
+
+    foreach ($case in @(
+        @{ Name = 'invalid-empty-source-value'; File = 'invalid-empty-source-value.json'; Code = 'OPENCLI_INFO' },
+        @{ Name = 'invalid-empty-alias'; File = 'invalid-empty-alias.json'; Code = 'INVALID_STRING' },
+        @{ Name = 'invalid-duplicate-alias'; File = 'invalid-duplicate-alias.json'; Code = 'INVALID_BASELINE' }
+    )) {
+        $fixturePath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot ('..\fixtures\opencli\' + $case.File))).Path
+        $fixtureBaseline = Join-Path $temp ($case.Name + '.canonical.json')
+        Assert-ToolError -Label "$($case.Name) consumer validate" -ExpectedExit 3 -ExpectedCode $case.Code -Arguments @('validate', $fixturePath, '--input', 'opencli', '--no-telemetry')
+        Assert-ToolError -Label "$($case.Name) consumer snapshot" -ExpectedExit 3 -ExpectedCode $case.Code -Arguments @('snapshot', $fixturePath, '--input', 'opencli', '--output', $fixtureBaseline, '--no-telemetry')
+        Assert-ToolError -Label "$($case.Name) consumer check" -ExpectedExit 3 -ExpectedCode $case.Code -Arguments @('check', $fixturePath, '--input', 'opencli', '--baseline', $officialBaseline, '--no-telemetry')
+        Assert-ToolError -Label "$($case.Name) consumer diff" -ExpectedExit 3 -ExpectedCode $case.Code -Arguments @('diff', $fixturePath, $fixturePath, '--input', 'opencli', '--no-telemetry')
+    }
+    Write-Output 'CASE=whitespace-source-negative-fixtures-consumer validate_snapshot_check_diff=PASS'
 
     function Assert-InformationalCase {
         param(
