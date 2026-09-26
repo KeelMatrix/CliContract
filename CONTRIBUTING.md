@@ -41,7 +41,12 @@ fetch remote references, or scrape help output. Report vulnerabilities through [
 
 The acceptance-map scripts are deterministic review tooling. `generate-acceptance-map.ps1` takes the current checklist
 and a criterion-keyed review ledger, emits rows in checklist order, and `lint-acceptance-map.ps1` verifies exact
-criterion text and criterion hashes before accepting candidate-SHA proof. Run the permanent script regression with:
+criterion text and criterion hashes before accepting candidate-SHA proof. A `MET` proof must also contain at least one
+machine-checkable anchor: `repo_path=<existing repository path>`, `command=<exact command>; output=<exact output>`,
+`criterion_value=<criterion-specific value>`, or a GitHub Actions run reference. Run references are resolved with
+`gh run view <id> --repo KeelMatrix/CliContract --json headSha,status,conclusion,event`; the generator embeds that
+metadata and the linter requires every named run to be completed/success at the candidate SHA. Use `-RunMetadataPath`
+only for deterministic offline tests with the same JSON fields. Run the permanent script regression with:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/test-acceptance-map.ps1

@@ -10,7 +10,11 @@ param(
     [string] $CandidateSha,
 
     [Parameter(Mandatory = $true)]
-    [string] $OutputPath
+    [string] $OutputPath,
+
+    [string] $Repository = 'KeelMatrix/CliContract',
+
+    [string] $RunMetadataPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -27,6 +31,70 @@ function Get-CriterionHash([string] $criterion) {
 
 function Escape-Cell([string] $value) {
     return $value.Replace('|', '\|').Replace("`r", ' ').Replace("`n", ' ').Trim()
+}
+
+function Find-GitHubRunIds([string] $proof) {
+    $pattern = '(?ix)(?:github\s+actions?\s+run(?:\s+id)?|github\s+run(?:\s+id)?|actions?\s+run(?:\s+id)?|ci\s+run(?:\s+id)?|run_id)\s*[:=#]?\s*(?<id>\d{6,})\b|gh\s+run\s+view\s+(?<ghid>\d{6,})\b'
+    $ids = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($match in [regex]::Matches($proof, $pattern)) {
+        $id = if ($match.Groups['id'].Success) { $match.Groups['id'].Value } else { $match.Groups['ghid'].Value }
+        if ($id) { [void]$ids.Add($id) }
+    }
+    return @($ids | Sort-Object { [long]$_ })
+}
+
+function Remove-GeneratedRunMetadata([string] $proof) {
+    return [regex]::Replace(
+        $proof,
+        '(?i)\bgithub_run_(?:id|head_sha|status|conclusion|event)=[^;|]+;?\s*',
+        ''
+    ).Trim()
+}
+
+$runMetadataById = @{}
+if ($RunMetadataPath) {
+    if (-not (Test-Path -LiteralPath $RunMetadataPath -PathType Leaf)) {
+        throw "Run metadata file was not found: $RunMetadataPath"
+    }
+
+    foreach ($entry in @(Get-Content -Raw -LiteralPath $RunMetadataPath | ConvertFrom-Json)) {
+        $runId = if ($null -ne $entry.run_id) { [string]$entry.run_id } elseif ($null -ne $entry.id) { [string]$entry.id } else { $null }
+        if ([string]::IsNullOrWhiteSpace($runId)) {
+            throw 'Every run metadata entry requires run_id or id.'
+        }
+        if ($runMetadataById.ContainsKey($runId)) {
+            throw "Duplicate run metadata entry: $runId"
+        }
+        $runMetadataById[$runId] = $entry
+    }
+}
+
+function Get-GitHubRunMetadata([string] $runId) {
+    if ($runMetadataById.ContainsKey($runId)) {
+        return $runMetadataById[$runId]
+    }
+
+    $raw = @(& gh run view $runId --repo $Repository --json headSha,status,conclusion,event 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to validate GitHub Actions run $runId with gh run view. Output: $($raw -join ' ')"
+    }
+
+    try {
+        $metadata = ($raw | ForEach-Object { $_.ToString() }) -join "`n" | ConvertFrom-Json
+    }
+    catch {
+        throw "GitHub Actions run $runId returned invalid JSON metadata: $($_.Exception.Message)"
+    }
+    $runMetadataById[$runId] = $metadata
+    return $metadata
+}
+
+function Get-RunField([object] $metadata, [string] $name, [string] $runId) {
+    $value = $metadata.$name
+    if ($null -eq $value -or [string]::IsNullOrWhiteSpace([string]$value)) {
+        throw "GitHub Actions run $runId metadata did not contain $name."
+    }
+    return ([string]$value).Trim()
 }
 
 $checklistRows = @(
@@ -77,6 +145,25 @@ for ($index = 0; $index -lt $checklistRows.Count; $index++) {
     $detail = ([string]$entry.evidence).Trim()
     if ([string]::IsNullOrWhiteSpace($detail)) {
         throw "Evidence is empty for checklist criterion $($index + 1)."
+    }
+
+    $runIds = @(Find-GitHubRunIds $detail)
+    $detail = Remove-GeneratedRunMetadata $detail
+    foreach ($runId in $runIds) {
+        $metadata = Get-GitHubRunMetadata $runId
+        $headSha = Get-RunField $metadata 'headSha' $runId
+        if ($headSha -notmatch '^[0-9a-fA-F]{40}$') {
+            throw "GitHub Actions run $runId returned an invalid headSha: $headSha"
+        }
+
+        if ($status -eq 'MET' -and $headSha -ine $CandidateSha) {
+            throw "GitHub Actions run $runId is not candidate-bound: headSha=$headSha candidate_sha=$($CandidateSha.ToLowerInvariant())"
+        }
+
+        $runStatus = Get-RunField $metadata 'status' $runId
+        $conclusion = Get-RunField $metadata 'conclusion' $runId
+        $event = Get-RunField $metadata 'event' $runId
+        $detail = "$detail; github_run_id=$runId; github_run_head_sha=$($headSha.ToLowerInvariant()); github_run_status=$runStatus; github_run_conclusion=$conclusion; github_run_event=$event"
     }
 
     if ($status -eq 'MET') {
