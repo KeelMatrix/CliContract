@@ -54,7 +54,7 @@ the linter rejects any embedded metadata that does not match the live run and ca
 and linter expose no run-metadata override; the fixture resolver exists only in the non-exported test seam. Mechanical
 checks establish candidate binding, exact criterion text/hashes, command/checker output, path containment, and proof
 shape. They cannot establish that a judgement rationale is semantically relevant, so `judgement` remains reviewer
-attestation rather than mechanically proven evidence. Run the permanent script regression with:
+attestation rather than mechanically proven proof. Run the permanent script regression with:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/test-acceptance-map.ps1
