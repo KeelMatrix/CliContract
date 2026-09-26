@@ -55,7 +55,7 @@ The manifest schema version is independent of the upstream OpenCLI version. Vers
 
 ## Verification references
 
-When a manifest path is cited in a repository acceptance record, path existence is not proof of a criterion. The record must also include an exact command and captured output, a rerunnable repository checker, a candidate-bound CI run, or an explicit `judgement=artifacts=...; rationale=...` anchor. Generated maps mark judgement proof separately; see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the validation contract. Production map generation and linting independently resolve named CI runs; the hermetic self-test uses only its internal fixture resolver and does not invoke `gh` or the network.
+When a manifest path is cited in a repository acceptance record, path existence is not proof of a criterion. The record must also include an exact command and captured output, a rerunnable repository checker, a candidate-bound CI run, or an explicit `judgement=artifacts=...; rationale=...` anchor. Generated maps mark judgement proof separately; see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the validation contract. Production map generation and linting independently resolve named CI runs through the application-only `gh` lookup; a caller-defined PowerShell function is not accepted. The hermetic self-test uses only its non-exported internal fixture seam and does not invoke `gh` or the network. These mechanical checks do not prove that a judgement rationale is semantically relevant; that part remains reviewer attestation.
 
 ## Unsupported constructs
 

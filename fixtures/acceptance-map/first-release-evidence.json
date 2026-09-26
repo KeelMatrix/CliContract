@@ -1,0 +1,852 @@
+[
+  {
+    "criterion_number": 1,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 2,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 3,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 4,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 5,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 6,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 7,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 8,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 9,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 10,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 11,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 12,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 13,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 14,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 15,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 16,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 17,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 18,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,MANIFEST.md,COMPATIBILITY-RULES.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 19,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 20,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 21,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 22,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 23,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 24,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 25,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 26,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 27,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 28,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 29,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 30,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 31,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 32,
+    "status": "N/A",
+    "evidence": "not applicable because the optional Code of Conduct is not present"
+  },
+  {
+    "criterion_number": 33,
+    "status": "N/A",
+    "evidence": "not applicable because issue and pull-request templates are not present"
+  },
+  {
+    "criterion_number": 34,
+    "status": "N/A",
+    "evidence": "not applicable because CODEOWNERS is optional and not present"
+  },
+  {
+    "criterion_number": 35,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 36,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 37,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 38,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 39,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,LICENSE,.gitignore,.editorconfig,.gitattributes,NuGet.config,global.json,Directory.Build.props,Directory.Packages.props,CHANGELOG.md,SECURITY.md,PRIVACY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 40,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 41,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 42,
+    "status": "N/A",
+    "evidence": "not applicable because the shipping product is an executable tool, not a library assembly with a supported public .NET API"
+  },
+  {
+    "criterion_number": 43,
+    "status": "N/A",
+    "evidence": "not applicable because the shipping product has no Public API analyzer baseline requirement"
+  },
+  {
+    "criterion_number": 44,
+    "status": "N/A",
+    "evidence": "not applicable because the shipping product has no Public API baseline"
+  },
+  {
+    "criterion_number": 45,
+    "status": "N/A",
+    "evidence": "not applicable because the shipping product has no accidental library API surface"
+  },
+  {
+    "criterion_number": 46,
+    "status": "N/A",
+    "evidence": "not applicable because the shipping product has no shipping library XML API documentation requirement"
+  },
+  {
+    "criterion_number": 47,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 48,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 49,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 50,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 51,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 52,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 53,
+    "status": "N/A",
+    "evidence": "not applicable because the product has no UX or UI"
+  },
+  {
+    "criterion_number": 54,
+    "status": "N/A",
+    "evidence": "not applicable because the product has no dangerous or irreversible user operation"
+  },
+  {
+    "criterion_number": 55,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 56,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 57,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 58,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 59,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 60,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 61,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 62,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 63,
+    "status": "N/A",
+    "evidence": "not applicable because the repository has no sample projects"
+  },
+  {
+    "criterion_number": 64,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 65,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 66,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 67,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 68,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 69,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 70,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,COMPATIBILITY-RULES.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md,CONTRIBUTING.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 71,
+    "status": "MET",
+    "evidence": "judgement=artifacts=Directory.Packages.props,PRIVACY.md,SECURITY.md,scripts/validate-sensitive-paths.ps1,.github/workflows/build.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 72,
+    "status": "MET",
+    "evidence": "judgement=artifacts=Directory.Packages.props,PRIVACY.md,SECURITY.md,scripts/validate-sensitive-paths.ps1,.github/workflows/build.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 73,
+    "status": "MET",
+    "evidence": "judgement=artifacts=Directory.Packages.props,PRIVACY.md,SECURITY.md,scripts/validate-sensitive-paths.ps1,.github/workflows/build.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 74,
+    "status": "MET",
+    "evidence": "judgement=artifacts=Directory.Packages.props,PRIVACY.md,SECURITY.md,scripts/validate-sensitive-paths.ps1,.github/workflows/build.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 75,
+    "status": "MET",
+    "evidence": "judgement=artifacts=Directory.Packages.props,PRIVACY.md,SECURITY.md,scripts/validate-sensitive-paths.ps1,.github/workflows/build.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 76,
+    "status": "MET",
+    "evidence": "judgement=artifacts=Directory.Packages.props,PRIVACY.md,SECURITY.md,scripts/validate-sensitive-paths.ps1,.github/workflows/build.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 77,
+    "status": "MET",
+    "evidence": "judgement=artifacts=Directory.Packages.props,PRIVACY.md,SECURITY.md,scripts/validate-sensitive-paths.ps1,.github/workflows/build.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 78,
+    "status": "MET",
+    "evidence": "judgement=artifacts=Directory.Packages.props,PRIVACY.md,SECURITY.md,scripts/validate-sensitive-paths.ps1,.github/workflows/build.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 79,
+    "status": "MET",
+    "evidence": "judgement=artifacts=Directory.Packages.props,PRIVACY.md,SECURITY.md,scripts/validate-sensitive-paths.ps1,.github/workflows/build.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 80,
+    "status": "MET",
+    "evidence": "judgement=artifacts=Directory.Packages.props,PRIVACY.md,SECURITY.md,scripts/validate-sensitive-paths.ps1,.github/workflows/build.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 81,
+    "status": "MET",
+    "evidence": "judgement=artifacts=PRIVACY.md,src/KeelMatrix.CliContract.Tool/README.md; rationale=self-review checked the product telemetry contract, suppression controls, best-effort behavior, and core-operation independence against these criterion-specific artifacts"
+  },
+  {
+    "criterion_number": 82,
+    "status": "MET",
+    "evidence": "judgement=artifacts=Directory.Packages.props,PRIVACY.md,SECURITY.md,scripts/validate-sensitive-paths.ps1,.github/workflows/build.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 83,
+    "status": "MET",
+    "evidence": "judgement=artifacts=Directory.Packages.props,PRIVACY.md,SECURITY.md,scripts/validate-sensitive-paths.ps1,.github/workflows/build.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 84,
+    "status": "N/A",
+    "evidence": "not applicable because no optional security automation is configured"
+  },
+  {
+    "criterion_number": 85,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 86,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 87,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 88,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 89,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 90,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 91,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 92,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 93,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 94,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 95,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 96,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 97,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 98,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 99,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 100,
+    "status": "MET",
+    "evidence": "judgement=artifacts=CONTRIBUTING.md,scripts/local-gate.ps1,scripts/inspect-package.ps1,scripts/package-consumer-smoke.ps1,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 101,
+    "status": "MET",
+    "evidence": "command=gh repo view KeelMatrix/CliContract --json description --jq .description; output=Detect breaking command-line interface changes from OpenCLI contracts."
+  },
+  {
+    "criterion_number": 102,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,src/KeelMatrix.CliContract.Tool/README.md,MANIFEST.md,COMPATIBILITY-RULES.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 103,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,src/KeelMatrix.CliContract.Tool/README.md,MANIFEST.md,COMPATIBILITY-RULES.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 104,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,src/KeelMatrix.CliContract.Tool/README.md,MANIFEST.md,COMPATIBILITY-RULES.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 105,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,src/KeelMatrix.CliContract.Tool/README.md,MANIFEST.md,COMPATIBILITY-RULES.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 106,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,src/KeelMatrix.CliContract.Tool/README.md,MANIFEST.md,COMPATIBILITY-RULES.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 107,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,src/KeelMatrix.CliContract.Tool/README.md,MANIFEST.md,COMPATIBILITY-RULES.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 108,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,src/KeelMatrix.CliContract.Tool/README.md,MANIFEST.md,COMPATIBILITY-RULES.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 109,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,src/KeelMatrix.CliContract.Tool/README.md,MANIFEST.md,COMPATIBILITY-RULES.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 110,
+    "status": "N/A",
+    "evidence": "not applicable because the repository ships one public tool"
+  },
+  {
+    "criterion_number": 111,
+    "status": "MET",
+    "evidence": "judgement=artifacts=LICENSE,CHANGELOG.md,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj,.github/workflows/build.yml,.github/workflows/release.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 112,
+    "status": "MET",
+    "evidence": "judgement=artifacts=LICENSE,CHANGELOG.md,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj,.github/workflows/build.yml,.github/workflows/release.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 113,
+    "status": "MET",
+    "evidence": "judgement=artifacts=LICENSE,CHANGELOG.md,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj,.github/workflows/build.yml,.github/workflows/release.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 114,
+    "status": "MET",
+    "evidence": "judgement=artifacts=LICENSE,CHANGELOG.md,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj,.github/workflows/build.yml,.github/workflows/release.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 115,
+    "status": "MET",
+    "evidence": "judgement=artifacts=LICENSE,CHANGELOG.md,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj,.github/workflows/build.yml,.github/workflows/release.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 116,
+    "status": "MET",
+    "evidence": "judgement=artifacts=LICENSE,CHANGELOG.md,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj,.github/workflows/build.yml,.github/workflows/release.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 117,
+    "status": "MET",
+    "evidence": "judgement=artifacts=LICENSE,CHANGELOG.md,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj,.github/workflows/build.yml,.github/workflows/release.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 118,
+    "status": "MET",
+    "evidence": "judgement=artifacts=LICENSE,CHANGELOG.md,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj,.github/workflows/build.yml,.github/workflows/release.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 119,
+    "status": "MET",
+    "evidence": "judgement=artifacts=LICENSE,CHANGELOG.md,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj,.github/workflows/build.yml,.github/workflows/release.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 120,
+    "status": "MET",
+    "evidence": "judgement=artifacts=LICENSE,CHANGELOG.md,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj,.github/workflows/build.yml,.github/workflows/release.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 121,
+    "status": "MET",
+    "evidence": "judgement=artifacts=LICENSE,CHANGELOG.md,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj,.github/workflows/build.yml,.github/workflows/release.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 122,
+    "status": "MET",
+    "evidence": "judgement=artifacts=LICENSE,CHANGELOG.md,src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj,.github/workflows/build.yml,.github/workflows/release.yml; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 123,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 124,
+    "status": "N/A",
+    "evidence": "not applicable because no released-company precedent was needed for this self-review"
+  },
+  {
+    "criterion_number": 125,
+    "status": "N/A",
+    "evidence": "not applicable because no released-company precedent was selected"
+  },
+  {
+    "criterion_number": 126,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 127,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 128,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 129,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 130,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 131,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 132,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 133,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 134,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 135,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 136,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 137,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 138,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 139,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 140,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 141,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 142,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 143,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 144,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 145,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 146,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 147,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 148,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 149,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 150,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 151,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 152,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 153,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 154,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 155,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 156,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 157,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 158,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 159,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 160,
+    "status": "N/A",
+    "evidence": "not applicable because the optional Code of Conduct is not present"
+  },
+  {
+    "criterion_number": 161,
+    "status": "N/A",
+    "evidence": "not applicable because the optional Code of Conduct is not present"
+  },
+  {
+    "criterion_number": 162,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 163,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 164,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 165,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 166,
+    "status": "N/A",
+    "evidence": "not applicable because the repository has no conditional sample or benchmark documentation directories"
+  },
+  {
+    "criterion_number": 167,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 168,
+    "status": "N/A",
+    "evidence": "not applicable because the repository has no family of repeated reference documents"
+  },
+  {
+    "criterion_number": 169,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  },
+  {
+    "criterion_number": 170,
+    "status": "MET",
+    "evidence": "judgement=artifacts=README.md,CONTRIBUTING.md,PRIVACY.md,SECURITY.md,MANIFEST.md,docs/OPENCLI-ALPHA14-CONFORMANCE.md,docs/ERROR-TAXONOMY.md; rationale=self-review compared this criterion with the declared criterion-specific repository artifacts and found the requirement satisfied at the candidate"
+  }
+]

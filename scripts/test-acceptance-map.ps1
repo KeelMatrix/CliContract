@@ -94,19 +94,28 @@ try {
         }
     }
 
-    # The resolver is available only to the internal implementation function after
-    # these scripts are dot-sourced. It is not a parameter on either production CLI.
+    # Dot-sourcing the production scripts must not expose either implementation or
+    # its test-only metadata resolver seam.
     . $generator -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath $map
     . $linter -ChecklistPath $checklist -MapPath $map -CandidateSha $candidate -RepositoryRoot $repositoryRoot
 
-    Invoke-AcceptanceMapGeneration -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath $map -RunMetadataResolver $runMetadataResolver
-    Invoke-AcceptanceMapGeneration -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath $mapAgain -RunMetadataResolver $runMetadataResolver
+    if (Get-Command Invoke-AcceptanceMapGeneration -ErrorAction SilentlyContinue) {
+        throw 'Dot-sourcing the production generator exposed a callable implementation.'
+    }
+    if (Get-Command Invoke-AcceptanceMapLint -ErrorAction SilentlyContinue) {
+        throw 'Dot-sourcing the production linter exposed a callable implementation.'
+    }
+
+    . (Join-Path $scriptDirectory 'private\acceptance-map-internals.ps1')
+
+    Invoke-AcceptanceMapGenerationCore -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath $map -RunMetadataResolver $runMetadataResolver
+    Invoke-AcceptanceMapGenerationCore -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath $mapAgain -RunMetadataResolver $runMetadataResolver
     if (-not (Test-Path -LiteralPath $map) -or -not (Test-Path -LiteralPath $mapAgain)) { throw 'Acceptance map self-test did not generate both maps.' }
     if (-not ([Linq.Enumerable]::SequenceEqual([IO.File]::ReadAllBytes($map), [IO.File]::ReadAllBytes($mapAgain)))) {
         throw 'Acceptance map generator was not byte-identical for the same inputs.'
     }
 
-    Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $map -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver
+    Invoke-AcceptanceMapLintCore -ChecklistPath $checklist -MapPath $map -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver
 
     $metadataOverrideOutput = @(& pwsh -NoProfile -File $generator -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath (Join-Path $temp 'metadata-override-map.md') -RunMetadataPath $runMetadata 2>&1)
     $metadataOverrideExit = $LASTEXITCODE
@@ -123,56 +132,80 @@ try {
     $tampered = $tampered.Replace("github_run_head_sha=$candidate", "github_run_head_sha=$stale")
     [IO.File]::WriteAllText($staleRunMap, $tampered, [Text.UTF8Encoding]::new($false))
     Assert-ExpectedRejection `
-        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $staleRunMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -Action { Invoke-AcceptanceMapLintCore -ChecklistPath $checklist -MapPath $staleRunMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
         -ExpectedPattern 'forged or stale head SHA metadata' `
         -FailureMessage 'Acceptance map lint self-test accepted forged embedded run metadata.'
 
     $forgedRun = (Get-Content -Raw -LiteralPath $map).Replace('github_run_id=123456789', 'github_run_id=36196565020')
     [IO.File]::WriteAllText($forgedRunMap, $forgedRun, [Text.UTF8Encoding]::new($false))
     Assert-ExpectedRejection `
-        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $forgedRunMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -Action { Invoke-AcceptanceMapLintCore -ChecklistPath $checklist -MapPath $forgedRunMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
         -ExpectedPattern 'resolved head SHA is not the candidate|independently validate' `
         -FailureMessage 'Acceptance map lint self-test accepted a stale run id paired with a forged candidate head SHA.'
 
     Assert-ExpectedRejection `
-        -Action { Invoke-AcceptanceMapGeneration -ChecklistPath $checklist -EvidencePath $staleEvidence -CandidateSha $candidate -OutputPath (Join-Path $temp 'stale-generated-map.md') -RunMetadataResolver $runMetadataResolver } `
+        -Action { Invoke-AcceptanceMapGenerationCore -ChecklistPath $checklist -EvidencePath $staleEvidence -CandidateSha $candidate -OutputPath (Join-Path $temp 'stale-generated-map.md') -RunMetadataResolver $runMetadataResolver } `
         -ExpectedPattern 'not candidate-bound' `
         -FailureMessage 'Acceptance map generator self-test accepted a stale run id end-to-end.'
 
     $pathOnly = (Get-Content -Raw -LiteralPath $map).Replace('repo_path=README.md; command=pwsh -NoProfile -File ./scripts/test-acceptance-map.ps1; output=ACCEPTANCE_MAP_SELF_TEST=PASS', 'repo_path=LICENSE')
     [IO.File]::WriteAllText($pathOnlyMap, $pathOnly, [Text.UTF8Encoding]::new($false))
     Assert-ExpectedRejection `
-        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $pathOnlyMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -Action { Invoke-AcceptanceMapLintCore -ChecklistPath $checklist -MapPath $pathOnlyMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
         -ExpectedPattern 'valid reproducible or explicit judgement anchor' `
         -FailureMessage 'Acceptance map lint self-test accepted an existing but irrelevant path anchor.'
 
     $judgementWithoutArtifact = (Get-Content -Raw -LiteralPath $map).Replace('judgement=artifacts=README.md', 'judgement=reviewer judgment without an artifact reference')
     [IO.File]::WriteAllText($judgementWithoutArtifactMap, $judgementWithoutArtifact, [Text.UTF8Encoding]::new($false))
     Assert-ExpectedRejection `
-        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $judgementWithoutArtifactMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -Action { Invoke-AcceptanceMapLintCore -ChecklistPath $checklist -MapPath $judgementWithoutArtifactMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
         -ExpectedPattern 'valid reproducible or explicit judgement anchor' `
         -FailureMessage 'Acceptance map lint self-test accepted a judgement without a criterion-specific artifact.'
 
     $generic = $pathOnly.Replace('repo_path=LICENSE', 'generic evidence')
     [IO.File]::WriteAllText($genericMap, $generic, [Text.UTF8Encoding]::new($false))
     Assert-ExpectedRejection `
-        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $genericMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -Action { Invoke-AcceptanceMapLintCore -ChecklistPath $checklist -MapPath $genericMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
         -ExpectedPattern 'valid reproducible or explicit judgement anchor' `
         -FailureMessage 'Acceptance map lint self-test accepted generic proof text.'
 
     $textDrift = (Get-Content -Raw -LiteralPath $map).Replace('Second criterion', 'Tampered criterion')
     [IO.File]::WriteAllText($tamperedTextMap, $textDrift, [Text.UTF8Encoding]::new($false))
     Assert-ExpectedRejection `
-        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $tamperedTextMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -Action { Invoke-AcceptanceMapLintCore -ChecklistPath $checklist -MapPath $tamperedTextMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
         -ExpectedPattern 'criterion mismatch' `
         -FailureMessage 'Acceptance map lint self-test accepted criterion-text drift.'
 
     Assert-ExpectedRejection `
-        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $map -CandidateSha $stale -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -Action { Invoke-AcceptanceMapLintCore -ChecklistPath $checklist -MapPath $map -CandidateSha $stale -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
         -ExpectedPattern 'exact candidate-SHA' `
         -FailureMessage 'Acceptance map lint self-test accepted candidate-SHA drift.'
 
-    Write-Output 'ACCEPTANCE_MAP_SELF_TEST=PASS generated=3 linted=2 rejected_metadata_override=1 rejected_internal_resolver=1 rejected_forged_embedded_run=1 rejected_forged_run_id=1 rejected_stale_run_end_to_end=1 rejected_path_only=1 rejected_judgement_without_artifact=1 rejected_generic=1 rejected_text_drift=1 rejected_candidate_sha=1 deterministic=1 checker=1 judgement_marker=1 fixture_golden=1'
+    $module = Import-Module (Join-Path $scriptDirectory 'private\acceptance-map.psm1') -Force -PassThru
+    $exportedNames = @(Get-Command -Module $module.Name | Select-Object -ExpandProperty Name)
+    if ($exportedNames -contains 'Invoke-AcceptanceMapGenerationCore' -or $exportedNames -contains 'Invoke-AcceptanceMapLintCore') {
+        throw 'The private acceptance-map module exported its test-only implementation seam.'
+    }
+    Remove-Module $module.Name -Force
+
+    $fakeGhDirectory = Join-Path $temp 'fake-gh'
+    New-Item -ItemType Directory -Path $fakeGhDirectory | Out-Null
+    $fakeGhPath = Join-Path $fakeGhDirectory 'gh.cmd'
+    $fakeGhBody = "@echo off`r`necho {`"headSha`":`"$candidate`",`"status`":`"completed`",`"conclusion`":`"success`",`"event`":`"push`"}`r`n"
+    [IO.File]::WriteAllText($fakeGhPath, $fakeGhBody, [Text.Encoding]::ASCII)
+    $originalPath = $env:PATH
+    $env:PATH = "$fakeGhDirectory$([IO.Path]::PathSeparator)$originalPath"
+    function gh { throw 'caller-defined gh function was invoked' }
+    try {
+        Invoke-AcceptanceMapGenerationCore -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath (Join-Path $temp 'application-resolved-map.md')
+        Invoke-AcceptanceMapLintCore -ChecklistPath $checklist -MapPath (Join-Path $temp 'application-resolved-map.md') -CandidateSha $candidate -RepositoryRoot $repositoryRoot
+    }
+    finally {
+        $env:PATH = $originalPath
+        Remove-Item Function:gh -ErrorAction SilentlyContinue
+    }
+
+    Write-Output 'ACCEPTANCE_MAP_SELF_TEST=PASS generated=4 linted=3 rejected_metadata_override=1 rejected_internal_resolver=1 rejected_forged_embedded_run=1 rejected_forged_run_id=1 rejected_stale_run_end_to_end=1 rejected_path_only=1 rejected_judgement_without_artifact=1 rejected_generic=1 rejected_text_drift=1 rejected_candidate_sha=1 rejected_function_gh=1 private_exports=1 deterministic=1 checker=1 judgement_marker=1 fixture_golden=1'
     exit 0
 }
 finally {

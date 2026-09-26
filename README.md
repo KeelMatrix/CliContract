@@ -72,7 +72,7 @@ Run the check in a build step and preserve the baseline in the application repos
 clicontract check ./opencli.yaml --baseline ./cli-contract.json --format json
 ```
 
-Repository acceptance records follow the same contract as the validation gates: a candidate-bound CI run, an exact command with captured output, a rerunnable repository checker, or an explicit judgement naming criterion-specific artifacts and rationale. A baseline or fixture path alone is not proof; the contributor workflow and acceptance-map scripts enforce this distinction. Production named-run validation is independently resolved; the acceptance-map self-test uses internal fixture metadata and does not require `gh`, network access, or `GH_TOKEN`.
+Repository acceptance records follow the same contract as the validation gates: a candidate-bound CI run, an exact command with captured output, a rerunnable repository checker, or an explicit judgement naming criterion-specific artifacts and rationale. A baseline or fixture path alone is not proof; the contributor workflow and acceptance-map scripts enforce this distinction. Production named-run validation resolves the application returned by `Get-Command gh -CommandType Application`, so a caller-defined PowerShell function cannot substitute for `gh`. Candidate binding, criterion text/hashes, command/checker output, and path containment are mechanical checks; the semantic relevance of a `judgement` rationale remains reviewer attestation. The acceptance-map self-test uses a non-exported fixture seam and does not require `gh`, network access, or `GH_TOKEN`.
 
 ## Troubleshooting
 

@@ -40,17 +40,21 @@ Keep tests and fixtures bounded, deterministic, and offline after restore. The t
 fetch remote references, or scrape help output. Report vulnerabilities through [`SECURITY.md`](SECURITY.md).
 
 The acceptance-map scripts are deterministic review tooling. `generate-acceptance-map.ps1` takes the current checklist
-and a criterion-keyed review ledger, emits rows in checklist order, and `lint-acceptance-map.ps1` verifies exact
+and a criterion-keyed review ledger (using exact criterion text or a one-based `criterion_number`), emits rows in checklist order, and `lint-acceptance-map.ps1` verifies exact
 criterion text and criterion hashes before accepting candidate-SHA proof. Every `MET` proof must contain at least one
 of these anchors: a candidate-bound GitHub Actions run, `command=<exact command>; output=<captured output>`,
 `checker=<repository-owned scripts/*.ps1 path>; checker_output=<captured result>` (the linter reruns the checker), or
 `judgement=artifacts=<one or more existing repository paths>; rationale=<criterion-specific reviewer rationale>`.
 `repo_path=<existing repository path>` and `criterion_value=<value>` are supplemental references only; either one by
 itself is rejected. Judgement rows are marked `proof_kind=judgement` in the generated map so they are visibly
-distinct from reproducible proof. Run references are resolved independently by both scripts with
-`gh run view <id> --repo KeelMatrix/CliContract --json headSha,status,conclusion,event`; the linter rejects any
-embedded metadata that does not match the live run and candidate SHA. The production generator has no run-metadata
-override. Run the permanent script regression with:
+distinct from reproducible proof and must declare the criterion-specific artifacts that support the attestation. Run
+references are resolved independently by both scripts with the full-path application returned by
+`Get-Command gh -CommandType Application`, then `gh run view <id> --repo KeelMatrix/CliContract --json headSha,status,conclusion,event`;
+the linter rejects any embedded metadata that does not match the live run and candidate SHA. The production generator
+and linter expose no run-metadata override; the fixture resolver exists only in the non-exported test seam. Mechanical
+checks establish candidate binding, exact criterion text/hashes, command/checker output, path containment, and proof
+shape. They cannot establish that a judgement rationale is semantically relevant, so `judgement` remains reviewer
+attestation rather than mechanically proven evidence. Run the permanent script regression with:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/test-acceptance-map.ps1
