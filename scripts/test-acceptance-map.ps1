@@ -42,11 +42,11 @@ try {
     $generator = Join-Path $scriptDirectory 'generate-acceptance-map.ps1'
     $linter = Join-Path $scriptDirectory 'lint-acceptance-map.ps1'
     $fixtureCandidate = '1111111111111111111111111111111111111111'
-    & pwsh -NoProfile -File $generator -ChecklistPath (Join-Path $repositoryRoot 'fixtures/acceptance-map/checklist.md') -EvidencePath (Join-Path $repositoryRoot 'fixtures/acceptance-map/evidence.json') -CandidateSha $fixtureCandidate -OutputPath $fixtureMap
+    & pwsh -NoProfile -WindowStyle Hidden -File $generator -ChecklistPath (Join-Path $repositoryRoot 'fixtures/acceptance-map/checklist.md') -EvidencePath (Join-Path $repositoryRoot 'fixtures/acceptance-map/evidence.json') -CandidateSha $fixtureCandidate -OutputPath $fixtureMap
     if ($LASTEXITCODE -ne 0 -or -not ([Linq.Enumerable]::SequenceEqual([IO.File]::ReadAllBytes($fixtureMap), [IO.File]::ReadAllBytes((Join-Path $repositoryRoot 'fixtures/acceptance-map/golden-map.md'))))) {
         throw 'Acceptance map fixture did not reproduce its checked-in golden map.'
     }
-    & pwsh -NoProfile -File $linter -ChecklistPath (Join-Path $repositoryRoot 'fixtures/acceptance-map/checklist.md') -MapPath $fixtureMap -CandidateSha $fixtureCandidate -RepositoryRoot $repositoryRoot
+    & pwsh -NoProfile -WindowStyle Hidden -File $linter -ChecklistPath (Join-Path $repositoryRoot 'fixtures/acceptance-map/checklist.md') -MapPath $fixtureMap -CandidateSha $fixtureCandidate -RepositoryRoot $repositoryRoot
     if ($LASTEXITCODE -ne 0) { throw 'Acceptance map fixture lint failed.' }
 
     $runMetadataById = @{}
@@ -117,12 +117,12 @@ try {
 
     Invoke-AcceptanceMapLintCore -ChecklistPath $checklist -MapPath $map -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver
 
-    $metadataOverrideOutput = @(& pwsh -NoProfile -File $generator -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath (Join-Path $temp 'metadata-override-map.md') -RunMetadataPath $runMetadata 2>&1)
+    $metadataOverrideOutput = @(& pwsh -NoProfile -WindowStyle Hidden -File $generator -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath (Join-Path $temp 'metadata-override-map.md') -RunMetadataPath $runMetadata 2>&1)
     $metadataOverrideExit = $LASTEXITCODE
     if ($metadataOverrideExit -eq 0 -or ($metadataOverrideOutput -join "`n") -notmatch 'RunMetadataPath|parameter cannot be found|named parameter') {
         throw 'Acceptance map generator self-test still exposed a run metadata override.'
     }
-    $metadataResolverOverrideOutput = @(& pwsh -NoProfile -File $generator -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath (Join-Path $temp 'resolver-override-map.md') -RunMetadataResolver $runMetadata 2>&1)
+    $metadataResolverOverrideOutput = @(& pwsh -NoProfile -WindowStyle Hidden -File $generator -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath (Join-Path $temp 'resolver-override-map.md') -RunMetadataResolver $runMetadata 2>&1)
     $metadataResolverOverrideExit = $LASTEXITCODE
     if ($metadataResolverOverrideExit -eq 0 -or ($metadataResolverOverrideOutput -join "`n") -notmatch 'RunMetadataResolver|parameter cannot be found|named parameter') {
         throw 'Acceptance map generator self-test exposed its internal run metadata resolver.'

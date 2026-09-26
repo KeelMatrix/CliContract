@@ -103,7 +103,7 @@ function Assert-HostileTagRejected {
     $oldTag = $env:TAG_NAME
     try {
         $env:TAG_NAME = $hostile
-        $output = @(& pwsh -NoProfile -File $tagScript -Tag $env:TAG_NAME 2>&1 | ForEach-Object { $_.ToString() })
+        $output = @(& pwsh -NoProfile -WindowStyle Hidden -File $tagScript -Tag $env:TAG_NAME 2>&1 | ForEach-Object { $_.ToString() })
         $exitCode = $LASTEXITCODE
     }
     finally {
@@ -140,7 +140,7 @@ exit /b 17
         $oldApiKey = $env:NUGET_API_KEY
         try {
             $env:NUGET_API_KEY = 'stub-key'
-            $output = @(& pwsh -NoProfile -File $publishScript -Package 'primary.nupkg' -Symbols 'symbols.snupkg' -NuGetExecutable $stubPath 2>&1)
+            $output = @(& pwsh -NoProfile -WindowStyle Hidden -File $publishScript -Package 'primary.nupkg' -Symbols 'symbols.snupkg' -NuGetExecutable $stubPath 2>&1)
             $exitCode = $LASTEXITCODE
         }
         finally {
