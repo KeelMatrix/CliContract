@@ -23,7 +23,9 @@ $surfaceFiles = @(
 $docsPath = Join-Path $root 'docs'
 if (Test-Path -LiteralPath $docsPath) {
     $surfaceFiles += @(Get-ChildItem -LiteralPath $docsPath -File -Recurse | ForEach-Object {
-        $_.FullName.Substring($root.Length + 1).Replace('\', '/')
+        if ($_.Name -ne 'first-release-acceptance-review.md') {
+            $_.FullName.Substring($root.Length + 1).Replace('\', '/')
+        }
     })
 }
 

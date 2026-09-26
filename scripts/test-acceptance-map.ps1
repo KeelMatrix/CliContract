@@ -190,9 +190,20 @@ try {
 
     $fakeGhDirectory = Join-Path $temp 'fake-gh'
     New-Item -ItemType Directory -Path $fakeGhDirectory | Out-Null
-    $fakeGhPath = Join-Path $fakeGhDirectory 'gh.cmd'
-    $fakeGhBody = "@echo off`r`necho {`"headSha`":`"$candidate`",`"status`":`"completed`",`"conclusion`":`"success`",`"event`":`"push`"}`r`n"
-    [IO.File]::WriteAllText($fakeGhPath, $fakeGhBody, [Text.Encoding]::ASCII)
+    if ($PSVersionTable.Platform -eq 'Win32NT') {
+        $fakeGhPath = Join-Path $fakeGhDirectory 'gh.cmd'
+        $fakeGhBody = "@echo off`r`necho {`"headSha`":`"$candidate`",`"status`":`"completed`",`"conclusion`":`"success`",`"event`":`"push`"}`r`n"
+        [IO.File]::WriteAllText($fakeGhPath, $fakeGhBody, [Text.Encoding]::ASCII)
+    }
+    else {
+        $fakeGhPath = Join-Path $fakeGhDirectory 'gh'
+        $fakeGhBody = @"
+#!/bin/sh
+printf '%s\n' '{"headSha":"$candidate","status":"completed","conclusion":"success","event":"push"}'
+"@
+        [IO.File]::WriteAllText($fakeGhPath, $fakeGhBody, [Text.Encoding]::ASCII)
+        [IO.File]::SetUnixFileMode($fakeGhPath, [IO.UnixFileMode]::UserRead -bor [IO.UnixFileMode]::UserWrite -bor [IO.UnixFileMode]::UserExecute)
+    }
     $originalPath = $env:PATH
     $env:PATH = "$fakeGhDirectory$([IO.Path]::PathSeparator)$originalPath"
     function gh { throw 'caller-defined gh function was invoked' }
