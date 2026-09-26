@@ -1,0 +1,17 @@
+[
+  {
+    "criterion": "Exact command evidence is captured",
+    "status": "MET",
+    "evidence": "command=pwsh -NoProfile -File ./scripts/verify-error-taxonomy.ps1; output=ERROR_TAXONOMY=PASS"
+  },
+  {
+    "criterion": "Reviewer judgement names its artifacts",
+    "status": "MET",
+    "evidence": "judgement=artifacts=MANIFEST.md,COMPATIBILITY-RULES.md; rationale=reviewer compared the manifest and compatibility contract for this criterion"
+  },
+  {
+    "criterion": "Multi-package evidence is not applicable",
+    "status": "N/A",
+    "evidence": "only applies to repositories shipping multiple packages"
+  }
+]

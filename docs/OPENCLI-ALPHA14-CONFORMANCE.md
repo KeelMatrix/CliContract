@@ -67,3 +67,7 @@ The following matrix records the alpha.14 source rule, its canonical enforcement
 
 The closed source-producibility guard is runnable as one command:
 `pwsh -NoProfile -File ./scripts/source-producibility-guard.ps1`. It executes the table-driven edge matrix, compares every serialized source leaf path with the independently authored source-schema contract, proves both descriptor-catalog and allow-listed projection-extra failures, then installs the freshly packed tool and exercises source `validate`/`snapshot` plus canonical `check`/`diff` round trips and the bounded hostile rejection set.
+
+## Verification contract
+
+Conformance records must identify a reproducible command/checker and its result, a candidate-bound CI run, or a judgement anchor that names the relevant conformance artifacts and reviewer rationale. A fixture or golden manifest path by itself proves only that the path exists; it is not criterion-specific proof. The acceptance-map scripts enforce this distinction and revalidate named run heads independently.

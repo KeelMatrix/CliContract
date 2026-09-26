@@ -15,7 +15,9 @@ param(
     [ValidatePattern('^[0-9a-fA-F]{40}$')]
     [string] $CandidateSha,
 
-    [string] $RepositoryRoot = (Get-Location).Path
+    [string] $RepositoryRoot = (Get-Location).Path,
+
+    [string] $Repository = 'KeelMatrix/CliContract'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -61,11 +63,17 @@ function Test-RepositoryPath([string] $candidatePath) {
         if ($relative -eq '..' -or $relative.StartsWith("..$([IO.Path]::DirectorySeparatorChar)") -or [IO.Path]::IsPathRooted($relative)) {
             return $false
         }
-        return Test-Path -LiteralPath $full
+        return Test-Path -LiteralPath $full -PathType Leaf
     }
     catch {
         return $false
     }
+}
+
+function Get-RepositoryFilePath([string] $candidatePath) {
+    $candidatePath = $candidatePath.Trim().Trim('`', '"', "'")
+    if (-not (Test-RepositoryPath $candidatePath)) { return $null }
+    return [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetFullPath($RepositoryRoot)) $candidatePath))
 }
 
 function Test-Placeholder([string] $value) {
@@ -76,28 +84,48 @@ function Test-Placeholder([string] $value) {
     return $false
 }
 
-function Test-CriterionSpecificAnchor([string] $proof, [int] $rowNumber) {
-    $pathAnchors = @(
-        [regex]::Matches($proof, '(?i)(?:^|[;\s]|proof=)(?:repo_path|path)=(?<value>[^;|]+)') |
-            ForEach-Object { $_.Groups['value'].Value.Trim() } |
-            Where-Object { Test-RepositoryPath $_ }
-    )
-    if ($pathAnchors.Count -gt 0) { return $true }
+function Get-GitHubRunMetadata([string] $runId) {
+    try {
+        $raw = @(& gh run view $runId --repo $Repository --json headSha,status,conclusion,event 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    catch {
+        throw "Unable to validate GitHub Actions run $runId with gh run view: $($_.Exception.Message)"
+    }
 
-    $commandAnchors = @(
-        [regex]::Matches($proof, '(?is)(?:^|[;\s]|proof=)command=(?<command>[^;|]+);\s*output=(?<output>[^;|]+)') |
-            Where-Object { -not (Test-Placeholder $_.Groups['command'].Value) -and -not (Test-Placeholder $_.Groups['output'].Value) }
-    )
-    if ($commandAnchors.Count -gt 0) { return $true }
+    if ($exitCode -ne 0) {
+        throw "Unable to validate GitHub Actions run $runId with gh run view. Output: $($raw -join ' ')"
+    }
 
-    $valueAnchors = @(
-        [regex]::Matches($proof, '(?i)(?:^|[;\s]|proof=)criterion_value=(?<value>[^;|]+)') |
-            ForEach-Object { $_.Groups['value'].Value.Trim() } |
-            Where-Object { -not (Test-Placeholder $_) }
-    )
-    if ($valueAnchors.Count -gt 0) { return $true }
+    try {
+        return (($raw | ForEach-Object { $_.ToString() }) -join "`n" | ConvertFrom-Json)
+    }
+    catch {
+        throw "GitHub Actions run $runId returned invalid JSON metadata: $($_.Exception.Message)"
+    }
+}
 
-    return $false
+function Get-RunField([object] $metadata, [string] $name, [string] $runId) {
+    $value = $metadata.$name
+    if ($null -eq $value -or [string]::IsNullOrWhiteSpace([string]$value)) {
+        throw "GitHub Actions run $runId metadata did not contain $name."
+    }
+    return ([string]$value).Trim()
+}
+
+function Get-RunEvidenceRecords([string] $proof) {
+    $pattern = '(?is)(?:^|[;\s])github_run_id=(?<id>\d{6,});\s*github_run_head_sha=(?<head>[^;|]+);\s*github_run_status=(?<status>[^;|]+);\s*github_run_conclusion=(?<conclusion>[^;|]+);\s*github_run_event=(?<event>[^;|]+)'
+    return @(
+        [regex]::Matches($proof, $pattern) | ForEach-Object {
+            [pscustomobject]@{
+                RunId = $_.Groups['id'].Value.Trim()
+                HeadSha = $_.Groups['head'].Value.Trim()
+                Status = $_.Groups['status'].Value.Trim()
+                Conclusion = $_.Groups['conclusion'].Value.Trim()
+                Event = $_.Groups['event'].Value.Trim()
+            }
+        }
+    )
 }
 
 function Test-RunEvidence([string] $proof, [string] $candidateSha, [int] $rowNumber) {
@@ -106,25 +134,126 @@ function Test-RunEvidence([string] $proof, [string] $candidateSha, [int] $rowNum
         return [pscustomobject]@{ Valid = $true; Reason = $null }
     }
 
-    $tokenRunIds = @(Get-TokenValues $proof 'github_run_id')
-    $headShas = @(Get-TokenValues $proof 'github_run_head_sha')
-    $statuses = @(Get-TokenValues $proof 'github_run_status')
-    $conclusions = @(Get-TokenValues $proof 'github_run_conclusion')
-    if ($tokenRunIds.Count -lt $runIds.Count -or $headShas.Count -lt $runIds.Count -or $statuses.Count -lt $runIds.Count -or $conclusions.Count -lt $runIds.Count) {
+    $records = @(Get-RunEvidenceRecords $proof)
+    if ($records.Count -ne $runIds.Count) {
         return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber names GitHub Actions run(s) without complete generator-derived metadata" }
     }
+
     foreach ($runId in $runIds) {
-        if ($runId -notin $tokenRunIds) {
-            return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber names run $runId without github_run_id metadata" }
+        $matchingRecords = @($records | Where-Object RunId -eq $runId)
+        if ($matchingRecords.Count -ne 1) {
+            return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber does not contain exactly one metadata record for run $runId" }
+        }
+
+        try {
+            $actual = Get-GitHubRunMetadata $runId
+            $actualHead = Get-RunField $actual 'headSha' $runId
+            $actualStatus = Get-RunField $actual 'status' $runId
+            $actualConclusion = Get-RunField $actual 'conclusion' $runId
+            $actualEvent = Get-RunField $actual 'event' $runId
+        }
+        catch {
+            return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber could not independently validate run ${runId}: $($_.Exception.Message)" }
+        }
+
+        if ($actualHead -notmatch '^[0-9a-fA-F]{40}$' -or $actualHead -ine $candidateSha) {
+            return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber names GitHub Actions run $runId whose resolved head SHA is not the candidate" }
+        }
+
+        $record = $matchingRecords[0]
+        if ($record.HeadSha -notmatch '^[0-9a-fA-F]{40}$' -or $record.HeadSha -ine $actualHead) {
+            return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber contains forged or stale head SHA metadata for run $runId" }
+        }
+        if ($record.Status -ine $actualStatus -or $record.Conclusion -ine $actualConclusion -or $record.Event -ine $actualEvent) {
+            return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber contains GitHub Actions metadata that does not match run $runId" }
+        }
+        if ($actualStatus -ine 'completed' -or $actualConclusion -ine 'success') {
+            return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber names a GitHub Actions run that is not completed/success" }
         }
     }
-    if (@($headShas | Where-Object { $_ -notmatch '^[0-9a-fA-F]{40}$' -or $_ -ine $candidateSha }).Count -gt 0) {
-        return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber names a GitHub Actions run whose head SHA is not the candidate" }
-    }
-    if (@($statuses | Where-Object { $_ -ine 'completed' }).Count -gt 0 -or @($conclusions | Where-Object { $_ -ine 'success' }).Count -gt 0) {
-        return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber names a GitHub Actions run that is not completed/success" }
-    }
+
     return [pscustomobject]@{ Valid = $true; Reason = $null }
+}
+
+function Test-CommandAnchor([string] $proof) {
+    return @(
+        [regex]::Matches($proof, '(?is)(?:^|[;\s]|proof=)command=(?<command>[^;|]+);\s*output=(?<output>[^;|]+)') |
+            Where-Object { -not (Test-Placeholder $_.Groups['command'].Value) -and -not (Test-Placeholder $_.Groups['output'].Value) }
+    ).Count -gt 0
+}
+
+function Test-JudgementAnchor([string] $proof) {
+    $judgements = @([regex]::Matches($proof, '(?is)(?:^|[;\s]|proof=)judgement=(?<value>[^;|]+)'))
+    foreach ($judgement in $judgements) {
+        $value = $judgement.Groups['value'].Value.Trim()
+        $artifactMatch = [regex]::Match($value, '(?i)(?:^|,)\s*artifacts?=(?<paths>[^,]+(?:,[^,]+)*)$')
+        if (-not $artifactMatch.Success) { continue }
+        $paths = @($artifactMatch.Groups['paths'].Value.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        if ($paths.Count -eq 0 -or @($paths | Where-Object { -not (Test-RepositoryPath $_) }).Count -gt 0) { continue }
+        $rationales = @(Get-TokenValues $proof 'rationale' | Where-Object { -not (Test-Placeholder $_) })
+        if ($rationales.Count -gt 0 -and -not (Test-Placeholder $value)) { return $true }
+    }
+    return $false
+}
+
+function Get-CheckerMatches([string] $proof) {
+    return @([regex]::Matches($proof, '(?is)(?:^|[;\s]|proof=)checker=(?<command>[^;|]+);\s*checker_output=(?<output>[^;|]+)'))
+}
+
+function Get-CheckerCommand([string] $command) {
+    return [regex]::Match($command.Trim(), '^(?<path>\S+\.ps1)$', [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+}
+
+function Test-CheckerEvidence([string] $proof, [int] $rowNumber) {
+    $matches = @(Get-CheckerMatches $proof)
+    if ($matches.Count -eq 0) {
+        return [pscustomobject]@{ Valid = $true; Reason = $null }
+    }
+
+    foreach ($match in $matches) {
+        $command = $match.Groups['command'].Value.Trim()
+        $expectedOutput = $match.Groups['output'].Value.Trim()
+        if (Test-Placeholder $command -or Test-Placeholder $expectedOutput) {
+            return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber contains a placeholder repository checker invocation" }
+        }
+
+        $commandMatch = Get-CheckerCommand $command
+        if (-not $commandMatch.Success) {
+            return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber repository checker must name one repository-owned .ps1 path" }
+        }
+
+        $checkerPath = $commandMatch.Groups['path'].Value.Replace('\', '/')
+        if ($checkerPath.StartsWith('./', [StringComparison]::Ordinal)) { $checkerPath = $checkerPath.Substring(2) }
+        if (-not $checkerPath.StartsWith('scripts/', [StringComparison]::OrdinalIgnoreCase)) {
+            return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber repository checker must be under scripts/" }
+        }
+        $fullPath = Get-RepositoryFilePath $checkerPath
+        if ($null -eq $fullPath) {
+            return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber repository checker path does not exist: $checkerPath" }
+        }
+
+        try {
+            $actualOutput = @(& $fullPath 2>&1)
+            $actualExit = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+        }
+        catch {
+            return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber repository checker could not be rerun: $($_.Exception.Message)" }
+        }
+        $actualText = ($actualOutput | ForEach-Object { $_.ToString() }) -join "`n"
+        if ($actualExit -ne 0 -or $actualText.IndexOf($expectedOutput, [StringComparison]::Ordinal) -lt 0) {
+            return [pscustomobject]@{ Valid = $false; Reason = "row $rowNumber repository checker result did not contain the captured output (exit=$actualExit expected=[$expectedOutput] actual=[$actualText])" }
+        }
+    }
+
+    return [pscustomobject]@{ Valid = $true; Reason = $null }
+}
+
+function Get-AnchorKind([string] $proof) {
+    if (@(Find-GitHubRunIds $proof).Count -gt 0) { return 'reproducible' }
+    if (Test-CommandAnchor $proof) { return 'reproducible' }
+    if (@(Get-CheckerMatches $proof).Count -gt 0) { return 'reproducible' }
+    if (Test-JudgementAnchor $proof) { return 'judgement' }
+    return $null
 }
 
 if ($PSCmdlet.ParameterSetName -eq 'Path') {
@@ -201,12 +330,28 @@ $criterionHashMismatches = @(
     }
 )
 $missingCriterionSpecificAnchor = @(
-    $metRows | Where-Object { -not (Test-CriterionSpecificAnchor $_.Evidence $_.Number) }
+    $metRows | Where-Object { $null -eq (Get-AnchorKind $_.Evidence) }
 )
 $runEvidenceFailures = @(
-    foreach ($row in $metRows) {
+    foreach ($row in $mapRows) {
         $result = Test-RunEvidence $row.Evidence $CandidateSha $row.Number
         if (-not $result.Valid) { $result.Reason }
+    }
+)
+$checkerEvidenceFailures = @(
+    foreach ($row in $metRows) {
+        $result = Test-CheckerEvidence $row.Evidence $row.Number
+        if (-not $result.Valid) { $result.Reason }
+    }
+)
+$evidenceKindMismatches = @(
+    foreach ($row in $metRows) {
+        $actualKind = Get-AnchorKind $row.Evidence
+        $declaredKinds = @(Get-TokenValues $row.Evidence 'proof_kind')
+        $expectedKind = if ($actualKind -eq 'judgement') { 'judgement' } else { 'reproducible' }
+        if ($declaredKinds.Count -ne 1 -or $declaredKinds[0] -cne $expectedKind) {
+            $row.Number
+        }
     }
 )
 $naWithoutJustification = @($naRows | Where-Object { $_.Evidence -notmatch '(?i)(^|[;\s])N/A\s+[^;|]+' })
@@ -221,11 +366,19 @@ if ($missingCandidateEvidence.Count -gt 0) {
 }
 
 if ($missingCriterionSpecificAnchor.Count -gt 0) {
-    throw "MET rows without a machine-checkable criterion-specific anchor: $($missingCriterionSpecificAnchor.Number -join ',')"
+    throw "MET rows without a valid reproducible or explicit judgement anchor: $($missingCriterionSpecificAnchor.Number -join ',')"
 }
 
 if ($runEvidenceFailures.Count -gt 0) {
-    throw "Invalid candidate-bound GitHub Actions evidence: $($runEvidenceFailures -join ' | ')"
+    throw "Invalid independently validated GitHub Actions evidence: $($runEvidenceFailures -join ' | ')"
+}
+
+if ($checkerEvidenceFailures.Count -gt 0) {
+    throw "Invalid repository checker evidence: $($checkerEvidenceFailures -join ' | ')"
+}
+
+if ($evidenceKindMismatches.Count -gt 0) {
+    throw "Evidence-kind marker does not match the proof anchor: $($evidenceKindMismatches -join ',')"
 }
 
 if ($naWithoutJustification.Count -gt 0) {
@@ -240,5 +393,5 @@ if ($criterionHashMismatches.Count -gt 0) {
     throw "Acceptance map rows without the exact checklist criterion hash: $($criterionHashMismatches -join ',')"
 }
 
-Write-Output ("ACCEPTANCE_MAP_LINT=PASS checklist_rows={0} map_rows={1} met_rows={2} unmet_rows={3} na_rows={4} missing=0 duplicate_numbers=0 criterion_text_mismatches=0 criterion_hash_mismatches=0 missing_candidate_evidence=0 met_without_candidate_sha=0 met_without_anchor=0 invalid_run_evidence=0 na_without_justification=0 unmet_without_justification=0 candidate_sha={5}" -f `
+Write-Output ("ACCEPTANCE_MAP_LINT=PASS checklist_rows={0} map_rows={1} met_rows={2} unmet_rows={3} na_rows={4} missing=0 duplicate_numbers=0 criterion_text_mismatches=0 criterion_hash_mismatches=0 missing_candidate_evidence=0 met_without_candidate_sha=0 met_without_anchor=0 invalid_run_evidence=0 checker_evidence_failures=0 evidence_kind_mismatches=0 na_without_justification=0 unmet_without_justification=0 candidate_sha={5}" -f `
     $checklistRows.Count, $mapRows.Count, $metRows.Count, $unmetRows.Count, $naRows.Count, $CandidateSha.ToLowerInvariant())

@@ -1,3 +1,7 @@
+param(
+    [switch] $SkipAcceptanceMapSelfTest
+)
+
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
@@ -35,8 +39,10 @@ Assert-NativeSuccess 'Error taxonomy documentation check'
 Assert-NativeSuccess 'Sensitive-path ingress safety'
 & pwsh -NoProfile -File ./scripts/scan-history-wording.ps1 -SelfTest
 Assert-NativeSuccess 'Reachable history wording scan'
-& pwsh -NoProfile -File ./scripts/test-acceptance-map.ps1
-Assert-NativeSuccess 'Acceptance map self-test'
+if (-not $SkipAcceptanceMapSelfTest) {
+    & pwsh -NoProfile -File ./scripts/test-acceptance-map.ps1
+    Assert-NativeSuccess 'Acceptance map self-test'
+}
 & pwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -SelfTest
 Assert-NativeSuccess 'Release contract self-test'
  $audit = dotnet list KeelMatrix.CliContract.sln package --vulnerable --include-transitive --configfile NuGet.config 2>&1

@@ -37,6 +37,9 @@ jobs:
       - uses: actions/setup-dotnet@v4.3.1
         with:
           global-json-file: global.json
+      - name: Verify acceptance evidence contract
+        shell: pwsh
+        run: ./scripts/test-acceptance-map.ps1
       - name: Run validation
         shell: pwsh
-        run: ./scripts/local-gate.ps1
+        run: ./scripts/local-gate.ps1 -SkipAcceptanceMapSelfTest

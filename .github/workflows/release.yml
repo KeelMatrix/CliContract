@@ -39,9 +39,12 @@ jobs:
       - name: Verify release contract
         shell: pwsh
         run: ./scripts/verify-release-contract.ps1 -Version $env:RELEASE_VERSION -Tag $env:GITHUB_REF_NAME
+      - name: Verify acceptance evidence contract
+        shell: pwsh
+        run: ./scripts/test-acceptance-map.ps1
       - name: Build package and run checks
         shell: pwsh
-        run: ./scripts/local-gate.ps1
+        run: ./scripts/local-gate.ps1 -SkipAcceptanceMapSelfTest
       - name: Verify release artifacts
         shell: pwsh
         run: ./scripts/verify-release-artifacts.ps1 -ArtifactDirectory ./artifacts/packages -Version $env:RELEASE_VERSION

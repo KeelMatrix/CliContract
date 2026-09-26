@@ -12,9 +12,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $OutputPath,
 
-    [string] $Repository = 'KeelMatrix/CliContract',
-
-    [string] $RunMetadataPath
+    [string] $Repository = 'KeelMatrix/CliContract'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,29 +49,19 @@ function Remove-GeneratedRunMetadata([string] $proof) {
     ).Trim()
 }
 
-$runMetadataById = @{}
-if ($RunMetadataPath) {
-    if (-not (Test-Path -LiteralPath $RunMetadataPath -PathType Leaf)) {
-        throw "Run metadata file was not found: $RunMetadataPath"
+function Get-EvidenceKind([string] $proof, [int] $runCount) {
+    if ($runCount -gt 0 -or
+        $proof -match '(?is)(?:^|[;\s]|proof=)command=[^;|]+;\s*output=[^;|]+' -or
+        $proof -match '(?is)(?:^|[;\s]|proof=)checker=[^;|]+;\s*checker_output=[^;|]+') {
+        return 'reproducible'
     }
-
-    foreach ($entry in @(Get-Content -Raw -LiteralPath $RunMetadataPath | ConvertFrom-Json)) {
-        $runId = if ($null -ne $entry.run_id) { [string]$entry.run_id } elseif ($null -ne $entry.id) { [string]$entry.id } else { $null }
-        if ([string]::IsNullOrWhiteSpace($runId)) {
-            throw 'Every run metadata entry requires run_id or id.'
-        }
-        if ($runMetadataById.ContainsKey($runId)) {
-            throw "Duplicate run metadata entry: $runId"
-        }
-        $runMetadataById[$runId] = $entry
+    if ($proof -match '(?is)(?:^|[;\s]|proof=)judgement=[^;|]+') {
+        return 'judgement'
     }
+    return 'reproducible'
 }
 
 function Get-GitHubRunMetadata([string] $runId) {
-    if ($runMetadataById.ContainsKey($runId)) {
-        return $runMetadataById[$runId]
-    }
-
     $raw = @(& gh run view $runId --repo $Repository --json headSha,status,conclusion,event 2>&1)
     if ($LASTEXITCODE -ne 0) {
         throw "Unable to validate GitHub Actions run $runId with gh run view. Output: $($raw -join ' ')"
@@ -85,7 +73,6 @@ function Get-GitHubRunMetadata([string] $runId) {
     catch {
         throw "GitHub Actions run $runId returned invalid JSON metadata: $($_.Exception.Message)"
     }
-    $runMetadataById[$runId] = $metadata
     return $metadata
 }
 
@@ -156,7 +143,7 @@ for ($index = 0; $index -lt $checklistRows.Count; $index++) {
             throw "GitHub Actions run $runId returned an invalid headSha: $headSha"
         }
 
-        if ($status -eq 'MET' -and $headSha -ine $CandidateSha) {
+        if ($headSha -ine $CandidateSha) {
             throw "GitHub Actions run $runId is not candidate-bound: headSha=$headSha candidate_sha=$($CandidateSha.ToLowerInvariant())"
         }
 
@@ -167,7 +154,8 @@ for ($index = 0; $index -lt $checklistRows.Count; $index++) {
     }
 
     if ($status -eq 'MET') {
-        $evidence = "candidate_sha=$($CandidateSha.ToLowerInvariant()); criterion_sha256=$hash; proof=$(Escape-Cell $detail)"
+        $kind = Get-EvidenceKind $detail $runIds.Count
+        $evidence = "candidate_sha=$($CandidateSha.ToLowerInvariant()); proof_kind=$kind; criterion_sha256=$hash; proof=$(Escape-Cell $detail)"
     }
     elseif ($status -eq 'UNMET') {
         $evidence = "criterion_sha256=$hash; UNMET: $(Escape-Cell $detail)"

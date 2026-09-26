@@ -72,6 +72,8 @@ Run the check in a build step and preserve the baseline in the application repos
 clicontract check ./opencli.yaml --baseline ./cli-contract.json --format json
 ```
 
+Repository acceptance records follow the same contract as the validation gates: a candidate-bound CI run, an exact command with captured output, a rerunnable repository checker, or an explicit judgement naming criterion-specific artifacts and rationale. A baseline or fixture path alone is not proof; the contributor workflow and acceptance-map scripts enforce this distinction.
+
 ## Troubleshooting
 
 - `MALFORMED_JSON` or `MALFORMED_YAML`: fix the source syntax; the tool never prints the whole input.

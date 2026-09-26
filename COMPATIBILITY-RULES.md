@@ -132,6 +132,10 @@ Missing source or baseline paths return exit `2`; present but unreadable, invali
 
 File failures are role-aware: a missing source, baseline, or suppression file is an invocation/configuration error (exit `2`); unreadable, invalid-UTF-8, oversized, malformed, or unsupported source and canonical baseline data is a schema/baseline error (exit `3`); invalid, unreadable, invalid-UTF-8, or oversized suppression data is an invocation/configuration error (exit `2`); and an output write failure is an invocation/configuration error (exit `2`). Only unexpected failures reach exit `4`. Text and JSON output use the same taxonomy.
 
+## Verification references
+
+Compatibility claims used in a repository acceptance record are anchored by a candidate-bound CI run, an exact command plus captured output, a rerunnable checker, or an explicit judgement naming criterion-specific artifacts and rationale. An existing manifest or source path alone is not a compatibility result; the acceptance-map linter rejects that form and independently resolves every named CI run.
+
 ## Schema validity versus compatibility
 
 `validate` answers whether one document is parseable and supported. `snapshot` creates a versioned canonical representation. `check` and `diff` compare two valid descriptions. A valid schema can still be incompatible with a valid baseline; compatibility is a relationship between two manifests, not a property of one input.

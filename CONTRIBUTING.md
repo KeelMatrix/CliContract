@@ -41,12 +41,16 @@ fetch remote references, or scrape help output. Report vulnerabilities through [
 
 The acceptance-map scripts are deterministic review tooling. `generate-acceptance-map.ps1` takes the current checklist
 and a criterion-keyed review ledger, emits rows in checklist order, and `lint-acceptance-map.ps1` verifies exact
-criterion text and criterion hashes before accepting candidate-SHA proof. A `MET` proof must also contain at least one
-machine-checkable anchor: `repo_path=<existing repository path>`, `command=<exact command>; output=<exact output>`,
-`criterion_value=<criterion-specific value>`, or a GitHub Actions run reference. Run references are resolved with
-`gh run view <id> --repo KeelMatrix/CliContract --json headSha,status,conclusion,event`; the generator embeds that
-metadata and the linter requires every named run to be completed/success at the candidate SHA. Use `-RunMetadataPath`
-only for deterministic offline tests with the same JSON fields. Run the permanent script regression with:
+criterion text and criterion hashes before accepting candidate-SHA proof. Every `MET` proof must contain at least one
+of these anchors: a candidate-bound GitHub Actions run, `command=<exact command>; output=<captured output>`,
+`checker=<repository-owned scripts/*.ps1 path>; checker_output=<captured result>` (the linter reruns the checker), or
+`judgement=artifacts=<one or more existing repository paths>; rationale=<criterion-specific reviewer rationale>`.
+`repo_path=<existing repository path>` and `criterion_value=<value>` are supplemental references only; either one by
+itself is rejected. Judgement rows are marked `proof_kind=judgement` in the generated map so they are visibly
+distinct from reproducible proof. Run references are resolved independently by both scripts with
+`gh run view <id> --repo KeelMatrix/CliContract --json headSha,status,conclusion,event`; the linter rejects any
+embedded metadata that does not match the live run and candidate SHA. The production generator has no run-metadata
+override. Run the permanent script regression with:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/test-acceptance-map.ps1

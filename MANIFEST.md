@@ -53,6 +53,10 @@ Typed defaults and constrained choices are validated against their declared para
 
 The manifest schema version is independent of the upstream OpenCLI version. Version `2` separates global options from root-local options and materializes derived command groups. A future incompatible manifest or source version must receive an explicit implementation and versioned contract; the current tool fails closed rather than best-effort parsing it. Baselines and current descriptions must use the same manifest and supported source versions.
 
+## Verification references
+
+When a manifest path is cited in a repository acceptance record, path existence is not proof of a criterion. The record must also include an exact command and captured output, a rerunnable repository checker, a candidate-bound CI run, or an explicit `judgement=artifacts=...; rationale=...` anchor. Generated maps mark judgement proof separately; see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the validation contract.
+
 ## Unsupported constructs
 
 The adapter does not interpret runtime behavior, execute commands, scrape help, or fetch remote references. Represented informational metadata is preserved in `Info` and compared as non-gating `KMCLI005` findings; `Info.Binary` remains invocation compatibility semantics. See [`COMPATIBILITY-RULES.md`](COMPATIBILITY-RULES.md) for the complete contract boundary.
