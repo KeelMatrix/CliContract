@@ -5,23 +5,26 @@ namespace KeelMatrix.CliContract.Core;
 internal static class SourceContractProjection
 {
     public static JsonObject Create(CanonicalManifest manifest)
+        => Create(manifest, null);
+
+    internal static JsonObject Create(CanonicalManifest manifest, SourceProjectionTrace? trace)
     {
         var root = new JsonObject
         {
-            ["info"] = ProjectInfo(manifest.Info)
+            ["info"] = ProjectInfo(manifest.Info, trace)
         };
-        SourceContractFields.OpenCliVersion.Set(root, manifest.SourceVersion);
+        SourceContractFields.OpenCliVersion.Set(root, manifest.SourceVersion, trace);
 
         if (manifest.Info.Install.Length > 0)
         {
-            root["install"] = new JsonArray(manifest.Info.Install.Select(ProjectInstall).ToArray());
+            root["install"] = new JsonArray(manifest.Info.Install.Select(install => ProjectInstall(install, trace)).ToArray());
         }
 
         var commands = new JsonObject();
         foreach (var command in Flatten(manifest.Root))
         {
             if (command.Path == "root" && !NeedsExplicitRoot(command)) continue;
-            commands[CommandKey(manifest.Info.Binary!, command.Path)] = ProjectCommand(command);
+            commands[CommandKey(manifest.Info.Binary!, command.Path)] = ProjectCommand(command, trace);
         }
 
         if (commands.Count > 0) root["commands"] = commands;
@@ -32,7 +35,14 @@ internal static class SourceContractProjection
             var config = new JsonObject();
             foreach (var source in manifest.GlobalConfig.FileSources)
             {
-                config[source.Format] = source.Path;
+                var field = source.Format switch
+                {
+                    "json" => SourceContractFields.Global.Config.Json,
+                    "toml" => SourceContractFields.Global.Config.Toml,
+                    "yaml" => SourceContractFields.Global.Config.Yaml,
+                    _ => throw new NormalizationException("INVALID_BASELINE", "A canonical file source format is not produced by the source normalizer.")
+                };
+                field.Set(config, source.Path, trace);
             }
 
             global["config"] = config;
@@ -40,7 +50,7 @@ internal static class SourceContractProjection
 
         if (manifest.GlobalExitCodes.Length > 0)
         {
-            global["exitCodes"] = new JsonArray(manifest.GlobalExitCodes.Select(exitCode => ProjectExitCode(exitCode, SourceContractFields.Global.ExitCodes)).ToArray());
+            global["exitCodes"] = new JsonArray(manifest.GlobalExitCodes.Select(exitCode => ProjectExitCode(exitCode, SourceContractFields.Global.ExitCodes, trace)).ToArray());
         }
 
         if (manifest.GlobalOptions.Length > 0)
@@ -50,54 +60,55 @@ internal static class SourceContractProjection
                 option: true,
                 SourceContractFields.Global.Flag,
                 SourceContractFields.GlobalChoice,
-                SourceContractFields.GlobalAlternativeSource)).ToArray());
+                SourceContractFields.GlobalAlternativeSource,
+                trace)).ToArray());
         }
 
         if (global.Count > 0) root["global"] = global;
         return root;
     }
 
-    private static JsonObject ProjectInfo(CanonicalInfo info)
+    private static JsonObject ProjectInfo(CanonicalInfo info, SourceProjectionTrace? trace)
     {
         var result = new JsonObject();
-        SourceContractFields.Info.Title.Set(result, info.Title);
-        SourceContractFields.Info.Summary.Set(result, info.Summary);
-        SourceContractFields.Info.Description.Set(result, info.Description);
-        SourceContractFields.Info.Binary.Set(result, info.Binary);
-        SourceContractFields.Info.Version.Set(result, info.Version);
+        SourceContractFields.Info.Title.Set(result, info.Title, trace);
+        SourceContractFields.Info.Summary.Set(result, info.Summary, trace);
+        SourceContractFields.Info.Description.Set(result, info.Description, trace);
+        SourceContractFields.Info.Binary.Set(result, info.Binary, trace);
+        SourceContractFields.Info.Version.Set(result, info.Version, trace);
 
         if (info.License is not null)
         {
             var license = new JsonObject();
-            SourceContractFields.Info.LicenseName.Set(license, info.License.Name);
-            SourceContractFields.Info.LicenseSpdxId.Set(license, info.License.SpdxId);
-            SourceContractFields.Info.LicenseUrl.Set(license, info.License.Url);
+            SourceContractFields.Info.LicenseName.Set(license, info.License.Name, trace);
+            SourceContractFields.Info.LicenseSpdxId.Set(license, info.License.SpdxId, trace);
+            SourceContractFields.Info.LicenseUrl.Set(license, info.License.Url, trace);
             result["license"] = license;
         }
 
         if (info.Contact is not null)
         {
             var contact = new JsonObject();
-            SourceContractFields.Info.ContactName.Set(contact, info.Contact.Name);
-            SourceContractFields.Info.ContactEmail.Set(contact, info.Contact.Email);
-            SourceContractFields.Info.ContactUrl.Set(contact, info.Contact.Url);
+            SourceContractFields.Info.ContactName.Set(contact, info.Contact.Name, trace);
+            SourceContractFields.Info.ContactEmail.Set(contact, info.Contact.Email, trace);
+            SourceContractFields.Info.ContactUrl.Set(contact, info.Contact.Url, trace);
             result["contact"] = contact;
         }
 
         return result;
     }
 
-    private static JsonObject ProjectInstall(CanonicalInstall install)
+    private static JsonObject ProjectInstall(CanonicalInstall install, SourceProjectionTrace? trace)
     {
         var result = new JsonObject();
-        SourceContractFields.Install.Name.Set(result, install.Name);
-        SourceContractFields.Install.Command.Set(result, install.Command);
-        SourceContractFields.Install.Url.Set(result, install.Url);
-        SourceContractFields.Install.Description.Set(result, install.Description);
+        SourceContractFields.Install.Name.Set(result, install.Name, trace);
+        SourceContractFields.Install.Command.Set(result, install.Command, trace);
+        SourceContractFields.Install.Url.Set(result, install.Url, trace);
+        SourceContractFields.Install.Description.Set(result, install.Description, trace);
         return result;
     }
 
-    private static JsonObject ProjectCommand(CanonicalCommand command)
+    private static JsonObject ProjectCommand(CanonicalCommand command, SourceProjectionTrace? trace)
     {
         var root = command.Path == "root";
         var commandFields = root ? SourceContractFields.RootCommand : SourceContractFields.Command;
@@ -109,15 +120,15 @@ internal static class SourceContractProjection
         var flagChoiceFields = root ? SourceContractFields.RootFlagChoice : SourceContractFields.CommandFlagChoice;
         var alternativeSourceFields = root ? SourceContractFields.RootFlagAlternativeSource : SourceContractFields.CommandFlagAlternativeSource;
         var result = new JsonObject();
-        commandFields.Kind.Set(result, command.Kind);
-        if (command.Aliases.Length > 0) commandFields.Aliases.Set(result, Strings(command.Aliases));
-        if (command.Summary is not null) commandFields.Summary.Set(result, command.Summary);
-        if (command.Description is not null) commandFields.Description.Set(result, command.Description);
-        if (command.Hidden) commandFields.Hidden.Set(result, true);
-        if (command.ExitCodes.Length > 0) result["exitCodes"] = new JsonArray(command.ExitCodes.Select(exitCode => ProjectExitCode(exitCode, exitCodeFields)).ToArray());
-        if (command.Examples.Length > 0) result["examples"] = new JsonArray(command.Examples.Select(example => ProjectExample(example, exampleFields)).ToArray());
-        if (command.Arguments.Length > 0) result["args"] = new JsonArray(command.Arguments.Select(argument => ProjectParameter(argument, option: false, argumentFields, argumentChoiceFields, alternativeSourceFields)).ToArray());
-        if (command.Options.Length > 0) result["flags"] = new JsonArray(command.Options.Select(option => ProjectParameter(option, option: true, flagFields, flagChoiceFields, alternativeSourceFields)).ToArray());
+        commandFields.Kind.Set(result, command.Kind, trace);
+        if (command.Aliases.Length > 0) commandFields.Aliases.Set(result, Strings(command.Aliases), trace);
+        if (command.Summary is not null) commandFields.Summary.Set(result, command.Summary, trace);
+        if (command.Description is not null) commandFields.Description.Set(result, command.Description, trace);
+        if (command.Hidden) commandFields.Hidden.Set(result, true, trace);
+        if (command.ExitCodes.Length > 0) result["exitCodes"] = new JsonArray(command.ExitCodes.Select(exitCode => ProjectExitCode(exitCode, exitCodeFields, trace)).ToArray());
+        if (command.Examples.Length > 0) result["examples"] = new JsonArray(command.Examples.Select(example => ProjectExample(example, exampleFields, trace)).ToArray());
+        if (command.Arguments.Length > 0) result["args"] = new JsonArray(command.Arguments.Select(argument => ProjectParameter(argument, option: false, argumentFields, argumentChoiceFields, alternativeSourceFields, trace)).ToArray());
+        if (command.Options.Length > 0) result["flags"] = new JsonArray(command.Options.Select(option => ProjectParameter(option, option: true, flagFields, flagChoiceFields, alternativeSourceFields, trace)).ToArray());
         return result;
     }
 
@@ -126,34 +137,35 @@ internal static class SourceContractProjection
         bool option,
         SourceParameterFields fields,
         SourceChoiceFields choiceFields,
-        SourceAlternativeSourceFields alternativeSourceFields)
+        SourceAlternativeSourceFields alternativeSourceFields,
+        SourceProjectionTrace? trace)
     {
         var name = option ? SourceOptionName((CanonicalOption)parameter) : parameter.Name;
         var result = new JsonObject();
-        fields.Name.Set(result, name);
+        fields.Name.Set(result, name, trace);
         if (option)
         {
             var canonicalOption = (CanonicalOption)parameter;
-            if (canonicalOption.Aliases.Length > 0) fields.Aliases!.Set(result, Strings(canonicalOption.Aliases));
+            if (canonicalOption.Aliases.Length > 0) fields.Aliases!.Set(result, Strings(canonicalOption.Aliases), trace);
         }
 
-        if (parameter.Summary is not null) fields.Summary.Set(result, parameter.Summary);
-        if (parameter.Description is not null) fields.Description.Set(result, parameter.Description);
-        if (parameter.Type is not null) fields.Type.Set(result, parameter.Type);
-        if (parameter.Required == true) fields.Required.Set(result, true);
+        if (parameter.Summary is not null) fields.Summary.Set(result, parameter.Summary, trace);
+        if (parameter.Description is not null) fields.Description.Set(result, parameter.Description, trace);
+        if (parameter.Type is not null) fields.Type.Set(result, parameter.Type, trace);
+        if (parameter.Required == true) fields.Required.Set(result, true, trace);
         if (parameter.Variadic)
         {
-            fields.Variadic.Set(result, true);
-            if (parameter.ArityMinimum is not null) fields.Minimum.Set(result, parameter.ArityMinimum.Value);
-            if (parameter.ArityMaximum is not null) fields.Maximum.Set(result, parameter.ArityMaximum.Value);
+            fields.Variadic.Set(result, true, trace);
+            if (parameter.ArityMinimum is not null) fields.Minimum.Set(result, parameter.ArityMinimum.Value, trace);
+            if (parameter.ArityMaximum is not null) fields.Maximum.Set(result, parameter.ArityMaximum.Value, trace);
         }
 
-        if (option && parameter.Hint is not null) fields.Hint!.Set(result, parameter.Hint);
-        if (parameter.Hidden && fields.Hidden is not null) fields.Hidden.Set(result, true);
-        if (parameter.Choices.Length > 0) result["choices"] = new JsonArray(parameter.Choices.Select(choice => ProjectChoice(choice, choiceFields)).ToArray());
-        if (option && parameter.DefaultValue is not null) fields.DefaultValue!.Set(result, parameter.DefaultValue);
-        if (option && parameter.AlternativeSources.Length > 0) result["alternativeSources"] = new JsonArray(parameter.AlternativeSources.Select(source => ProjectSource(source, alternativeSourceFields)).ToArray());
-        if (!option && parameter is CanonicalArgument argument && argument.Passthrough) fields.Passthrough!.Set(result, true);
+        if (option && parameter.Hint is not null) fields.Hint!.Set(result, parameter.Hint, trace);
+        if (parameter.Hidden && fields.Hidden is not null) fields.Hidden.Set(result, true, trace);
+        if (parameter.Choices.Length > 0) result["choices"] = new JsonArray(parameter.Choices.Select(choice => ProjectChoice(choice, choiceFields, trace)).ToArray());
+        if (option && parameter.DefaultValue is not null) fields.DefaultValue!.Set(result, parameter.DefaultValue, trace);
+        if (option && parameter.AlternativeSources.Length > 0) result["alternativeSources"] = new JsonArray(parameter.AlternativeSources.Select(source => ProjectSource(source, alternativeSourceFields, trace)).ToArray());
+        if (!option && parameter is CanonicalArgument argument && argument.Passthrough) fields.Passthrough!.Set(result, true, trace);
         return result;
     }
 
@@ -167,37 +179,37 @@ internal static class SourceContractProjection
         return option.Name == "--" ? "-" : option.Name[2..];
     }
 
-    private static JsonObject ProjectChoice(CanonicalChoice choice, SourceChoiceFields fields)
+    private static JsonObject ProjectChoice(CanonicalChoice choice, SourceChoiceFields fields, SourceProjectionTrace? trace)
     {
         var result = new JsonObject();
-        fields.Value.Set(result, choice.Value);
-        if (choice.Description is not null) fields.Description.Set(result, choice.Description);
+        fields.Value.Set(result, choice.Value, trace);
+        if (choice.Description is not null) fields.Description.Set(result, choice.Description, trace);
         return result;
     }
 
-    private static JsonObject ProjectSource(CanonicalAlternativeSource source, SourceAlternativeSourceFields fields)
+    private static JsonObject ProjectSource(CanonicalAlternativeSource source, SourceAlternativeSourceFields fields, SourceProjectionTrace? trace)
     {
         var result = new JsonObject();
-        fields.Type.Set(result, source.Type);
-        fields.Property.Set(result, source.Property);
+        fields.Type.Set(result, source.Type, trace);
+        fields.Property.Set(result, source.Property, trace);
         return result;
     }
 
-    private static JsonObject ProjectExitCode(CanonicalExitCode exitCode, SourceExitCodeFields fields)
+    private static JsonObject ProjectExitCode(CanonicalExitCode exitCode, SourceExitCodeFields fields, SourceProjectionTrace? trace)
     {
         var result = new JsonObject();
-        fields.Code.Set(result, exitCode.Code);
-        fields.Status.Set(result, exitCode.Status);
-        fields.Summary.Set(result, exitCode.Summary);
-        if (exitCode.Description is not null) fields.Description.Set(result, exitCode.Description);
+        fields.Code.Set(result, exitCode.Code, trace);
+        fields.Status.Set(result, exitCode.Status, trace);
+        fields.Summary.Set(result, exitCode.Summary, trace);
+        if (exitCode.Description is not null) fields.Description.Set(result, exitCode.Description, trace);
         return result;
     }
 
-    private static JsonObject ProjectExample(CanonicalExample example, SourceExampleFields fields)
+    private static JsonObject ProjectExample(CanonicalExample example, SourceExampleFields fields, SourceProjectionTrace? trace)
     {
         var result = new JsonObject();
-        fields.Content.Set(result, example.Content);
-        if (example.Title is not null) fields.Title.Set(result, example.Title);
+        fields.Content.Set(result, example.Content, trace);
+        if (example.Title is not null) fields.Title.Set(result, example.Title, trace);
         return result;
     }
 

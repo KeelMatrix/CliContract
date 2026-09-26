@@ -24,7 +24,7 @@ internal sealed class SourceFieldDescriptor
 
     public Func<string, bool> Accepts { get; }
 
-    public void Set(JsonObject target, object? value)
+    public void Set(JsonObject target, object? value, SourceProjectionTrace? trace = null)
     {
         if (value is null)
         {
@@ -33,6 +33,7 @@ internal sealed class SourceFieldDescriptor
         }
 
         target[Property] = value is JsonNode node ? node.DeepClone() : JsonValue.Create(value);
+        trace?.Record(this);
     }
 }
 

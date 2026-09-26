@@ -24,21 +24,38 @@ public sealed class SourceProducibilityGuardTests
     [Fact]
     public void DescriptorCatalogCoversEveryProjectionFieldAcrossAllScopes()
     {
-        var expected = SourceContractFields.ExpectedFields.Select(field => field.Name).ToArray();
+        var trace = new SourceProjectionTrace();
+        var projected = SourceContractProjection.Create(NormalizeAndRead(BaseDocument()), trace);
+        trace.ObserveOutput(projected);
+        var expected = trace.Fields.ToArray();
         var covered = SourceFields.Select(field => field.Name).ToArray();
 
-        Assert.Equal(expected.Length, expected.Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(covered.Length, covered.Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(expected.OrderBy(value => value), covered.OrderBy(value => value));
+        AssertProjectionCoverage(expected, covered);
 
-        var projected = SourceContractProjection.Create(NormalizeAndRead(BaseDocument()));
         var commandKeys = projected["commands"]!.AsObject().Select(property => property.Key).ToArray();
         Assert.Contains("tool", commandKeys);
         Assert.Contains("tool run", commandKeys);
         Assert.Contains("tool run deploy", commandKeys);
         Console.WriteLine($"covered_fields={covered.Length}");
         Console.WriteLine($"expected_fields={expected.Length}");
-        Console.WriteLine($"covered_field_names={string.Join(',', covered.OrderBy(value => value, StringComparer.Ordinal))}");
+        Console.WriteLine($"expected_field_names={string.Join(',', expected.OrderBy(value => value, StringComparer.Ordinal))}");
+    }
+
+    [Fact]
+    public void UnregisteredRootProjectionFieldFailsCoverageGuard()
+    {
+        var trace = new SourceProjectionTrace();
+        var projected = SourceContractProjection.Create(NormalizeAndRead(BaseDocument()), trace);
+        projected["unregistered"] = "scratch-probe";
+        trace.ObserveOutput(projected);
+
+        var failure = Record.Exception(() => AssertProjectionCoverage(
+            trace.Fields.ToArray(),
+            SourceFields.Select(field => field.Name).ToArray()));
+
+        Assert.Contains("root.unregistered", trace.Fields);
+        Assert.NotNull(failure);
+        Console.WriteLine("SELF_FALSIFICATION=PASS uncovered=root.unregistered");
     }
 
     [Fact]
@@ -70,6 +87,13 @@ public sealed class SourceProducibilityGuardTests
         Assert.Equal(serialized, Normalizer.Serialize(roundTrip));
         Assert.Empty(CompatibilityAnalyzer.Compare(roundTrip, roundTrip).Findings);
         return roundTrip;
+    }
+
+    private static void AssertProjectionCoverage(IReadOnlyCollection<string> expected, IReadOnlyCollection<string> covered)
+    {
+        Assert.Equal(expected.Count, expected.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(covered.Count, covered.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(expected.OrderBy(value => value), covered.OrderBy(value => value));
     }
 
     private static JsonObject BaseDocument() => JsonNode.Parse("""
