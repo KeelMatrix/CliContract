@@ -1,6 +1,6 @@
 # First-release acceptance self-review
 
-This record covers candidate `bca89f0ce48420ab41b0a3bfc966d2546080563b` against the current read-only KeelMatrix first-release acceptance checklist. The record itself is committed by the following repository commit so the candidate and its durable review record remain separately identifiable.
+This record covers candidate `3256b1cafb5eb653413a7e0b8926bfe609212544` against the current read-only KeelMatrix first-release acceptance checklist. The record itself is committed by the following repository commit so the candidate and its durable review record remain separately identifiable.
 
 ## Durable inputs and output
 
@@ -14,7 +14,7 @@ The evidence input covers every checklist item by one-based `criterion_number`. 
 ## Candidate lint result
 
 ```text
-ACCEPTANCE_MAP_LINT=PASS checklist_rows=170 map_rows=170 met_rows=151 unmet_rows=0 na_rows=19 missing=0 duplicate_numbers=0 criterion_text_mismatches=0 criterion_hash_mismatches=0 missing_candidate_evidence=0 met_without_candidate_sha=0 met_without_anchor=0 invalid_run_evidence=0 checker_evidence_failures=0 evidence_kind_mismatches=0 na_without_justification=0 unmet_without_justification=0 candidate_sha=bca89f0ce48420ab41b0a3bfc966d2546080563b
+ACCEPTANCE_MAP_LINT=PASS checklist_rows=170 map_rows=170 met_rows=151 unmet_rows=0 na_rows=19 missing=0 duplicate_numbers=0 criterion_text_mismatches=0 criterion_hash_mismatches=0 missing_candidate_evidence=0 met_without_candidate_sha=0 met_without_anchor=0 invalid_run_evidence=0 checker_evidence_failures=0 evidence_kind_mismatches=0 na_without_justification=0 unmet_without_justification=0 candidate_sha=3256b1cafb5eb653413a7e0b8926bfe609212544
 ```
 
 C81 has its own telemetry/privacy evidence in row 81. C101 has its own `gh repo view KeelMatrix/CliContract --json description --jq .description` command evidence in row 101.
