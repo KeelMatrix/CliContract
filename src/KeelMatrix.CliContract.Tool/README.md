@@ -27,7 +27,7 @@ Use `--format json` for CI consumers, `--fail-on warning` to gate warnings, and 
 
 `0` means no gated finding, `1` means a gated finding, `2` means a missing source/baseline path, invalid invocation/configuration, or output failure, `3` means a present but unreadable or invalid source/baseline (including an impossible canonical manifest), and `4` means an unexpected tool failure. See the [error taxonomy](https://github.com/KeelMatrix/CliContract/blob/main/docs/ERROR-TAXONOMY.md). JSON output places compatibility findings and tool errors in separate arrays.
 
-When package behavior is cited in a repository acceptance record, use a candidate-bound CI run, an exact command with captured output, a rerunnable checker, or an explicit judgement that names the relevant artifact and rationale. A package, fixture, or manifest path alone is not a proof anchor; the repository acceptance-map linter rejects path-only proof.
+When package behavior is cited in a repository acceptance record, use a candidate-bound CI run, an exact command with captured output, a rerunnable checker, or an explicit judgement that names the relevant artifact and rationale. A package, fixture, or manifest path alone is not a proof anchor; the repository acceptance-map linter rejects path-only proof. The production acceptance-map path independently validates named CI runs; its self-test uses internal fixture metadata and requires no `gh`, network access, or `GH_TOKEN`.
 
 ## Privacy and limitations
 

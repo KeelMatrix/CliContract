@@ -4,15 +4,11 @@ $repositoryRoot = Split-Path -Parent $scriptDirectory
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-acceptance-map-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp | Out-Null
 
-$originalPath = $env:PATH
-$fakeGhDirectory = Join-Path $temp 'fake-gh'
-New-Item -ItemType Directory -Path $fakeGhDirectory | Out-Null
-
 try {
     $checklist = Join-Path $temp 'checklist.md'
     $evidence = Join-Path $temp 'evidence.json'
     $staleEvidence = Join-Path $temp 'stale-evidence.json'
-    $runMetadata = Join-Path $temp 'run-metadata.json'
+    $runMetadata = Join-Path $repositoryRoot 'fixtures/acceptance-map/run-metadata.json'
     $map = Join-Path $temp 'map.md'
     $mapAgain = Join-Path $temp 'map-again.md'
     $fixtureMap = Join-Path $temp 'fixture-map.md'
@@ -25,21 +21,8 @@ try {
 
     $candidate = '0123456789abcdef0123456789abcdef01234567'
     $stale = 'fedcba9876543210fedcba9876543210fedcba98'
-    [IO.File]::WriteAllText((Join-Path $fakeGhDirectory 'gh.cmd'), @"
-@echo off
-if "%~3"=="36196565020" (
-  echo {"headSha":"$stale","status":"completed","conclusion":"success","event":"push"}
-  exit /b 0
-)
-echo {"headSha":"$candidate","status":"completed","conclusion":"success","event":"push"}
-exit /b 0
-"@, [Text.UTF8Encoding]::new($false))
-    $env:PATH = "$fakeGhDirectory;$originalPath"
 
     [IO.File]::WriteAllText($checklist, "* [ ] First criterion`n* [ ] Second criterion`n* [ ] Third criterion`n* [ ] Fourth criterion`n* [ ] Fifth criterion`n", [Text.UTF8Encoding]::new($false))
-    [IO.File]::WriteAllText($runMetadata, (@(
-        @{ run_id = '123456789'; headSha = $candidate; status = 'completed'; conclusion = 'success'; event = 'push' }
-    ) | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
     $evidenceEntries = @(
         @{ criterion = 'First criterion'; status = 'MET'; evidence = 'repo_path=README.md; command=pwsh -NoProfile -File ./scripts/test-acceptance-map.ps1; output=ACCEPTANCE_MAP_SELF_TEST=PASS' },
         @{ criterion = 'Second criterion'; status = 'MET'; evidence = 'GitHub Actions run 123456789; criterion_value=completed candidate validation' },
@@ -66,67 +49,132 @@ exit /b 0
     & pwsh -NoProfile -File $linter -ChecklistPath (Join-Path $repositoryRoot 'fixtures/acceptance-map/checklist.md') -MapPath $fixtureMap -CandidateSha $fixtureCandidate -RepositoryRoot $repositoryRoot
     if ($LASTEXITCODE -ne 0) { throw 'Acceptance map fixture lint failed.' }
 
-    & pwsh -NoProfile -File $generator -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath $map
-    if ($LASTEXITCODE -ne 0) { throw 'Acceptance map self-test generation failed.' }
-    & pwsh -NoProfile -File $generator -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath $mapAgain
-    if ($LASTEXITCODE -ne 0) { throw 'Acceptance map deterministic regeneration failed.' }
+    $runMetadataById = @{}
+    foreach ($metadata in @(Get-Content -Raw -LiteralPath $runMetadata | ConvertFrom-Json)) {
+        $runMetadataById[[string]$metadata.run_id] = [pscustomobject]@{
+            headSha = [string]$metadata.headSha
+            status = [string]$metadata.status
+            conclusion = [string]$metadata.conclusion
+            event = [string]$metadata.event
+        }
+    }
+    $runMetadataResolver = {
+        param([string] $runId)
+        if (-not $runMetadataById.ContainsKey($runId)) {
+            throw "Test fixture has no metadata for GitHub Actions run $runId."
+        }
+        return $runMetadataById[$runId]
+    }
+
+    function Assert-ExpectedRejection {
+        param(
+            [Parameter(Mandatory = $true)]
+            [scriptblock] $Action,
+
+            [Parameter(Mandatory = $true)]
+            [string] $ExpectedPattern,
+
+            [Parameter(Mandatory = $true)]
+            [string] $FailureMessage
+        )
+
+        $output = @()
+        $completed = $true
+        try {
+            $output = @(& $Action 2>&1)
+        }
+        catch {
+            $completed = $false
+            $output += $_
+        }
+
+        $text = $output -join "`n"
+        if ($completed -or $text -notmatch $ExpectedPattern) {
+            throw "$FailureMessage Output: $text"
+        }
+    }
+
+    # The resolver is available only to the internal implementation function after
+    # these scripts are dot-sourced. It is not a parameter on either production CLI.
+    . $generator -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath $map
+    . $linter -ChecklistPath $checklist -MapPath $map -CandidateSha $candidate -RepositoryRoot $repositoryRoot
+
+    Invoke-AcceptanceMapGeneration -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath $map -RunMetadataResolver $runMetadataResolver
+    Invoke-AcceptanceMapGeneration -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath $mapAgain -RunMetadataResolver $runMetadataResolver
+    if (-not (Test-Path -LiteralPath $map) -or -not (Test-Path -LiteralPath $mapAgain)) { throw 'Acceptance map self-test did not generate both maps.' }
     if (-not ([Linq.Enumerable]::SequenceEqual([IO.File]::ReadAllBytes($map), [IO.File]::ReadAllBytes($mapAgain)))) {
         throw 'Acceptance map generator was not byte-identical for the same inputs.'
     }
 
-    & pwsh -NoProfile -File $linter -ChecklistPath $checklist -MapPath $map -CandidateSha $candidate -RepositoryRoot $repositoryRoot
-    if ($LASTEXITCODE -ne 0) { throw 'Acceptance map self-test lint failed.' }
+    Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $map -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver
 
     $metadataOverrideOutput = @(& pwsh -NoProfile -File $generator -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath (Join-Path $temp 'metadata-override-map.md') -RunMetadataPath $runMetadata 2>&1)
     $metadataOverrideExit = $LASTEXITCODE
     if ($metadataOverrideExit -eq 0 -or ($metadataOverrideOutput -join "`n") -notmatch 'RunMetadataPath|parameter cannot be found|named parameter') {
         throw 'Acceptance map generator self-test still exposed a run metadata override.'
     }
+    $metadataResolverOverrideOutput = @(& pwsh -NoProfile -File $generator -ChecklistPath $checklist -EvidencePath $evidence -CandidateSha $candidate -OutputPath (Join-Path $temp 'resolver-override-map.md') -RunMetadataResolver $runMetadata 2>&1)
+    $metadataResolverOverrideExit = $LASTEXITCODE
+    if ($metadataResolverOverrideExit -eq 0 -or ($metadataResolverOverrideOutput -join "`n") -notmatch 'RunMetadataResolver|parameter cannot be found|named parameter') {
+        throw 'Acceptance map generator self-test exposed its internal run metadata resolver.'
+    }
 
     $tampered = Get-Content -Raw -LiteralPath $map
     $tampered = $tampered.Replace("github_run_head_sha=$candidate", "github_run_head_sha=$stale")
     [IO.File]::WriteAllText($staleRunMap, $tampered, [Text.UTF8Encoding]::new($false))
-    & pwsh -NoProfile -File $linter -ChecklistPath $checklist -MapPath $staleRunMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot 2>$null
-    if ($LASTEXITCODE -eq 0) { throw 'Acceptance map lint self-test accepted forged embedded run metadata.' }
+    Assert-ExpectedRejection `
+        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $staleRunMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -ExpectedPattern 'forged or stale head SHA metadata' `
+        -FailureMessage 'Acceptance map lint self-test accepted forged embedded run metadata.'
 
     $forgedRun = (Get-Content -Raw -LiteralPath $map).Replace('github_run_id=123456789', 'github_run_id=36196565020')
     [IO.File]::WriteAllText($forgedRunMap, $forgedRun, [Text.UTF8Encoding]::new($false))
-    $forgedRunOutput = @(& pwsh -NoProfile -File $linter -ChecklistPath $checklist -MapPath $forgedRunMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot 2>&1)
-    if ($LASTEXITCODE -eq 0 -or ($forgedRunOutput -join "`n") -notmatch 'resolved head SHA is not the candidate|independently validate') {
-        throw 'Acceptance map lint self-test accepted a stale run id paired with a forged candidate head SHA.'
-    }
+    Assert-ExpectedRejection `
+        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $forgedRunMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -ExpectedPattern 'resolved head SHA is not the candidate|independently validate' `
+        -FailureMessage 'Acceptance map lint self-test accepted a stale run id paired with a forged candidate head SHA.'
 
-    $staleGenerationOutput = @(& pwsh -NoProfile -File $generator -ChecklistPath $checklist -EvidencePath $staleEvidence -CandidateSha $candidate -OutputPath (Join-Path $temp 'stale-generated-map.md') 2>&1)
-    if ($LASTEXITCODE -eq 0 -or ($staleGenerationOutput -join "`n") -notmatch 'not candidate-bound') {
-        throw 'Acceptance map generator self-test accepted a stale run id end-to-end.'
-    }
+    Assert-ExpectedRejection `
+        -Action { Invoke-AcceptanceMapGeneration -ChecklistPath $checklist -EvidencePath $staleEvidence -CandidateSha $candidate -OutputPath (Join-Path $temp 'stale-generated-map.md') -RunMetadataResolver $runMetadataResolver } `
+        -ExpectedPattern 'not candidate-bound' `
+        -FailureMessage 'Acceptance map generator self-test accepted a stale run id end-to-end.'
 
     $pathOnly = (Get-Content -Raw -LiteralPath $map).Replace('repo_path=README.md; command=pwsh -NoProfile -File ./scripts/test-acceptance-map.ps1; output=ACCEPTANCE_MAP_SELF_TEST=PASS', 'repo_path=LICENSE')
     [IO.File]::WriteAllText($pathOnlyMap, $pathOnly, [Text.UTF8Encoding]::new($false))
-    & pwsh -NoProfile -File $linter -ChecklistPath $checklist -MapPath $pathOnlyMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot 2>$null
-    if ($LASTEXITCODE -eq 0) { throw 'Acceptance map lint self-test accepted an existing but irrelevant path anchor.' }
+    Assert-ExpectedRejection `
+        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $pathOnlyMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -ExpectedPattern 'valid reproducible or explicit judgement anchor' `
+        -FailureMessage 'Acceptance map lint self-test accepted an existing but irrelevant path anchor.'
 
     $judgementWithoutArtifact = (Get-Content -Raw -LiteralPath $map).Replace('judgement=artifacts=README.md', 'judgement=reviewer judgment without an artifact reference')
     [IO.File]::WriteAllText($judgementWithoutArtifactMap, $judgementWithoutArtifact, [Text.UTF8Encoding]::new($false))
-    & pwsh -NoProfile -File $linter -ChecklistPath $checklist -MapPath $judgementWithoutArtifactMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot 2>$null
-    if ($LASTEXITCODE -eq 0) { throw 'Acceptance map lint self-test accepted a judgement without a criterion-specific artifact.' }
+    Assert-ExpectedRejection `
+        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $judgementWithoutArtifactMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -ExpectedPattern 'valid reproducible or explicit judgement anchor' `
+        -FailureMessage 'Acceptance map lint self-test accepted a judgement without a criterion-specific artifact.'
 
     $generic = $pathOnly.Replace('repo_path=LICENSE', 'generic evidence')
     [IO.File]::WriteAllText($genericMap, $generic, [Text.UTF8Encoding]::new($false))
-    & pwsh -NoProfile -File $linter -ChecklistPath $checklist -MapPath $genericMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot 2>$null
-    if ($LASTEXITCODE -eq 0) { throw 'Acceptance map lint self-test accepted generic proof text.' }
+    Assert-ExpectedRejection `
+        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $genericMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -ExpectedPattern 'valid reproducible or explicit judgement anchor' `
+        -FailureMessage 'Acceptance map lint self-test accepted generic proof text.'
 
     $textDrift = (Get-Content -Raw -LiteralPath $map).Replace('Second criterion', 'Tampered criterion')
     [IO.File]::WriteAllText($tamperedTextMap, $textDrift, [Text.UTF8Encoding]::new($false))
-    & pwsh -NoProfile -File $linter -ChecklistPath $checklist -MapPath $tamperedTextMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot 2>$null
-    if ($LASTEXITCODE -eq 0) { throw 'Acceptance map lint self-test accepted criterion-text drift.' }
+    Assert-ExpectedRejection `
+        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $tamperedTextMap -CandidateSha $candidate -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -ExpectedPattern 'criterion mismatch' `
+        -FailureMessage 'Acceptance map lint self-test accepted criterion-text drift.'
 
-    & pwsh -NoProfile -File $linter -ChecklistPath $checklist -MapPath $map -CandidateSha $stale -RepositoryRoot $repositoryRoot 2>$null
-    if ($LASTEXITCODE -eq 0) { throw 'Acceptance map lint self-test accepted candidate-SHA drift.' }
+    Assert-ExpectedRejection `
+        -Action { Invoke-AcceptanceMapLint -ChecklistPath $checklist -MapPath $map -CandidateSha $stale -RepositoryRoot $repositoryRoot -RunMetadataResolver $runMetadataResolver } `
+        -ExpectedPattern 'exact candidate-SHA' `
+        -FailureMessage 'Acceptance map lint self-test accepted candidate-SHA drift.'
 
-    Write-Output 'ACCEPTANCE_MAP_SELF_TEST=PASS generated=3 linted=2 rejected_metadata_override=1 rejected_forged_embedded_run=1 rejected_forged_run_id=1 rejected_stale_run_end_to_end=1 rejected_path_only=1 rejected_judgement_without_artifact=1 rejected_generic=1 rejected_text_drift=1 rejected_candidate_sha=1 deterministic=1 checker=1 judgement_marker=1 fixture_golden=1'
+    Write-Output 'ACCEPTANCE_MAP_SELF_TEST=PASS generated=3 linted=2 rejected_metadata_override=1 rejected_internal_resolver=1 rejected_forged_embedded_run=1 rejected_forged_run_id=1 rejected_stale_run_end_to_end=1 rejected_path_only=1 rejected_judgement_without_artifact=1 rejected_generic=1 rejected_text_drift=1 rejected_candidate_sha=1 deterministic=1 checker=1 judgement_marker=1 fixture_golden=1'
+    exit 0
 }
 finally {
-    $env:PATH = $originalPath
     if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
 }

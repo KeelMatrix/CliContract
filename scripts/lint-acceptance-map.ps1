@@ -84,9 +84,13 @@ function Test-Placeholder([string] $value) {
     return $false
 }
 
-function Get-GitHubRunMetadata([string] $runId) {
+function Get-GitHubRunMetadata([string] $runId, [string] $repository, [scriptblock] $runMetadataResolver) {
+    if ($null -ne $runMetadataResolver) {
+        return & $runMetadataResolver $runId
+    }
+
     try {
-        $raw = @(& gh run view $runId --repo $Repository --json headSha,status,conclusion,event 2>&1)
+        $raw = @(& gh run view $runId --repo $repository --json headSha,status,conclusion,event 2>&1)
         $exitCode = $LASTEXITCODE
     }
     catch {
@@ -128,7 +132,7 @@ function Get-RunEvidenceRecords([string] $proof) {
     )
 }
 
-function Test-RunEvidence([string] $proof, [string] $candidateSha, [int] $rowNumber) {
+function Test-RunEvidence([string] $proof, [string] $candidateSha, [int] $rowNumber, [string] $repository, [scriptblock] $runMetadataResolver) {
     $runIds = @(Find-GitHubRunIds $proof)
     if ($runIds.Count -eq 0) {
         return [pscustomobject]@{ Valid = $true; Reason = $null }
@@ -146,7 +150,7 @@ function Test-RunEvidence([string] $proof, [string] $candidateSha, [int] $rowNum
         }
 
         try {
-            $actual = Get-GitHubRunMetadata $runId
+            $actual = Get-GitHubRunMetadata $runId $repository $runMetadataResolver
             $actualHead = Get-RunField $actual 'headSha' $runId
             $actualStatus = Get-RunField $actual 'status' $runId
             $actualConclusion = Get-RunField $actual 'conclusion' $runId
@@ -256,6 +260,31 @@ function Get-AnchorKind([string] $proof) {
     return $null
 }
 
+function Invoke-AcceptanceMapLint {
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ChecklistPath,
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'Text')]
+    [string] $MapText,
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'Path')]
+    [string] $MapPath,
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'Stdin')]
+    [switch] $MapFromStdin,
+
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern('^[0-9a-fA-F]{40}$')]
+    [string] $CandidateSha,
+
+    [string] $RepositoryRoot = (Get-Location).Path,
+
+    [string] $Repository = 'KeelMatrix/CliContract',
+
+    [scriptblock] $RunMetadataResolver
+)
+
 if ($PSCmdlet.ParameterSetName -eq 'Path') {
     $MapText = Get-Content -Raw -LiteralPath $MapPath
 }
@@ -334,7 +363,7 @@ $missingCriterionSpecificAnchor = @(
 )
 $runEvidenceFailures = @(
     foreach ($row in $mapRows) {
-        $result = Test-RunEvidence $row.Evidence $CandidateSha $row.Number
+        $result = Test-RunEvidence $row.Evidence $CandidateSha $row.Number $Repository $RunMetadataResolver
         if (-not $result.Valid) { $result.Reason }
     }
 )
@@ -395,3 +424,8 @@ if ($criterionHashMismatches.Count -gt 0) {
 
 Write-Output ("ACCEPTANCE_MAP_LINT=PASS checklist_rows={0} map_rows={1} met_rows={2} unmet_rows={3} na_rows={4} missing=0 duplicate_numbers=0 criterion_text_mismatches=0 criterion_hash_mismatches=0 missing_candidate_evidence=0 met_without_candidate_sha=0 met_without_anchor=0 invalid_run_evidence=0 checker_evidence_failures=0 evidence_kind_mismatches=0 na_without_justification=0 unmet_without_justification=0 candidate_sha={5}" -f `
     $checklistRows.Count, $mapRows.Count, $metRows.Count, $unmetRows.Count, $naRows.Count, $CandidateSha.ToLowerInvariant())
+}
+
+if ($MyInvocation.InvocationName -ne '.') {
+    Invoke-AcceptanceMapLint @PSBoundParameters
+}

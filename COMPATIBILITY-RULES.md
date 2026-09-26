@@ -134,7 +134,7 @@ File failures are role-aware: a missing source, baseline, or suppression file is
 
 ## Verification references
 
-Compatibility claims used in a repository acceptance record are anchored by a candidate-bound CI run, an exact command plus captured output, a rerunnable checker, or an explicit judgement naming criterion-specific artifacts and rationale. An existing manifest or source path alone is not a compatibility result; the acceptance-map linter rejects that form and independently resolves every named CI run.
+Compatibility claims used in a repository acceptance record are anchored by a candidate-bound CI run, an exact command plus captured output, a rerunnable checker, or an explicit judgement naming criterion-specific artifacts and rationale. An existing manifest or source path alone is not a compatibility result; the acceptance-map linter rejects that form and independently resolves every named CI run. The production generator and linter retain that independent resolution, while their self-test exercises the same internal implementation with fixture metadata and no `gh`, network, or `GH_TOKEN` dependency.
 
 ## Schema validity versus compatibility
 

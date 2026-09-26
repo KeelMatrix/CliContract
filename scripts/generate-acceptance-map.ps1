@@ -61,8 +61,12 @@ function Get-EvidenceKind([string] $proof, [int] $runCount) {
     return 'reproducible'
 }
 
-function Get-GitHubRunMetadata([string] $runId) {
-    $raw = @(& gh run view $runId --repo $Repository --json headSha,status,conclusion,event 2>&1)
+function Get-GitHubRunMetadata([string] $runId, [string] $repository, [scriptblock] $runMetadataResolver) {
+    if ($null -ne $runMetadataResolver) {
+        return & $runMetadataResolver $runId
+    }
+
+    $raw = @(& gh run view $runId --repo $repository --json headSha,status,conclusion,event 2>&1)
     if ($LASTEXITCODE -ne 0) {
         throw "Unable to validate GitHub Actions run $runId with gh run view. Output: $($raw -join ' ')"
     }
@@ -83,6 +87,26 @@ function Get-RunField([object] $metadata, [string] $name, [string] $runId) {
     }
     return ([string]$value).Trim()
 }
+
+function Invoke-AcceptanceMapGeneration {
+param(
+    [Parameter(Mandatory = $true)]
+    [string] $ChecklistPath,
+
+    [Parameter(Mandatory = $true)]
+    [string] $EvidencePath,
+
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern('^[0-9a-fA-F]{40}$')]
+    [string] $CandidateSha,
+
+    [Parameter(Mandatory = $true)]
+    [string] $OutputPath,
+
+    [string] $Repository = 'KeelMatrix/CliContract',
+
+    [scriptblock] $RunMetadataResolver
+)
 
 $checklistRows = @(
     [regex]::Matches((Get-Content -Raw -LiteralPath $ChecklistPath), '(?m)^\s*\* \[ \] (.+)$') |
@@ -111,7 +135,7 @@ foreach ($entry in $evidenceEntries) {
 $lines = [System.Collections.Generic.List[string]]::new()
 $lines.Add('# First-release acceptance map')
 $lines.Add('')
-$lines.Add('Generated from the current read-only acceptance checklist by `scripts/generate-acceptance-map.ps1`; row numbers and criterion text are not hand-maintained.')
+$lines.Add('Generated from the current read-only acceptance checklist by `scripts/generate-acceptance-map.ps1`; production named-run evidence is independently resolved, while the self-test uses only internal fixture metadata; row numbers and criterion text are not hand-maintained.')
 $lines.Add('')
 $lines.Add('| # | Criterion | Status | Candidate-SHA evidence or disposition |')
 $lines.Add('|---:|---|:---:|---|')
@@ -137,7 +161,7 @@ for ($index = 0; $index -lt $checklistRows.Count; $index++) {
     $runIds = @(Find-GitHubRunIds $detail)
     $detail = Remove-GeneratedRunMetadata $detail
     foreach ($runId in $runIds) {
-        $metadata = Get-GitHubRunMetadata $runId
+        $metadata = Get-GitHubRunMetadata $runId $Repository $RunMetadataResolver
         $headSha = Get-RunField $metadata 'headSha' $runId
         if ($headSha -notmatch '^[0-9a-fA-F]{40}$') {
             throw "GitHub Actions run $runId returned an invalid headSha: $headSha"
@@ -179,3 +203,8 @@ if ($parent -and -not (Test-Path -LiteralPath $parent)) {
 }
 [IO.File]::WriteAllText($fullOutputPath, ($lines -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
 Write-Output "ACCEPTANCE_MAP_GENERATED=PASS checklist_rows=$($checklistRows.Count) output=$fullOutputPath candidate_sha=$($CandidateSha.ToLowerInvariant())"
+}
+
+if ($MyInvocation.InvocationName -ne '.') {
+    Invoke-AcceptanceMapGeneration @PSBoundParameters
+}

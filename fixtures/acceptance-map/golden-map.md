@@ -1,6 +1,6 @@
 # First-release acceptance map
 
-Generated from the current read-only acceptance checklist by `scripts/generate-acceptance-map.ps1`; row numbers and criterion text are not hand-maintained.
+Generated from the current read-only acceptance checklist by `scripts/generate-acceptance-map.ps1`; production named-run evidence is independently resolved, while the self-test uses only internal fixture metadata; row numbers and criterion text are not hand-maintained.
 
 | # | Criterion | Status | Candidate-SHA evidence or disposition |
 |---:|---|:---:|---|

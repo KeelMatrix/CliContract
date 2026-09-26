@@ -37,8 +37,10 @@ jobs:
       - uses: actions/setup-dotnet@v4.3.1
         with:
           global-json-file: global.json
-      - name: Verify acceptance evidence contract
+      - name: Verify hermetic acceptance evidence contract
         shell: pwsh
+        env:
+          GH_TOKEN: ''
         run: ./scripts/test-acceptance-map.ps1
       - name: Run validation
         shell: pwsh

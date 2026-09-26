@@ -1,0 +1,16 @@
+[
+  {
+    "run_id": "123456789",
+    "headSha": "0123456789abcdef0123456789abcdef01234567",
+    "status": "completed",
+    "conclusion": "success",
+    "event": "push"
+  },
+  {
+    "run_id": "36196565020",
+    "headSha": "fedcba9876543210fedcba9876543210fedcba98",
+    "status": "completed",
+    "conclusion": "success",
+    "event": "push"
+  }
+]

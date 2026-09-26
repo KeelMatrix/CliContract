@@ -39,8 +39,10 @@ jobs:
       - name: Verify release contract
         shell: pwsh
         run: ./scripts/verify-release-contract.ps1 -Version $env:RELEASE_VERSION -Tag $env:GITHUB_REF_NAME
-      - name: Verify acceptance evidence contract
+      - name: Verify hermetic acceptance evidence contract
         shell: pwsh
+        env:
+          GH_TOKEN: ''
         run: ./scripts/test-acceptance-map.ps1
       - name: Build package and run checks
         shell: pwsh
