@@ -21,7 +21,7 @@ try {
         @{ run_id = '123456789'; headSha = $candidate; status = 'completed'; conclusion = 'success'; event = 'push' }
     ) | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText($evidence, (@(
-        @{ criterion = 'First criterion'; status = 'MET'; evidence = 'repo_path=README.md; command=pwsh -NoProfile -File ./scripts/test-acceptance-map.ps1; output=ACCEPTANCE_MAP_SELF_TEST=PASS' },
+        @{ criterion = 'First criterion'; status = 'MET'; evidence = 'repo_path=README.md' },
         @{ criterion = 'Second criterion'; status = 'MET'; evidence = 'GitHub Actions run 123456789; criterion_value=completed candidate validation' },
         @{ criterion = 'Third criterion'; status = 'N/A'; evidence = 'only applies to multi-package repositories' }
     ) | ConvertTo-Json), [Text.UTF8Encoding]::new($false))

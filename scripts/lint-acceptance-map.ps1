@@ -78,20 +78,20 @@ function Test-Placeholder([string] $value) {
 
 function Test-CriterionSpecificAnchor([string] $proof, [int] $rowNumber) {
     $pathAnchors = @(
-        [regex]::Matches($proof, '(?i)(?:^|[;\s])(?:repo_path|path)=(?<value>[^;|]+)') |
+        [regex]::Matches($proof, '(?i)(?:^|[;\s]|proof=)(?:repo_path|path)=(?<value>[^;|]+)') |
             ForEach-Object { $_.Groups['value'].Value.Trim() } |
             Where-Object { Test-RepositoryPath $_ }
     )
     if ($pathAnchors.Count -gt 0) { return $true }
 
     $commandAnchors = @(
-        [regex]::Matches($proof, '(?is)(?:^|[;\s])command=(?<command>[^;|]+);\s*output=(?<output>[^;|]+)') |
+        [regex]::Matches($proof, '(?is)(?:^|[;\s]|proof=)command=(?<command>[^;|]+);\s*output=(?<output>[^;|]+)') |
             Where-Object { -not (Test-Placeholder $_.Groups['command'].Value) -and -not (Test-Placeholder $_.Groups['output'].Value) }
     )
     if ($commandAnchors.Count -gt 0) { return $true }
 
     $valueAnchors = @(
-        [regex]::Matches($proof, '(?i)(?:^|[;\s])criterion_value=(?<value>[^;|]+)') |
+        [regex]::Matches($proof, '(?i)(?:^|[;\s]|proof=)criterion_value=(?<value>[^;|]+)') |
             ForEach-Object { $_.Groups['value'].Value.Trim() } |
             Where-Object { -not (Test-Placeholder $_) }
     )
