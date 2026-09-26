@@ -18,6 +18,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Get-CriterionHash([string] $criterion) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [Convert]::ToHexString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($criterion))).ToLowerInvariant()
+    }
+    finally {
+        $sha.Dispose()
+    }
+}
+
 if ($PSCmdlet.ParameterSetName -eq 'Path') {
     $MapText = Get-Content -Raw -LiteralPath $MapPath
 }
@@ -31,7 +41,7 @@ $checklistRows = @(
 )
 
 $mapRows = @(
-    [regex]::Matches($MapText, '(?m)^\|\s*(?<number>\d+)\s*\|(?<criterion>.*?)\|\s*(?<status>MET|N/A)\s*\|\s*(?<evidence>.*?)\|\s*$') |
+    [regex]::Matches($MapText, '(?m)^\|\s*(?<number>\d+)\s*\|(?<criterion>.*?)\|\s*(?<status>MET|UNMET|N/A)\s*\|\s*(?<evidence>.*)\|\s*$') |
         ForEach-Object {
             [pscustomobject]@{
                 Number = [int]$_.Groups['number'].Value
@@ -50,6 +60,14 @@ if ($mapRows.Count -ne $checklistRows.Count) {
     throw "Acceptance map row count $($mapRows.Count) does not match checklist row count $($checklistRows.Count)."
 }
 
+for ($index = 0; $index -lt $checklistRows.Count; $index++) {
+    $row = $mapRows[$index]
+    $expectedNumber = $index + 1
+    if ($row.Number -ne $expectedNumber -or $row.Criterion -cne $checklistRows[$index]) {
+        throw "Acceptance map criterion mismatch at position $expectedNumber. expected_number=$expectedNumber actual_number=$($row.Number) expected_criterion=[$($checklistRows[$index])] actual_criterion=[$($row.Criterion)]"
+    }
+}
+
 $numbers = @($mapRows | Select-Object -ExpandProperty Number)
 $duplicates = @($numbers | Group-Object | Where-Object Count -gt 1 | Select-Object -ExpandProperty Name)
 $expectedNumbers = @(1..$checklistRows.Count)
@@ -60,30 +78,47 @@ if ($duplicates.Count -gt 0 -or $missingNumbers.Count -gt 0 -or $unexpectedNumbe
     throw "Acceptance map numbering is not one unique sequential row per checklist criterion. duplicate_numbers=$($duplicates -join ',') missing_numbers=$($missingNumbers -join ',') unexpected_numbers=$($unexpectedNumbers -join ',')"
 }
 
-$pathPattern = '(?i)(^|[\s;])(?:\.github/|docs/|scripts/|src/|tests/|fixtures/|(?:README|CHANGELOG|PRIVACY|SECURITY|LICENSE|CONTRIBUTING|MANIFEST|COMPATIBILITY-RULES)\.md|Directory\.[A-Za-z0-9._-]+|global\.json|NuGet\.config|\.gitignore|\.gitattributes)'
-$invalidStatuses = @($mapRows | Where-Object { $_.Status -notin @('MET', 'N/A') })
+$invalidStatuses = @($mapRows | Where-Object { $_.Status -notin @('MET', 'UNMET', 'N/A') })
 $metRows = @($mapRows | Where-Object Status -eq 'MET')
+$unmetRows = @($mapRows | Where-Object Status -eq 'UNMET')
 $naRows = @($mapRows | Where-Object Status -eq 'N/A')
 $missingCandidateEvidence = @(
     $metRows | Where-Object {
-        $_.Evidence -notmatch [regex]::Escape($CandidateSha) -and
-        $_.Evidence -notmatch $pathPattern
+        $_.Evidence -notmatch "(?i)(^|[;\s])candidate_sha=$([regex]::Escape($CandidateSha.ToLowerInvariant()))([;\s]|$)" -or
+        $_.Evidence -notmatch '(?i)(^|[;\s])proof=\s*\S'
     }
 )
-$naWithoutJustification = @($naRows | Where-Object { $_.Evidence -notmatch '(?i)^N/A\s+' })
+$criterionHashMismatches = @(
+    for ($index = 0; $index -lt $mapRows.Count; $index++) {
+        $row = $mapRows[$index]
+        $expectedHash = Get-CriterionHash $checklistRows[$index]
+        if ($row.Evidence -notmatch "(?i)(^|[;\s])criterion_sha256=$expectedHash([;\s]|$)") {
+            $row.Number
+        }
+    }
+)
+$naWithoutJustification = @($naRows | Where-Object { $_.Evidence -notmatch '(?i)(^|[;\s])N/A\s+[^;|]+' })
+$unmetWithoutJustification = @($unmetRows | Where-Object { $_.Evidence -notmatch '(?i)(^|[;\s])UNMET\s*:\s*[^;|]+' })
 
 if ($invalidStatuses.Count -gt 0) {
-    throw 'Acceptance map contains a status other than MET or N/A.'
+    throw 'Acceptance map contains a status other than MET, UNMET, or N/A.'
 }
 
 if ($missingCandidateEvidence.Count -gt 0) {
-    throw "MET rows without the candidate SHA or a precise repository file/test path: $($missingCandidateEvidence.Number -join ',')"
+    throw "MET rows without exact candidate-SHA evidence and criterion-specific proof=: $($missingCandidateEvidence.Number -join ',')"
 }
 
 if ($naWithoutJustification.Count -gt 0) {
     throw "N/A rows without an applicability justification: $($naWithoutJustification.Number -join ',')"
 }
 
-$missingCandidateSha = @($metRows | Where-Object { $_.Evidence -notmatch [regex]::Escape($CandidateSha) })
-Write-Output ("ACCEPTANCE_MAP_LINT=PASS checklist_rows={0} map_rows={1} met_rows={2} na_rows={3} missing=0 duplicate_numbers=0 missing_candidate_evidence=0 met_without_candidate_sha={4} na_without_justification=0 candidate_sha={5}" -f `
-    $checklistRows.Count, $mapRows.Count, $metRows.Count, $naRows.Count, $missingCandidateSha.Count, $CandidateSha.ToLowerInvariant())
+if ($unmetWithoutJustification.Count -gt 0) {
+    throw "UNMET rows without an explanation: $($unmetWithoutJustification.Number -join ',')"
+}
+
+if ($criterionHashMismatches.Count -gt 0) {
+    throw "Acceptance map rows without the exact checklist criterion hash: $($criterionHashMismatches -join ',')"
+}
+
+Write-Output ("ACCEPTANCE_MAP_LINT=PASS checklist_rows={0} map_rows={1} met_rows={2} unmet_rows={3} na_rows={4} missing=0 duplicate_numbers=0 criterion_text_mismatches=0 criterion_hash_mismatches=0 missing_candidate_evidence=0 met_without_candidate_sha=0 na_without_justification=0 unmet_without_justification=0 candidate_sha={5}" -f `
+    $checklistRows.Count, $mapRows.Count, $metRows.Count, $unmetRows.Count, $naRows.Count, $CandidateSha.ToLowerInvariant())

@@ -22,13 +22,13 @@ public sealed class SourceProducibilityGuardTests
         .ToArray();
 
     [Fact]
-    public void DescriptorCatalogCoversEveryProjectionFieldAcrossAllScopes()
+    public void ProjectionTraceMatchesIndependentlyAuthoredSourceFieldContract()
     {
         var trace = new SourceProjectionTrace();
         var projected = SourceContractProjection.Create(NormalizeAndRead(BaseDocument()), trace);
         trace.ObserveOutput(projected);
-        var expected = trace.Fields.ToArray();
-        var covered = SourceFields.Select(field => field.Name).ToArray();
+        var expected = SourceContractExpectedFields.Fields;
+        var covered = trace.Fields;
 
         AssertProjectionCoverage(expected, covered);
 
@@ -36,26 +36,53 @@ public sealed class SourceProducibilityGuardTests
         Assert.Contains("tool", commandKeys);
         Assert.Contains("tool run", commandKeys);
         Assert.Contains("tool run deploy", commandKeys);
-        Console.WriteLine($"covered_fields={covered.Length}");
-        Console.WriteLine($"expected_fields={expected.Length}");
-        Console.WriteLine($"expected_field_names={string.Join(',', expected.OrderBy(value => value, StringComparer.Ordinal))}");
+        Console.WriteLine($"covered_fields={covered.Count}");
+        Console.WriteLine($"expected_fields={expected.Count}");
+        Console.WriteLine($"covered_field_names={string.Join(',', covered.OrderBy(value => value, StringComparer.Ordinal))}");
     }
 
     [Fact]
-    public void UnregisteredRootProjectionFieldFailsCoverageGuard()
+    public void DescriptorCatalogCoversEveryProjectionFieldAcrossAllScopes()
     {
         var trace = new SourceProjectionTrace();
+        var projected = SourceContractProjection.Create(NormalizeAndRead(BaseDocument()), trace);
+        trace.ObserveOutput(projected);
+
+        AssertProjectionCoverage(
+            trace.CatalogFields,
+            SourceFields.Select(field => field.Name).ToArray());
+    }
+
+    [Fact]
+    public void CatalogOnlyProjectionFieldFailsCoverageGuardWithItsPath()
+    {
+        var trace = new SourceProjectionTrace();
+        var projected = SourceContractProjection.Create(NormalizeAndRead(BaseDocument()), trace);
+        trace.ObserveOutput(projected);
+        var catalog = SourceFields.Select(field => field.Name).Append("catalog.unwritten").ToArray();
+
+        var failure = Record.Exception(() => AssertProjectionCoverage(trace.CatalogFields, catalog));
+
+        Assert.NotNull(failure);
+        Assert.Contains("catalog.unwritten", failure!.Message);
+        Console.WriteLine("CATALOG_COVERAGE_GUARD_EXIT=1 unwritten=catalog.unwritten");
+    }
+
+    [Fact]
+    public void AllowListedUnregisteredProjectionFieldFailsCoverageGuardWithItsPath()
+    {
+        var trace = new SourceProjectionTrace("unregistered");
         var projected = SourceContractProjection.Create(NormalizeAndRead(BaseDocument()), trace);
         projected["unregistered"] = "scratch-probe";
         trace.ObserveOutput(projected);
 
         var failure = Record.Exception(() => AssertProjectionCoverage(
-            trace.Fields.ToArray(),
-            SourceFields.Select(field => field.Name).ToArray()));
+            SourceContractExpectedFields.Fields,
+            trace.Fields));
 
-        Assert.Contains("root.unregistered", trace.Fields);
         Assert.NotNull(failure);
-        Console.WriteLine("SELF_FALSIFICATION=PASS uncovered=root.unregistered");
+        Assert.Contains("root.unregistered", failure!.Message);
+        Console.WriteLine("ALLOWLISTED_COVERAGE_GUARD_EXIT=1 uncovered=root.unregistered");
     }
 
     [Fact]
@@ -91,9 +118,24 @@ public sealed class SourceProducibilityGuardTests
 
     private static void AssertProjectionCoverage(IReadOnlyCollection<string> expected, IReadOnlyCollection<string> covered)
     {
-        Assert.Equal(expected.Count, expected.Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(covered.Count, covered.Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(expected.OrderBy(value => value), covered.OrderBy(value => value));
+        var duplicateExpected = expected
+            .GroupBy(value => value, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        var duplicateCovered = covered
+            .GroupBy(value => value, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        var missing = expected.Except(covered, StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToArray();
+        var unexpected = covered.Except(expected, StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToArray();
+
+        Assert.True(
+            duplicateExpected.Length == 0 && duplicateCovered.Length == 0 && missing.Length == 0 && unexpected.Length == 0,
+            $"Source projection coverage mismatch. missing={string.Join(',', missing)} unexpected={string.Join(',', unexpected)} duplicate_expected={string.Join(',', duplicateExpected)} duplicate_covered={string.Join(',', duplicateCovered)}");
     }
 
     private static JsonObject BaseDocument() => JsonNode.Parse("""

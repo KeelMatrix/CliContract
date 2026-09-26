@@ -38,3 +38,11 @@ pwsh -NoProfile -File ./scripts/package-consumer-smoke.ps1 -PackagePath ./artifa
 
 Keep tests and fixtures bounded, deterministic, and offline after restore. The tool must not execute a described CLI,
 fetch remote references, or scrape help output. Report vulnerabilities through [`SECURITY.md`](SECURITY.md).
+
+The acceptance-map scripts are deterministic review tooling. `generate-acceptance-map.ps1` takes the current checklist
+and a criterion-keyed review ledger, emits rows in checklist order, and `lint-acceptance-map.ps1` verifies exact
+criterion text and criterion hashes before accepting candidate-SHA proof. Run the permanent script regression with:
+
+```powershell
+pwsh -NoProfile -File ./scripts/test-acceptance-map.ps1
+```
