@@ -7,6 +7,7 @@ This file records user-visible changes to KeelMatrix CliContract.
 ### Fixed
 
 - Canonical baseline validation rejects states the pinned alpha.14 normalizer cannot produce, including invalid metadata, arity, source, domain, status, file-source, and exit-code invariants; `check` and `diff` return bounded exit `3` for invalid baselines.
+- Telemetry activation now follows the canonical runnable-action surface; aliases, parameters, help metadata, and group-only command trees do not activate telemetry.
 
 ### Added
 - Canonical manifest schema version `2` preserves global options separately from root-local options, materializes derived command groups, and compares inherited option surfaces at every command.

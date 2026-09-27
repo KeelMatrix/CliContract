@@ -1,4 +1,3 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("KeelMatrix.CliContract.Tests")]
-[assembly: InternalsVisibleTo("KeelMatrix.CliContract")]

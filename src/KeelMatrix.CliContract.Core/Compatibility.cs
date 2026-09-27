@@ -59,7 +59,7 @@ public static class CompatibilityAnalyzer
 
             if (candidates.Length == 0)
             {
-                if (IsRunnable(baselineCommand))
+                if (CanonicalCommandContract.IsRunnable(baselineCommand))
                 {
                     findings.Add(new CompatibilityFinding("KMCLI103", "breaking", baselineCommand.Path, "Removed callable command."));
                 }
@@ -81,7 +81,7 @@ public static class CompatibilityAnalyzer
                      .Where(command => !matchedCurrentCommands.Contains(command))
                      .OrderBy(command => command.Path, StringComparer.Ordinal))
         {
-            if (IsRunnable(currentCommand))
+            if (CanonicalCommandContract.IsRunnable(currentCommand))
             {
                 findings.Add(new CompatibilityFinding("KMCLI001", "info", currentCommand.Path, "Added callable command."));
             }
@@ -342,8 +342,6 @@ public static class CompatibilityAnalyzer
 
     private static CanonicalOption[] EffectiveOptions(CanonicalCommand command, IReadOnlyList<CanonicalOption> globalOptions) =>
         globalOptions.Concat(command.Options).ToArray();
-
-    private static bool IsRunnable(CanonicalCommand command) => string.Equals(command.Kind ?? "action", "action", StringComparison.Ordinal);
 
     private static void CompareParameter(CanonicalParameter baseline, CanonicalParameter current, string path, string kind, List<CompatibilityFinding> findings)
     {

@@ -13,5 +13,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\KeelMatrix.CliContract.Core\KeelMatrix.CliContract.Core.csproj" />
+    <ProjectReference Include="..\..\src\KeelMatrix.CliContract.Tool\KeelMatrix.CliContract.Tool.csproj" />
   </ItemGroup>
 </Project>

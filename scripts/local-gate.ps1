@@ -33,6 +33,8 @@ Assert-NativeSuccess 'Error taxonomy documentation check'
 Assert-NativeSuccess 'Sensitive-path ingress safety'
 & pwsh -NoProfile -WindowStyle Hidden -File ./scripts/scan-history-wording.ps1 -SelfTest
 Assert-NativeSuccess 'Reachable history wording scan'
+& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/verify-release-contract.ps1 -SelfTest
+Assert-NativeSuccess 'Release contract self-test'
  $audit = dotnet list KeelMatrix.CliContract.sln package --vulnerable --include-transitive --configfile NuGet.config 2>&1
  $audit | Out-Host
  if (($audit -join "`n") -match '(?im)^\s*[>]?\s*.*Package.*\s+has the following vulnerable packages|(?im)^\s*>\s+.*\s+(Critical|High|Moderate|Low)\s+') { throw 'Dependency vulnerability audit reported a vulnerable package.' }

@@ -73,7 +73,7 @@ public sealed class SourceProducibilityGuardTests
     {
         var trace = new SourceProjectionTrace("unregistered");
         var projected = SourceContractProjection.Create(NormalizeAndRead(BaseDocument()), trace);
-        projected["unregistered"] = "scratch-probe";
+        projected["unregistered"] = "scratch-check";
         trace.ObserveOutput(projected);
 
         var failure = Record.Exception(() => AssertProjectionCoverage(

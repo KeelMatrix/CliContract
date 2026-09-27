@@ -1,7 +1,6 @@
 using System.Text;
 using System.Text.Json;
 using KeelMatrix.CliContract.Core;
-using KeelMatrix.Telemetry;
 
 return CliApplication.Run(args);
 
@@ -419,7 +418,7 @@ internal static class CliApplication
         {
             // The published telemetry contract accepts only shared bounded activation data.
             // No schema-derived value is passed to the telemetry package.
-            new Client("devtool", typeof(CliApplication)).TrackActivation();
+            ActivationTelemetry.TrackActivation();
         }
         catch
         {
@@ -434,9 +433,7 @@ internal static class CliApplication
 
     internal static bool HasMeaningfulCommand(CanonicalCommand command)
     {
-        if (string.Equals(command.Kind ?? "action", "action", StringComparison.Ordinal)) return true;
-        if (command.Arguments.Length > 0 || command.Options.Length > 0 || command.Aliases.Length > 0) return true;
-        return command.Subcommands.Any(HasMeaningfulCommand);
+        return CanonicalCommandContract.ContainsRunnableAction(command);
     }
 
     private static bool IsTelemetrySuppressedForDevelopmentOrCi()
@@ -686,6 +683,8 @@ internal static class CliApplication
       --fail-on breaking|warning Failure threshold (default: breaking)
       --ignore <file>            Explicit JSON suppression file
       --no-telemetry             Disable optional telemetry; CI/development suppress automatically
+      Telemetry activates only after comparison with a runnable action at the root or below a group;
+      aliases, parameters, help metadata, and group-only trees do not qualify.
 
     Canonicalization:
       Finite JSON and recognized YAML numbers are compared by exact numeric value,

@@ -31,7 +31,7 @@ The shipping command surface is OpenCLI-only: `--input auto|opencli`. The tool p
 - Canonical output is invariant to source ordering and line endings.
 - Unknown source and canonical manifest versions fail closed.
 - The packed tool must contain all required internal assemblies and pass the isolated consumer smoke test.
-- Do not create, copy, modify, or delete icon bytes; the required icon is founder-owned and resolved by the pack configuration.
+- Do not create, copy, modify, or delete icon bytes; the required icon is resolved by the pack configuration and must remain at its committed path.
 
 ## Validation escalation
 

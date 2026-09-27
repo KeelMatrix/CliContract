@@ -14,7 +14,7 @@ TestResults/
 *.user
 *.suo
 
-## Acceptance-policy sensitive files
+## Local-only sensitive files
 .env*
 **/.env*
 *appsettings*.json

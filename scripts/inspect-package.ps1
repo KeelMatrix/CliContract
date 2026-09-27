@@ -29,8 +29,11 @@ function Get-ForbiddenPatterns {
     $partM = 'KE' + 'E-'
     $partN = 'ta' + 'sk'
     $partO = 'com' + 'pany'
+    $partP = 'fou' + 'nder'
+    $partQ = 'acce' + 'ptance'
+    $partR = 'orche' + 'stration'
 
-    $pattern = '(?i)\b(' + $partA + '|' + $partB + '[ -]?0|' + $partC + '|' + $partD + '|' + $partE + '|' + $partF + '|' + $partG + '|' + $partH + '|' + $partI + '|' + $partI + '[- ]?routing|' + $partN + '[- ]?id|' + $partH + '[- ]?id|' + $partO + '[- ]?' + $partJ + '|' + $partJ + '[_ -]?' + $partL + '|' + $partJ + '\s+' + $partK + '\s+' + $partL + '|' + $partM + '\d+)\b'
+    $pattern = '(?i)\b(' + $partA + '|' + $partB + '[ -]?0|' + $partC + '|' + $partD + '|' + $partE + '|' + $partF + '|' + $partG + '|' + $partH + '|' + $partI + '|' + $partP + '|' + $partQ + '|' + $partR + '|' + $partI + '[- ]?routing|' + $partN + '[- ]?id|' + $partH + '[- ]?id|' + $partO + '[- ]?' + $partJ + '|' + $partJ + '[_ -]?' + $partL + '|' + $partJ + '\s+' + $partK + '\s+' + $partL + '|' + $partM + '\d+)\b'
     return $pattern
 }
 
