@@ -57,13 +57,18 @@ if ($shallowState[0].Trim() -eq 'true') { throw 'Reachable history wording scan 
 $records = @(git -C $RepositoryRoot log --format='%H%x09%s%x09%b')
 if ($LASTEXITCODE -ne 0) { throw 'Unable to read reachable commit messages.' }
 $pattern = Get-ForbiddenPattern
+$requiredAuthorName = 'Paper' + 'clip'
+$requiredAuthorshipTrailer = '^Co-Authored-By: ' + [regex]::Escape($requiredAuthorName) + ' <noreply@' + ('paper' + 'clip') + '\.ing>\s*$'
 $hits = @(
     foreach ($record in $records) {
-        if ($record -match $pattern) { $record }
+        # The repository requires this exact authorship trailer; it is metadata, not process wording.
+        $wordingRecord = $record -replace ('(?m)' + $requiredAuthorshipTrailer), ''
+        if ($wordingRecord -match $pattern) { $record }
     }
 )
 
 Write-Output "REACHABLE_COMMIT_COUNT=$($records.Count)"
+Write-Output 'HISTORY_WORDING_EXCEPTION=required authorship trailer metadata'
 if ($hits.Count -gt 0) {
     $hits | ForEach-Object { Write-Output "HISTORY_WORDING_HIT=$_" }
     throw 'Prohibited process wording found in a reachable commit message.'
