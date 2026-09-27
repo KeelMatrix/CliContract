@@ -8,6 +8,7 @@ $root = (Resolve-Path -LiteralPath $RootPath).Path
 
 $nonTextExceptions = [ordered]@{
     'icon.png' = 'binary PNG asset; textual wording does not apply'
+    'scripts/scan-history-wording.ps1' = 'commit-message guard contains match literals required to detect disallowed metadata and wording'
 }
 
 function Get-TrackedTextFiles {

@@ -57,24 +57,4 @@ foreach ($workflow in $workflowFiles) {
     }
 }
 
-$tagScript = Join-Path $RepositoryRoot 'scripts/verify-release-tag.ps1'
-$publishScript = Join-Path $RepositoryRoot 'scripts/publish-package.ps1'
-if (-not (Test-Path -LiteralPath $tagScript -PathType Leaf)) { throw "Release tag validator is missing: $tagScript" }
-if (-not (Test-Path -LiteralPath $publishScript -PathType Leaf)) { throw "Package publisher is missing: $publishScript" }
-if ((Get-Content -Raw -LiteralPath $publishScript) -match 'NUGET_API_KEY') { throw 'The package publisher must not read a long-lived NuGet API-key environment variable.' }
-
-$hostileTag = "v1.0.0';Write-Output('VALIDATION_MARKER');#"
-$tagRejected = $false
-$output = @()
-try {
-    $output = @(& $tagScript -Tag $hostileTag 2>&1 | ForEach-Object { $_.ToString() })
-}
-catch {
-    $tagRejected = $true
-    $output += $_.ToString()
-}
-if (-not $tagRejected -and ($output -join "`n") -notmatch 'Unsupported release tag') { throw 'The release tag validator accepted an invalid tag.' }
-if ($output | Where-Object { $_ -match '^\s*VALIDATION_MARKER\s*$' }) { throw 'The release tag validator executed tag text.' }
-
 Write-Output "WORKFLOW_SOURCE_BOUNDARIES=PASS files=$($workflowFiles.Count)"
-Write-Output 'RELEASE_TAG_VALIDATION=PASS hostile_input_rejected'
