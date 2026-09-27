@@ -2,13 +2,17 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $PackagePath,
     [Parameter(Mandatory = $true)]
-    [string] $SymbolPackagePath
+    [string] $SymbolPackagePath,
+    [switch] $SelfTest
 )
 
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root 'src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj'
+$PackagePath = (Resolve-Path -LiteralPath $PackagePath).Path
+$SymbolPackagePath = (Resolve-Path -LiteralPath $SymbolPackagePath).Path
+Set-Location $root
 $packageName = Split-Path -Leaf $PackagePath
 $symbolName = Split-Path -Leaf $SymbolPackagePath
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-reproducibility-' + [Guid]::NewGuid().ToString('N'))
@@ -34,6 +38,27 @@ try {
         throw "Repeated package build changed artifact identity. nupkg=$packageHash/$repeatPackageHash snupkg=$symbolHash/$repeatSymbolHash"
     }
     Write-Output "PACKAGE_REPRODUCIBILITY=PASS nupkg_sha256=$packageHash snupkg_sha256=$symbolHash"
+
+    if ($SelfTest) {
+        $outsideContext = Join-Path $temp 'outside-context'
+        New-Item -ItemType Directory -Path $outsideContext | Out-Null
+        $outsideOutput = @()
+        $outsideExitCode = 0
+        Push-Location ([IO.Path]::GetTempPath())
+        try {
+            $outsideOutput = @(& dotnet pack $project -c Release --no-build --no-restore --include-symbols --output $outsideContext --nologo 2>&1)
+            $outsideExitCode = $LASTEXITCODE
+        }
+        finally {
+            Pop-Location
+        }
+        $outsideOutput | Out-Host
+        if ($outsideExitCode -eq 0) { throw 'The package build context self-test accepted an outside-root invocation.' }
+        if (($outsideOutput -join "`n") -notmatch 'Package builds must start from the canonical repository root') {
+            throw 'The package build context self-test failed for an unexpected reason.'
+        }
+        Write-Output "PACKAGE_CONTEXT_SELF_TEST=PASS outside_root_exit=$outsideExitCode"
+    }
 }
 finally {
     if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }

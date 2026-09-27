@@ -35,6 +35,13 @@
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\..\icon.png" Pack="true" PackagePath="icon.png" Link="icon.png" Condition="Exists('..\..\icon.png')" />
   </ItemGroup>
+  <PropertyGroup>
+    <_CanonicalRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..'))</_CanonicalRepositoryRoot>
+    <_PackageBuildStartupDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildStartupDirectory)'))</_PackageBuildStartupDirectory>
+  </PropertyGroup>
+  <Target Name="ValidatePackageBuildContext" BeforeTargets="_IntermediatePack;GenerateNuspec">
+    <Error Condition="'$(_PackageBuildStartupDirectory)' != '$(_CanonicalRepositoryRoot)'" Text="Package builds must start from the canonical repository root '$(_CanonicalRepositoryRoot)'; build context '$(_PackageBuildStartupDirectory)' is unsupported." />
+  </Target>
   <Target Name="NormalizePackageArchives" AfterTargets="Pack">
     <PropertyGroup>
       <_PackageArchiveNormalizer>$(MSBuildProjectDirectory)/../../scripts/normalize-package-archive.ps1</_PackageArchiveNormalizer>

@@ -45,7 +45,7 @@ $package = Join-Path $packageDir 'KeelMatrix.CliContract.0.1.0.nupkg'
 $symbols = Join-Path $packageDir 'KeelMatrix.CliContract.0.1.0.snupkg'
 if (-not (Test-Path -LiteralPath $symbols)) { throw 'Expected symbol package was not produced.' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-& pwsh -NoProfile -File ./scripts/verify-package-reproducibility.ps1 -PackagePath $package -SymbolPackagePath $symbols
+& pwsh -NoProfile -File ./scripts/verify-package-reproducibility.ps1 -PackagePath $package -SymbolPackagePath $symbols -SelfTest
 Assert-NativeSuccess 'Package reproducibility'
 & pwsh -NoProfile -File ./scripts/verify-release-artifacts.ps1 -ArtifactDirectory $packageDir -Version '0.1.0' -SelfTest
 Assert-NativeSuccess 'Package artifact allowlist'

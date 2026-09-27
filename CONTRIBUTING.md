@@ -28,12 +28,22 @@ vulnerability, package-inspection, and packed-tool smoke checks:
 pwsh -NoProfile -File ./scripts/local-gate.ps1
 ```
 
-To pack and inspect the tool separately:
+Package identity depends on the repository's pinned SDK and Git metadata. Run packaging from the canonical repository
+root; the pack target fails closed when invoked from another working directory. To pack and inspect the tool separately:
 
 ```powershell
 dotnet pack src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj -c Release --no-build --include-symbols --output ./artifacts/packages --nologo
 pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath ./artifacts/packages/KeelMatrix.CliContract.0.1.0.nupkg -SymbolPackagePath ./artifacts/packages/KeelMatrix.CliContract.0.1.0.snupkg
 pwsh -NoProfile -File ./scripts/package-consumer-smoke.ps1 -PackagePath ./artifacts/packages/KeelMatrix.CliContract.0.1.0.nupkg
+```
+
+The reproducibility gate compares both archives byte-for-byte and rejects an outside-root packaging context:
+
+```powershell
+pwsh -NoProfile -File ./scripts/verify-package-reproducibility.ps1 `
+  -PackagePath ./artifacts/packages/KeelMatrix.CliContract.0.1.0.nupkg `
+  -SymbolPackagePath ./artifacts/packages/KeelMatrix.CliContract.0.1.0.snupkg `
+  -SelfTest
 ```
 
 Keep tests and fixtures bounded, deterministic, and offline after restore. The tool must not execute a described CLI,
