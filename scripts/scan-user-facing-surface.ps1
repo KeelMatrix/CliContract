@@ -127,6 +127,20 @@ function Try-DecodeText {
     }
 }
 
+function Try-DecodeUtf32NoBom {
+    param(
+        [byte[]] $Bytes,
+        [Text.Encoding] $Encoding,
+        [bool] $BigEndian
+    )
+    if ($Bytes.Length -eq 0 -or $Bytes.Length % 4 -ne 0) { return $null }
+    $highByteOffset = if ($BigEndian) { 0 } else { 3 }
+    for ($index = $highByteOffset; $index -lt $Bytes.Length; $index += 4) {
+        if ($Bytes[$index] -ne 0) { return $null }
+    }
+    return Try-DecodeText -Bytes $Bytes -Encoding $Encoding
+}
+
 function Get-NullRatio {
     param(
         [byte[]] $Bytes,
@@ -163,16 +177,16 @@ function Decode-TrackedFile {
         elseif (Test-BytePrefix -Bytes $bytes -Prefix ([byte[]](0xfe, 0xff))) { $text = Try-DecodeText -Bytes $bytes -Encoding $utf16be -Offset 2 }
         else {
             $text = $null
-            if ($bytes.Length % 4 -eq 0 -and (Get-NullRatio -Bytes $bytes -Modulo 4 -Position 1) -ge 0.75 -and (Get-NullRatio -Bytes $bytes -Modulo 4 -Position 2) -ge 0.75 -and (Get-NullRatio -Bytes $bytes -Modulo 4 -Position 3) -ge 0.75) {
-                $text = Try-DecodeText -Bytes $bytes -Encoding $utf32le
+            if ($null -eq $text) {
+                $text = Try-DecodeUtf32NoBom -Bytes $bytes -Encoding $utf32le -BigEndian:$false
             }
-            elseif ($bytes.Length % 4 -eq 0 -and (Get-NullRatio -Bytes $bytes -Modulo 4 -Position 0) -ge 0.75 -and (Get-NullRatio -Bytes $bytes -Modulo 4 -Position 1) -ge 0.75 -and (Get-NullRatio -Bytes $bytes -Modulo 4 -Position 2) -ge 0.75) {
-                $text = Try-DecodeText -Bytes $bytes -Encoding $utf32be
+            if ($null -eq $text) {
+                $text = Try-DecodeUtf32NoBom -Bytes $bytes -Encoding $utf32be -BigEndian:$true
             }
-            elseif ($bytes.Length % 2 -eq 0 -and (Get-NullRatio -Bytes $bytes -Modulo 2 -Position 1) -ge 0.50) {
+            if ($null -eq $text -and $bytes.Length % 2 -eq 0 -and (Get-NullRatio -Bytes $bytes -Modulo 2 -Position 1) -ge 0.50) {
                 $text = Try-DecodeText -Bytes $bytes -Encoding $utf16le
             }
-            elseif ($bytes.Length % 2 -eq 0 -and (Get-NullRatio -Bytes $bytes -Modulo 2 -Position 0) -ge 0.50) {
+            if ($null -eq $text -and $bytes.Length % 2 -eq 0 -and (Get-NullRatio -Bytes $bytes -Modulo 2 -Position 0) -ge 0.50) {
                 $text = Try-DecodeText -Bytes $bytes -Encoding $utf16be
             }
             if ($null -eq $text) { $text = Try-DecodeText -Bytes $bytes -Encoding $utf8 }
@@ -311,6 +325,17 @@ function Assert-SurfaceChildReject {
     Write-Output "SURFACE_WORDING_FIXTURE=$Name EXPECTED=REJECT exit=$($Result.ExitCode) inventory=1"
 }
 
+function Assert-SurfaceChildAccept {
+    param(
+        [string] $Name,
+        [object] $Result
+    )
+    if ($Result.ExitCode -ne 0 -or $Result.Text -notmatch 'SURFACE_INVENTORY_COUNT=1' -or $Result.Text -notmatch 'SURFACE_FILE=README\.md' -or $Result.Text -notmatch 'SURFACE_WORDING_SCAN=PASS') {
+        throw "Surface wording self-test rejected clean fixture $Name."
+    }
+    Write-Output "SURFACE_WORDING_FIXTURE=$Name EXPECTED=ACCEPT exit=$($Result.ExitCode) inventory=1"
+}
+
 if ($SelfTest) {
     $temp = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-surface-' + [Guid]::NewGuid().ToString('N'))
     try {
@@ -320,6 +345,25 @@ if ($SelfTest) {
         $utf16be = [Text.UnicodeEncoding]::new($true, $false, $true)
         $utf32le = [Text.UTF32Encoding]::new($false, $false, $true)
         $utf32be = [Text.UTF32Encoding]::new($true, $false, $true)
+        $cleanText = 'safe text α世界😀'
+        $cleanCases = @(
+            @{ Name = 'utf8-no-bom'; Bytes = $utf8.GetBytes($cleanText) },
+            @{ Name = 'utf8-bom'; Bytes = [byte[]]($utf8Bom.GetPreamble() + $utf8Bom.GetBytes($cleanText)) },
+            @{ Name = 'utf16le-no-bom'; Bytes = $utf16le.GetBytes($cleanText) },
+            @{ Name = 'utf16le-bom'; Bytes = [byte[]](([Text.Encoding]::Unicode.GetPreamble()) + $utf16le.GetBytes($cleanText)) },
+            @{ Name = 'utf16be-no-bom'; Bytes = $utf16be.GetBytes($cleanText) },
+            @{ Name = 'utf16be-bom'; Bytes = [byte[]](([Text.Encoding]::BigEndianUnicode.GetPreamble()) + $utf16be.GetBytes($cleanText)) },
+            @{ Name = 'utf32le-no-bom'; Bytes = $utf32le.GetBytes($cleanText) },
+            @{ Name = 'utf32le-bom'; Bytes = [byte[]](([Text.UTF32Encoding]::new($false, $true, $true).GetPreamble()) + $utf32le.GetBytes($cleanText)) },
+            @{ Name = 'utf32be-no-bom'; Bytes = $utf32be.GetBytes($cleanText) },
+            @{ Name = 'utf32be-bom'; Bytes = [byte[]](([Text.UTF32Encoding]::new($true, $true, $true).GetPreamble()) + $utf32be.GetBytes($cleanText)) }
+        )
+        foreach ($case in $cleanCases) {
+            $caseRoot = Join-Path $temp ("clean-$($case.Name)")
+            New-SurfaceFixture -Path $caseRoot -Bytes $case.Bytes
+            $result = Invoke-ChildSurfaceScan -Path $caseRoot
+            Assert-SurfaceChildAccept -Name $case.Name -Result $result
+        }
         $cases = @(
             @{ Name = 'utf8-no-bom'; Bytes = $utf8.GetBytes('Paperclip') },
             @{ Name = 'utf8-bom'; Bytes = [byte[]]($utf8Bom.GetPreamble() + $utf8Bom.GetBytes('Paperclip')) },

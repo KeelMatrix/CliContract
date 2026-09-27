@@ -80,6 +80,20 @@ function Try-DecodeText {
     }
 }
 
+function Try-DecodeUtf32NoBom {
+    param(
+        [byte[]] $Bytes,
+        [Text.Encoding] $Encoding,
+        [bool] $BigEndian
+    )
+    if ($Bytes.Length -eq 0 -or $Bytes.Length % 4 -ne 0) { return $null }
+    $highByteOffset = if ($BigEndian) { 0 } else { 3 }
+    for ($index = $highByteOffset; $index -lt $Bytes.Length; $index += 4) {
+        if ($Bytes[$index] -ne 0) { return $null }
+    }
+    return Try-DecodeText -Bytes $Bytes -Encoding $Encoding
+}
+
 function Get-NullRatio {
     param(
         [byte[]] $Bytes,
@@ -117,16 +131,16 @@ function Decode-PackageText {
         elseif (Test-BytePrefix -Bytes $Bytes -Prefix ([byte[]](0xfe, 0xff))) { $text = Try-DecodeText -Bytes $Bytes -Encoding $utf16be -Offset 2 }
         else {
             $text = $null
-            if ($Bytes.Length % 4 -eq 0 -and (Get-NullRatio -Bytes $Bytes -Modulo 4 -Position 1) -ge 0.75 -and (Get-NullRatio -Bytes $Bytes -Modulo 4 -Position 2) -ge 0.75 -and (Get-NullRatio -Bytes $Bytes -Modulo 4 -Position 3) -ge 0.75) {
-                $text = Try-DecodeText -Bytes $Bytes -Encoding $utf32le
+            if ($null -eq $text) {
+                $text = Try-DecodeUtf32NoBom -Bytes $Bytes -Encoding $utf32le -BigEndian:$false
             }
-            elseif ($Bytes.Length % 4 -eq 0 -and (Get-NullRatio -Bytes $Bytes -Modulo 4 -Position 0) -ge 0.75 -and (Get-NullRatio -Bytes $Bytes -Modulo 4 -Position 1) -ge 0.75 -and (Get-NullRatio -Bytes $Bytes -Modulo 4 -Position 2) -ge 0.75) {
-                $text = Try-DecodeText -Bytes $Bytes -Encoding $utf32be
+            if ($null -eq $text) {
+                $text = Try-DecodeUtf32NoBom -Bytes $Bytes -Encoding $utf32be -BigEndian:$true
             }
-            elseif ($Bytes.Length % 2 -eq 0 -and (Get-NullRatio -Bytes $Bytes -Modulo 2 -Position 1) -ge 0.50) {
+            if ($null -eq $text -and $Bytes.Length % 2 -eq 0 -and (Get-NullRatio -Bytes $Bytes -Modulo 2 -Position 1) -ge 0.50) {
                 $text = Try-DecodeText -Bytes $Bytes -Encoding $utf16le
             }
-            elseif ($Bytes.Length % 2 -eq 0 -and (Get-NullRatio -Bytes $Bytes -Modulo 2 -Position 0) -ge 0.50) {
+            if ($null -eq $text -and $Bytes.Length % 2 -eq 0 -and (Get-NullRatio -Bytes $Bytes -Modulo 2 -Position 0) -ge 0.50) {
                 $text = Try-DecodeText -Bytes $Bytes -Encoding $utf16be
             }
             if ($null -eq $text) { $text = Try-DecodeText -Bytes $Bytes -Encoding $utf8 }
@@ -373,6 +387,39 @@ if ($SelfTest) {
         $utf16be = [Text.UnicodeEncoding]::new($true, $false, $true)
         $utf32le = [Text.UTF32Encoding]::new($false, $false, $true)
         $utf32be = [Text.UTF32Encoding]::new($true, $false, $true)
+        $cleanText = 'safe text α世界😀'
+        $cleanDecoderCases = @(
+            @{ Name = 'utf8-no-bom'; Bytes = $utf8.GetBytes($cleanText) },
+            @{ Name = 'utf8-bom'; Bytes = [byte[]]($utf8Bom.GetPreamble() + $utf8Bom.GetBytes($cleanText)) },
+            @{ Name = 'utf16le-no-bom'; Bytes = $utf16le.GetBytes($cleanText) },
+            @{ Name = 'utf16le-bom'; Bytes = [byte[]](([Text.Encoding]::Unicode.GetPreamble()) + $utf16le.GetBytes($cleanText)) },
+            @{ Name = 'utf16be-no-bom'; Bytes = $utf16be.GetBytes($cleanText) },
+            @{ Name = 'utf16be-bom'; Bytes = [byte[]](([Text.Encoding]::BigEndianUnicode.GetPreamble()) + $utf16be.GetBytes($cleanText)) },
+            @{ Name = 'utf32le-no-bom'; Bytes = $utf32le.GetBytes($cleanText) },
+            @{ Name = 'utf32le-bom'; Bytes = [byte[]](([Text.UTF32Encoding]::new($false, $true, $true).GetPreamble()) + $utf32le.GetBytes($cleanText)) },
+            @{ Name = 'utf32be-no-bom'; Bytes = $utf32be.GetBytes($cleanText) },
+            @{ Name = 'utf32be-bom'; Bytes = [byte[]](([Text.UTF32Encoding]::new($true, $true, $true).GetPreamble()) + $utf32be.GetBytes($cleanText)) }
+        )
+        foreach ($archiveCase in @('nupkg', 'snupkg')) {
+            foreach ($case in $cleanDecoderCases) {
+                $caseRoot = Join-Path $selfTestRoot ("clean-decoder-$archiveCase-$($case.Name)")
+                New-Item -ItemType Directory -Path $caseRoot | Out-Null
+                $casePackage = Join-Path $caseRoot 'KeelMatrix.CliContract.0.1.0.nupkg'
+                $caseSymbols = Join-Path $caseRoot 'KeelMatrix.CliContract.0.1.0.snupkg'
+                Copy-Item -LiteralPath $packagePath -Destination $casePackage
+                Copy-Item -LiteralPath $symbolPackagePath -Destination $caseSymbols
+                if ($archiveCase -eq 'nupkg') {
+                    Replace-ArchiveEntryBytes -ArchivePath $casePackage -EntryName 'README.md' -Bytes $case.Bytes
+                }
+                else {
+                    Replace-ArchiveEntryBytes -ArchivePath $caseSymbols -EntryName 'KeelMatrix.CliContract.nuspec' -Bytes $case.Bytes
+                }
+                $caseOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $caseSymbols -RepositoryRoot $root 2>&1)
+                $caseExit = $LASTEXITCODE
+                if ($caseExit -ne 0 -or ($caseOutput -join "`n") -notmatch 'PACKAGE_INSPECTION=PASS') { throw "Package strict-decoder self-test rejected clean $archiveCase fixture $($case.Name)." }
+                Write-Output "PACKAGE_TEXT_FIXTURE=$archiveCase-$($case.Name) EXPECTED=ACCEPT exit=$caseExit"
+            }
+        }
         $decoderCases = @(
             @{ Name = 'utf8-no-bom'; Bytes = $utf8.GetBytes('Paperclip') },
             @{ Name = 'utf8-bom'; Bytes = [byte[]]($utf8Bom.GetPreamble() + $utf8Bom.GetBytes('Paperclip')) },

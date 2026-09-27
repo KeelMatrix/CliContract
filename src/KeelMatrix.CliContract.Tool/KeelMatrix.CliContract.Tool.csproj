@@ -35,4 +35,12 @@
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\..\icon.png" Pack="true" PackagePath="icon.png" Link="icon.png" Condition="Exists('..\..\icon.png')" />
   </ItemGroup>
+  <Target Name="NormalizePackageArchives" AfterTargets="Pack">
+    <PropertyGroup>
+      <_PackageArchiveNormalizer>$(MSBuildProjectDirectory)/../../scripts/normalize-package-archive.ps1</_PackageArchiveNormalizer>
+      <_PackageArchivePath>$(PackageOutputPath)/$(PackageId).$(PackageVersion).nupkg</_PackageArchivePath>
+      <_SymbolPackageArchivePath Condition="'$(IncludeSymbols)' == 'true'">$(PackageOutputPath)/$(PackageId).$(PackageVersion).snupkg</_SymbolPackageArchivePath>
+    </PropertyGroup>
+    <Exec Command="pwsh -NoProfile -File &quot;$(_PackageArchiveNormalizer)&quot; -PackagePath &quot;$(_PackageArchivePath)&quot; -SymbolPackagePath &quot;$(_SymbolPackageArchivePath)&quot; -PackageId &quot;$(PackageId)&quot; -PackageVersion &quot;$(PackageVersion)&quot;" />
+  </Target>
 </Project>
