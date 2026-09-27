@@ -68,7 +68,7 @@ if ($SelfTest) {
 </Project>
 '@ | Set-Content -LiteralPath (Join-Path $selfTestRoot 'src/KeelMatrix.CliContract.Tool/KeelMatrix.CliContract.Tool.csproj') -Encoding utf8NoBOM
         @'
-# KeelMatrix CliContract
+# KeelMatrix.CliContract
 
 dotnet tool install --global KeelMatrix.CliContract
 '@ | Set-Content -LiteralPath (Join-Path $selfTestRoot 'README.md') -Encoding utf8NoBOM

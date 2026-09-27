@@ -1,6 +1,6 @@
 # CliContract Compatibility Rules
 
-This document defines the v1 change-classification contract for KeelMatrix CliContract. It applies to OpenCLI `1.0.0-alpha.14` JSON and YAML input and canonical manifest schema version `2`.
+This document defines the v1 change-classification contract for KeelMatrix.CliContract. It applies to OpenCLI `1.0.0-alpha.14` JSON and YAML input and canonical manifest schema version `2`.
 
 ## Categories and failure policy
 

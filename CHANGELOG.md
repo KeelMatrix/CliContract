@@ -1,6 +1,6 @@
 # Changelog
 
-This file records user-visible changes to KeelMatrix CliContract.
+This file records user-visible changes to KeelMatrix.CliContract.
 
 ## [Unreleased]
 
