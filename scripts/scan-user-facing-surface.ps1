@@ -10,6 +10,7 @@ $nonTextExceptions = [ordered]@{
     'icon.png' = 'binary PNG asset; textual wording does not apply'
     'scripts/scan-history-wording.ps1' = 'commit-message guard contains match literals required to detect disallowed metadata and wording'
     'scripts/scan-user-facing-surface.ps1' = 'surface guard contains match literals required to detect disallowed wording'
+    'scripts/inspect-package.ps1' = 'package guard contains match literals and strict decoder logic required to inspect package text'
 }
 
 function Invoke-GitBytes {
@@ -224,7 +225,7 @@ function ConvertTo-ScanText {
 
 function New-WrappedLiteral {
     param([string] $Value)
-    $lineWrap = '(?:[\r\n\u2028\u2029][\s\p{Z}]*)?'
+    $lineWrap = '(?:[^\S\r\n\u2028\u2029]*(?:\r\n|[\r\n\u2028\u2029])[^\S\r\n\u2028\u2029]*)?'
     return (($Value.ToCharArray() | ForEach-Object { [regex]::Escape([string] $_) }) -join $lineWrap)
 }
 
@@ -333,6 +334,10 @@ if ($SelfTest) {
             @{ Name = 'invalid-utf8'; Bytes = [byte[]](0x50, 0x61, 0x70, 0x65, 0x72, 0xc3, 0x28, 0x63, 0x6c, 0x69, 0x70) },
             @{ Name = 'invalid-utf8-even'; Bytes = [byte[]](0x50, 0x61, 0x70, 0x65, 0x72, 0x63, 0x6c, 0x69, 0x70, 0xff) },
             @{ Name = 'line-wrap-crlf'; Bytes = $utf8.GetBytes("Paper`r`nclip") },
+            @{ Name = 'line-wrap-crlf-hard-wrap'; Bytes = $utf8.GetBytes("Paper  `r`n  clip") },
+            @{ Name = 'line-wrap-lf-hard-wrap'; Bytes = $utf8.GetBytes("Paper `n`tclip") },
+            @{ Name = 'line-wrap-line-separator-hard-wrap'; Bytes = $utf8.GetBytes("Paper `u{2028} clip") },
+            @{ Name = 'line-wrap-paragraph-separator-hard-wrap'; Bytes = $utf8.GetBytes("Paper`t`u{2029}`tclip") },
             @{ Name = 'zero-width'; Bytes = $utf8.GetBytes("Paper`u{200b}clip") },
             @{ Name = 'soft-hyphen'; Bytes = $utf8.GetBytes("Paper`u{00ad}clip") },
             @{ Name = 'word-joiner'; Bytes = $utf8.GetBytes("Paper`u{2060}clip") },
@@ -360,8 +365,9 @@ if ($SelfTest) {
         if ($LASTEXITCODE -ne 0) { throw 'Surface scan self-test could not create the tracked-file fixture.' }
         [IO.File]::AppendAllText((Join-Path $nonVacuityRoot 'README.md'), "`npr`obe`n")
         $child = Invoke-ChildSurfaceScan -Path $nonVacuityRoot
-        if ($child.ExitCode -eq 0 -or $child.Text -notmatch 'SURFACE_INVENTORY_COUNT=104') { throw 'Surface wording gate accepted an injected forbidden term or had no tracked-file inventory.' }
-        Write-Output "SURFACE_NON_VACUITY_CHILD_EXIT=$($child.ExitCode) inventory=104"
+        $expectedInventory = $sourceFiles.Count
+        if ($child.ExitCode -eq 0 -or $child.Text -notmatch ('SURFACE_INVENTORY_COUNT=' + $expectedInventory + '(?:\r?\n|$)')) { throw 'Surface wording gate accepted an injected forbidden term or had no tracked-file inventory.' }
+        Write-Output "SURFACE_NON_VACUITY_CHILD_EXIT=$($child.ExitCode) inventory=$expectedInventory"
         Write-Output 'SURFACE_NON_VACUITY=PASS'
         Write-Output 'SURFACE_WORDING_REGRESSION_FIXTURES=PASS'
     }

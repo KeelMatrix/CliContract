@@ -47,7 +47,7 @@ if (-not (Test-Path -LiteralPath $symbols)) { throw 'Expected symbol package was
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 & pwsh -NoProfile -File ./scripts/verify-release-artifacts.ps1 -ArtifactDirectory $packageDir -Version '0.1.0' -SelfTest
 Assert-NativeSuccess 'Package artifact allowlist'
-& pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath $package -SelfTest
+& pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath $package -SymbolPackagePath $symbols -SelfTest
 Assert-NativeSuccess 'Package inspection'
 & pwsh -NoProfile -File ./scripts/source-producibility-guard.ps1 -PackagePath $package
 Assert-NativeSuccess 'Source-producibility guard and package consumer smoke'

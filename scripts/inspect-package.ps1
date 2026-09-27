@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)] [string] $PackagePath,
     [string] $RepositoryRoot = (Split-Path -Parent $PSScriptRoot),
+    [Parameter(Mandatory = $true)] [string] $SymbolPackagePath,
     [switch] $AllowMissingIcon,
     [switch] $SelfTest
 )
@@ -8,33 +9,219 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $packagePath = (Resolve-Path -LiteralPath $PackagePath).Path
+$hasSymbolPackage = -not [string]::IsNullOrWhiteSpace($SymbolPackagePath)
+if ($hasSymbolPackage) {
+    $symbolPackagePath = (Resolve-Path -LiteralPath $SymbolPackagePath).Path
+}
 $policyPath = Join-Path $PSScriptRoot 'sensitive-path-policy.json'
 $sensitivePolicy = Get-Content -Raw -LiteralPath (Resolve-Path -LiteralPath $policyPath) | ConvertFrom-Json
 $sensitivePatterns = @($sensitivePolicy.families | ForEach-Object { $_.regex })
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 function Get-ForbiddenPatterns {
-    $partA = 'pr' + 'obe'
-    $partB = 'ph' + 'ase'
-    $partC = 'evi' + 'dence'
-    $partD = 'orche' + 'stration'
-    $partE = 'co' + 'dex'
-    $partF = 'Paper' + 'clip'
-    $partG = 'fron' + 'tier'
-    $partH = 'ag' + 'ent'
-    $partI = 'mo' + 'del'
-    $partJ = 'INTER' + 'NAL'
-    $partK = 'anal' + 'ysis'
-    $partL = 'er' + 'ror'
-    $partM = 'KE' + 'E-'
-    $partN = 'ta' + 'sk'
-    $partO = 'com' + 'pany'
-    $partP = 'fou' + 'nder'
-    $partQ = 'acce' + 'ptance'
-    $partR = 'orche' + 'stration'
+    $patterns = [Collections.Generic.List[object]]::new()
+    foreach ($value in @('probe', 'evidence', 'orchestration', 'Codex', 'Paperclip', 'frontier', 'agent', 'model', 'founder', 'acceptance', 'task')) {
+        $patterns.Add([pscustomobject]@{ Name = $value; Pattern = '(?i)' + (New-WrappedTokenPattern -Value $value) })
+    }
+    $patterns.Add([pscustomobject]@{ Name = 'phase-0'; Pattern = '(?i)(?<![\p{L}\p{N}_])' + (New-WrappedLiteral -Value 'phase') + '[\s\p{Z}\p{Pd}_]*0(?![\p{L}\p{N}_])' })
+    $patterns.Add([pscustomobject]@{ Name = 'internal-error'; Pattern = '(?i)(?<![\p{L}\p{N}_])' + (New-WrappedLiteral -Value 'INTERNAL') + '[\s\p{Z}\p{Pd}_]*' + (New-WrappedLiteral -Value 'ERROR') + '(?![\p{L}\p{N}_])' })
+    $patterns.Add([pscustomobject]@{ Name = 'internal analysis error'; Pattern = '(?i)(?<![\p{L}\p{N}_])' + (New-WrappedLiteral -Value 'INTERNAL') + '[\s\p{Z}]+analysis[\s\p{Z}]+' + (New-WrappedLiteral -Value 'error') + '(?![\p{L}\p{N}_])' })
+    $patterns.Add([pscustomobject]@{ Name = 'issue identifier'; Pattern = '(?i)(?<![\p{L}\p{N}_])K' + (New-WrappedLiteral -Value 'E') + (New-WrappedLiteral -Value 'E') + '[\s\p{Z}\p{Pd}_]*-?[\s\p{Z}]*\d(?:[\s\p{Z}]*\d)*(?![\p{L}\p{N}_])' })
+    return $patterns.ToArray()
+}
 
-    $pattern = '(?i)\b(' + $partA + '|' + $partB + '[ -]?0|' + $partC + '|' + $partD + '|' + $partE + '|' + $partF + '|' + $partG + '|' + $partH + '|' + $partI + '|' + $partP + '|' + $partQ + '|' + $partR + '|' + $partI + '[- ]?routing|' + $partN + '[- ]?id|' + $partH + '[- ]?id|' + $partO + '[- ]?' + $partJ + '|' + $partJ + '[_ -]?' + $partL + '|' + $partJ + '\s+' + $partK + '\s+' + $partL + '|' + $partM + '\d+)\b'
-    return $pattern
+function ConvertTo-ByteSlice {
+    param(
+        [byte[]] $Bytes,
+        [int] $StartIndex,
+        [int] $Length
+    )
+    $slice = [byte[]]::new($Length)
+    if ($Length -gt 0) { [Buffer]::BlockCopy($Bytes, $StartIndex, $slice, 0, $Length) }
+    return ,$slice
+}
+
+function Test-BytePrefix {
+    param(
+        [byte[]] $Bytes,
+        [byte[]] $Prefix
+    )
+    if ($Bytes.Length -lt $Prefix.Length) { return $false }
+    for ($index = 0; $index -lt $Prefix.Length; $index++) {
+        if ($Bytes[$index] -ne $Prefix[$index]) { return $false }
+    }
+    return $true
+}
+
+function Test-AllowedTextCharacters {
+    param([string] $Text)
+    foreach ($character in $Text.ToCharArray()) {
+        if ([char]::IsControl($character) -and $character -notin @([char] 0x09, [char] 0x0a, [char] 0x0d)) {
+            return $false
+        }
+    }
+    return $true
+}
+
+function Try-DecodeText {
+    param(
+        [byte[]] $Bytes,
+        [Text.Encoding] $Encoding,
+        [int] $Offset = 0
+    )
+    try {
+        $payload = ConvertTo-ByteSlice -Bytes $Bytes -StartIndex $Offset -Length ($Bytes.Length - $Offset)
+        $text = $Encoding.GetString($payload)
+        if (-not (Test-AllowedTextCharacters -Text $text)) { return $null }
+        return $text
+    }
+    catch {
+        return $null
+    }
+}
+
+function Get-NullRatio {
+    param(
+        [byte[]] $Bytes,
+        [int] $Modulo,
+        [int] $Position
+    )
+    $total = 0
+    $zeros = 0
+    for ($index = $Position; $index -lt $Bytes.Length; $index += $Modulo) {
+        $total++
+        if ($Bytes[$index] -eq 0) { $zeros++ }
+    }
+    if ($total -eq 0) { return 0.0 }
+    return [double] $zeros / $total
+}
+
+function Decode-PackageText {
+    param(
+        [byte[]] $Bytes,
+        [string] $EntryName
+    )
+
+    if ($Bytes.Length -eq 0) { return '' }
+    $utf8 = [Text.UTF8Encoding]::new($false, $true)
+    $utf16le = [Text.UnicodeEncoding]::new($false, $false, $true)
+    $utf16be = [Text.UnicodeEncoding]::new($true, $false, $true)
+    $utf32le = [Text.UTF32Encoding]::new($false, $false, $true)
+    $utf32be = [Text.UTF32Encoding]::new($true, $false, $true)
+
+    try {
+        if (Test-BytePrefix -Bytes $Bytes -Prefix ([byte[]](0xff, 0xfe, 0x00, 0x00))) { $text = Try-DecodeText -Bytes $Bytes -Encoding $utf32le -Offset 4 }
+        elseif (Test-BytePrefix -Bytes $Bytes -Prefix ([byte[]](0x00, 0x00, 0xfe, 0xff))) { $text = Try-DecodeText -Bytes $Bytes -Encoding $utf32be -Offset 4 }
+        elseif (Test-BytePrefix -Bytes $Bytes -Prefix ([byte[]](0xef, 0xbb, 0xbf))) { $text = Try-DecodeText -Bytes $Bytes -Encoding $utf8 -Offset 3 }
+        elseif (Test-BytePrefix -Bytes $Bytes -Prefix ([byte[]](0xff, 0xfe))) { $text = Try-DecodeText -Bytes $Bytes -Encoding $utf16le -Offset 2 }
+        elseif (Test-BytePrefix -Bytes $Bytes -Prefix ([byte[]](0xfe, 0xff))) { $text = Try-DecodeText -Bytes $Bytes -Encoding $utf16be -Offset 2 }
+        else {
+            $text = $null
+            if ($Bytes.Length % 4 -eq 0 -and (Get-NullRatio -Bytes $Bytes -Modulo 4 -Position 1) -ge 0.75 -and (Get-NullRatio -Bytes $Bytes -Modulo 4 -Position 2) -ge 0.75 -and (Get-NullRatio -Bytes $Bytes -Modulo 4 -Position 3) -ge 0.75) {
+                $text = Try-DecodeText -Bytes $Bytes -Encoding $utf32le
+            }
+            elseif ($Bytes.Length % 4 -eq 0 -and (Get-NullRatio -Bytes $Bytes -Modulo 4 -Position 0) -ge 0.75 -and (Get-NullRatio -Bytes $Bytes -Modulo 4 -Position 1) -ge 0.75 -and (Get-NullRatio -Bytes $Bytes -Modulo 4 -Position 2) -ge 0.75) {
+                $text = Try-DecodeText -Bytes $Bytes -Encoding $utf32be
+            }
+            elseif ($Bytes.Length % 2 -eq 0 -and (Get-NullRatio -Bytes $Bytes -Modulo 2 -Position 1) -ge 0.50) {
+                $text = Try-DecodeText -Bytes $Bytes -Encoding $utf16le
+            }
+            elseif ($Bytes.Length % 2 -eq 0 -and (Get-NullRatio -Bytes $Bytes -Modulo 2 -Position 0) -ge 0.50) {
+                $text = Try-DecodeText -Bytes $Bytes -Encoding $utf16be
+            }
+            if ($null -eq $text) { $text = Try-DecodeText -Bytes $Bytes -Encoding $utf8 }
+        }
+        if ($null -eq $text) { throw 'unsupported or invalid text encoding' }
+        return $text
+    }
+    catch {
+        throw "Could not decode package text entry '$EntryName': $($_.Exception.Message)"
+    }
+}
+
+function ConvertTo-ScanText {
+    param([string] $Text)
+
+    $normalized = $Text.Normalize([Text.NormalizationForm]::FormKC)
+    $normalized = [regex]::Replace($normalized, '[\u00ad\u034f\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]', '')
+    $map = @{
+        ([char] 0x0430) = 'a'; ([char] 0x0410) = 'A'; ([char] 0x0435) = 'e'; ([char] 0x0415) = 'E'
+        ([char] 0x043e) = 'o'; ([char] 0x041e) = 'O'; ([char] 0x0440) = 'p'; ([char] 0x0420) = 'P'
+        ([char] 0x0441) = 'c'; ([char] 0x0421) = 'C'; ([char] 0x0445) = 'x'; ([char] 0x0425) = 'X'
+        ([char] 0x0456) = 'i'; ([char] 0x0406) = 'I'; ([char] 0x0458) = 'j'; ([char] 0x0408) = 'J'
+        ([char] 0x03b1) = 'a'; ([char] 0x0391) = 'A'; ([char] 0x03bf) = 'o'; ([char] 0x039f) = 'O'
+        ([char] 0x03c1) = 'p'; ([char] 0x03a1) = 'P'; ([char] 0x03b5) = 'e'; ([char] 0x0395) = 'E'
+    }
+    $builder = [Text.StringBuilder]::new($normalized.Length)
+    foreach ($character in $normalized.ToCharArray()) {
+        if ($map.ContainsKey($character)) { [void] $builder.Append($map[$character]) }
+        else { [void] $builder.Append($character) }
+    }
+    return $builder.ToString()
+}
+
+function New-WrappedLiteral {
+    param([string] $Value)
+    $lineWrap = '(?:[^\S\r\n\u2028\u2029]*(?:\r\n|[\r\n\u2028\u2029])[^\S\r\n\u2028\u2029]*)?'
+    return (($Value.ToCharArray() | ForEach-Object { [regex]::Escape([string] $_) }) -join $lineWrap)
+}
+
+function New-WrappedTokenPattern {
+    param([string] $Value)
+    return '(?<![\p{L}\p{N}_])' + (New-WrappedLiteral -Value $Value) + '(?![\p{L}\p{N}_])'
+}
+
+function Get-ArchiveEntryBytes {
+    param([IO.Compression.ZipArchiveEntry] $Entry)
+    $memory = [IO.MemoryStream]::new()
+    try {
+        $stream = $Entry.Open()
+        try { $stream.CopyTo($memory) }
+        finally { $stream.Dispose() }
+        return ,$memory.ToArray()
+    }
+    finally { $memory.Dispose() }
+}
+
+function Assert-ArchiveTextSurface {
+    param(
+        [string] $ArchivePath,
+        [string] $ArchiveName
+    )
+
+    $patterns = @(Get-ForbiddenPatterns)
+    $archive = [IO.Compression.ZipFile]::OpenRead($ArchivePath)
+    try {
+        foreach ($entry in $archive.Entries) {
+            if ([string]::IsNullOrEmpty($entry.FullName) -or $entry.FullName.EndsWith('/') -or $entry.FullName -match '(?i)\.(?:dll|pdb|png)$') { continue }
+            $text = Decode-PackageText -Bytes (Get-ArchiveEntryBytes -Entry $entry) -EntryName ("{0}:{1}" -f $ArchiveName, $entry.FullName)
+            $text = ConvertTo-ScanText -Text $text
+            foreach ($pattern in $patterns) {
+                if ($text -match $pattern.Pattern) { throw "Forbidden user-facing wording found in package entry: $ArchiveName/$($entry.FullName)" }
+            }
+        }
+    }
+    finally { $archive.Dispose() }
+}
+
+function Replace-ArchiveEntryBytes {
+    param(
+        [string] $ArchivePath,
+        [string] $EntryName,
+        [byte[]] $Bytes
+    )
+
+    $archive = [IO.Compression.ZipFile]::Open($ArchivePath, [IO.Compression.ZipArchiveMode]::Update)
+    try {
+        $entry = $archive.GetEntry($EntryName)
+        if ($null -eq $entry) { throw "Package self-test entry is missing: $EntryName" }
+        $entry.Delete()
+        $replacement = $archive.CreateEntry($EntryName)
+        $stream = $replacement.Open()
+        try { $stream.Write($Bytes, 0, $Bytes.Length) }
+        finally { $stream.Dispose() }
+    }
+    finally { $archive.Dispose() }
 }
 
 function Add-ArchiveMarker {
@@ -142,13 +329,16 @@ function Assert-CorePropertiesEntry {
 }
 
 if ($SelfTest) {
+    if (-not $hasSymbolPackage) { throw 'Package inspection self-test requires the symbol package path.' }
     $selfTestRoot = Join-Path ([IO.Path]::GetTempPath()) ('clicontract-package-' + [Guid]::NewGuid().ToString('N'))
     try {
         New-Item -ItemType Directory -Path $selfTestRoot | Out-Null
         $mutatedPackage = Join-Path $selfTestRoot 'mutated.nupkg'
+        $mutatedSymbols = Join-Path $selfTestRoot 'mutated.snupkg'
         Copy-Item -LiteralPath $packagePath -Destination $mutatedPackage
+        Copy-Item -LiteralPath $symbolPackagePath -Destination $mutatedSymbols
         Add-ArchiveMarker -ArchivePath $mutatedPackage -Marker ('pr' + 'obe')
-        $childOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $mutatedPackage -RepositoryRoot $root 2>&1)
+        $childOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $mutatedPackage -SymbolPackagePath $mutatedSymbols -RepositoryRoot $root 2>&1)
         $childExit = $LASTEXITCODE
         if ($childExit -eq 0) {
             throw 'Package wording gate accepted an injected forbidden term.'
@@ -170,12 +360,53 @@ if ($SelfTest) {
             else {
                 Add-ArchiveEntry -ArchivePath $casePackage -EntryName $case.Entry
             }
-        $caseOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -RepositoryRoot $root 2>&1)
+            $caseOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $mutatedSymbols -RepositoryRoot $root 2>&1)
             $caseExit = $LASTEXITCODE
             if ($caseExit -eq 0) { throw "Package inspection accepted self-test case $($case.Name)." }
             Write-Output "PACKAGE_NEGATIVE_SELF_TEST=$($case.Name) child_exit=$caseExit"
         }
         Write-Output 'PACKAGE_NEGATIVE_SELF_TEST=PASS'
+
+        $utf8 = [Text.UTF8Encoding]::new($false, $true)
+        $utf8Bom = [Text.UTF8Encoding]::new($true, $true)
+        $utf16le = [Text.UnicodeEncoding]::new($false, $false, $true)
+        $utf16be = [Text.UnicodeEncoding]::new($true, $false, $true)
+        $utf32le = [Text.UTF32Encoding]::new($false, $false, $true)
+        $utf32be = [Text.UTF32Encoding]::new($true, $false, $true)
+        $decoderCases = @(
+            @{ Name = 'utf8-no-bom'; Bytes = $utf8.GetBytes('Paperclip') },
+            @{ Name = 'utf8-bom'; Bytes = [byte[]]($utf8Bom.GetPreamble() + $utf8Bom.GetBytes('Paperclip')) },
+            @{ Name = 'utf16le-no-bom'; Bytes = $utf16le.GetBytes('Paperclip') },
+            @{ Name = 'utf16le-bom'; Bytes = [byte[]](([Text.Encoding]::Unicode.GetPreamble()) + $utf16le.GetBytes('Paperclip')) },
+            @{ Name = 'utf16be-no-bom'; Bytes = $utf16be.GetBytes('Paperclip') },
+            @{ Name = 'utf16be-bom'; Bytes = [byte[]](([Text.Encoding]::BigEndianUnicode.GetPreamble()) + $utf16be.GetBytes('Paperclip')) },
+            @{ Name = 'utf32le-no-bom'; Bytes = $utf32le.GetBytes('Paperclip') },
+            @{ Name = 'utf32le-bom'; Bytes = [byte[]](([Text.UTF32Encoding]::new($false, $true, $true).GetPreamble()) + $utf32le.GetBytes('Paperclip')) },
+            @{ Name = 'utf32be-no-bom'; Bytes = $utf32be.GetBytes('Paperclip') },
+            @{ Name = 'utf32be-bom'; Bytes = [byte[]](([Text.UTF32Encoding]::new($true, $true, $true).GetPreamble()) + $utf32be.GetBytes('Paperclip')) },
+            @{ Name = 'invalid-utf8'; Bytes = [byte[]](0x50, 0x61, 0x70, 0x65, 0x72, 0xc3, 0x28, 0x63, 0x6c, 0x69, 0x70) }
+        )
+        foreach ($archiveCase in @('nupkg', 'snupkg')) {
+            foreach ($case in $decoderCases) {
+                $caseRoot = Join-Path $selfTestRoot ("decoder-$archiveCase-$($case.Name)")
+                New-Item -ItemType Directory -Path $caseRoot | Out-Null
+                $casePackage = Join-Path $caseRoot 'KeelMatrix.CliContract.0.1.0.nupkg'
+                $caseSymbols = Join-Path $caseRoot 'KeelMatrix.CliContract.0.1.0.snupkg'
+                Copy-Item -LiteralPath $packagePath -Destination $casePackage
+                Copy-Item -LiteralPath $symbolPackagePath -Destination $caseSymbols
+                if ($archiveCase -eq 'nupkg') {
+                    Replace-ArchiveEntryBytes -ArchivePath $casePackage -EntryName 'README.md' -Bytes $case.Bytes
+                }
+                else {
+                    Replace-ArchiveEntryBytes -ArchivePath $caseSymbols -EntryName 'KeelMatrix.CliContract.nuspec' -Bytes $case.Bytes
+                }
+                $caseOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $caseSymbols -RepositoryRoot $root 2>&1)
+                $caseExit = $LASTEXITCODE
+                if ($caseExit -eq 0) { throw "Package strict-decoder self-test accepted $archiveCase fixture $($case.Name)." }
+                Write-Output "PACKAGE_TEXT_FIXTURE=$archiveCase-$($case.Name) EXPECTED=REJECT exit=$caseExit"
+            }
+        }
+        Write-Output 'PACKAGE_TEXT_DECODER_REGRESSION=PASS'
     }
     finally {
         if (Test-Path -LiteralPath $selfTestRoot) { Remove-Item -LiteralPath $selfTestRoot -Recurse -Force }
@@ -249,13 +480,8 @@ try {
     $pdbEntries = @($entries | Where-Object { $_ -match '\.pdb$' })
     $expectedPdbEntries = @($requiredToolPayload | Where-Object { $_ -match '\.pdb$' })
     if ((@($pdbEntries | Sort-Object) -join '|') -ne (@($expectedPdbEntries | Sort-Object) -join '|')) { throw "Unexpected or missing package symbol entries: $($pdbEntries -join ', ')" }
-    $forbiddenSurfacePatterns = @(Get-ForbiddenPatterns)
-    foreach ($entry in $entries | Where-Object { $_ -notmatch '\.(dll|pdb)$' }) {
-        $text = Get-Content -Raw -LiteralPath (Join-Path $temp $entry)
-        foreach ($pattern in $forbiddenSurfacePatterns) {
-            if ($text -match $pattern) { throw "Forbidden user-facing wording found in package entry: $entry" }
-        }
-    }
+    Assert-ArchiveTextSurface -ArchivePath $packagePath -ArchiveName 'nupkg'
+    if ($hasSymbolPackage) { Assert-ArchiveTextSurface -ArchivePath $symbolPackagePath -ArchiveName 'snupkg' }
     if (-not (Test-Path -LiteralPath $iconPath)) {
         if (-not $AllowMissingIcon) { throw 'Required icon path is missing: repository-root icon.png' }
         Write-Output 'ICON_GATE=UNVERIFIED repository-root icon.png is absent.'

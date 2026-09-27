@@ -202,6 +202,13 @@ function New-WrappedLiteral {
     return (($Value.ToCharArray() | ForEach-Object { [regex]::Escape([string] $_) }) -join $lineWrap)
 }
 
+function New-SeparatedLiteral {
+    param([string] $Value)
+
+    $separator = '[\s\p{Z}\p{Pd}_]*'
+    return (($Value.ToCharArray() | ForEach-Object { [regex]::Escape([string] $_) }) -join $separator)
+}
+
 function New-WrappedTokenPattern {
     param([string] $Value)
     return '(?<![\p{L}\p{N}_])' + (New-WrappedLiteral -Value $Value) + '(?![\p{L}\p{N}_])'
@@ -217,7 +224,8 @@ function Get-ForbiddenPatterns {
     $patterns.Add([pscustomobject]@{ Name = 'internal-error'; Pattern = '(?i)(?<![\p{L}\p{N}_])' + (New-WrappedLiteral -Value 'INTERNAL') + '[\s\p{Z}\p{Pd}_]*' + (New-WrappedLiteral -Value 'ERROR') + '(?![\p{L}\p{N}_])' })
     $patterns.Add([pscustomobject]@{ Name = 'internal analysis error'; Pattern = '(?i)(?<![\p{L}\p{N}_])' + (New-WrappedLiteral -Value 'INTERNAL') + '[\s\p{Z}]+analysis[\s\p{Z}]+' + (New-WrappedLiteral -Value 'error') + '(?![\p{L}\p{N}_])' })
     $patterns.Add([pscustomobject]@{ Name = 'issue identifier'; Pattern = '(?i)(?<![\p{L}\p{N}_])K' + (New-WrappedLiteral -Value 'E') + (New-WrappedLiteral -Value 'E') + '[\s\p{Z}\p{Pd}_]*-?[\s\p{Z}]*\d(?:[\s\p{Z}]*\d)*(?![\p{L}\p{N}_])' })
-    $attribution = '(?i)(?<![\p{L}\p{N}_])(?:co' + $separator + 'authored' + $separator + 'by|signed' + $separator + 'off' + $separator + 'by|generated' + $separator + '(?:by|with)|assisted' + $separator + 'by|co' + $separator + 'developed' + $separator + 'by|reviewed' + $separator + '(?:by|with))(?![\p{L}\p{N}_])'
+    $attributionForms = @('coauthoredby', 'signedoffby', 'generatedby', 'generatedwith', 'assistedby', 'codevelopedby', 'reviewedby', 'reviewedwith')
+    $attribution = '(?i)(?<![\p{L}\p{N}_])(?:' + (($attributionForms | ForEach-Object { New-SeparatedLiteral -Value $_ }) -join '|') + ')(?![\p{L}\p{N}_])'
     $patterns.Add([pscustomobject]@{ Name = 'attribution keyword'; Pattern = $attribution })
     foreach ($label in @('Claude', 'ChatGPT', 'OpenAI', 'Copilot', 'Cursor', 'Cline', 'DeepSeek', 'Gemini', 'GPT')) {
         $patterns.Add([pscustomobject]@{ Name = 'prohibited label: ' + $label; Pattern = '(?i)' + (New-WrappedTokenPattern -Value $label) })
@@ -366,6 +374,9 @@ if ($SelfTest) {
             @{ Name = 'field-separator'; Message = "clean$([char] 0x1f)Paperclip hidden" },
             @{ Name = 'repeated-separators'; Message = "clean$([char] 0x1e)$([char] 0x1e)Paperclip hidden" },
             @{ Name = 'line-wrapped-attribution'; Message = "Co-Authored-`nBy: Vendor <vendor@example.com>" },
+            @{ Name = 'internal-split-co-prefix'; Message = "C`no-Authored-By: Vendor <vendor@example.com>" },
+            @{ Name = 'internal-split-authored-suffix'; Message = "Co-Authored-B`r`ny: Vendor <vendor@example.com>" },
+            @{ Name = 'internal-split-generated-suffix'; Message = "Generated-b`u{2028}y: Vendor <vendor@example.com>" },
             @{ Name = 'spaced-attribution'; Message = 'Co - Authored - By: Vendor <vendor@example.com>' },
             @{ Name = 'underscored-attribution'; Message = 'Co_Authored_By: Vendor <vendor@example.com>' },
             @{ Name = 'signed-off-by'; Message = "clean`nSigned-off-by: Vendor <vendor@example.com>" },
