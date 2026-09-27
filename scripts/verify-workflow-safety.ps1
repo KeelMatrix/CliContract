@@ -64,8 +64,10 @@ if (-not (Test-Path -LiteralPath $publishScript -PathType Leaf)) { throw "Packag
 if ((Get-Content -Raw -LiteralPath $publishScript) -match 'NUGET_API_KEY') { throw 'The package publisher must not read a long-lived NuGet API-key environment variable.' }
 
 $hostileTag = "v1.0.0';Write-Output('VALIDATION_MARKER');#"
-$output = @(& pwsh -NoProfile -WindowStyle Hidden -File $tagScript -Tag $hostileTag 2>&1 | ForEach-Object { $_.ToString() })
-if ($LASTEXITCODE -eq 0 -or ($output -join "`n") -notmatch 'Unsupported release tag') { throw 'The release tag validator accepted an invalid tag.' }
+$rawOutput = @(& pwsh -NoProfile -WindowStyle Hidden -File $tagScript -Tag $hostileTag 2>&1)
+$tagExitCode = $LASTEXITCODE
+$output = @($rawOutput | ForEach-Object { $_.ToString() })
+if ($tagExitCode -eq 0 -or ($output -join "`n") -notmatch 'Unsupported release tag') { throw 'The release tag validator accepted an invalid tag.' }
 if ($output | Where-Object { $_ -match '^\s*VALIDATION_MARKER\s*$' }) { throw 'The release tag validator executed tag text.' }
 
 Write-Output "WORKFLOW_SOURCE_BOUNDARIES=PASS files=$($workflowFiles.Count)"
