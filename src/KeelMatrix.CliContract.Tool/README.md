@@ -27,11 +27,11 @@ Use `--format json` for CI consumers, `--fail-on warning` to gate warnings, and 
 
 `0` means no gated finding, `1` means a gated finding, `2` means a missing source/baseline path, invalid invocation/configuration, or output failure, `3` means a present but unreadable or invalid source/baseline (including an impossible canonical manifest), and `4` means an unexpected tool failure. See the [error taxonomy](https://github.com/KeelMatrix/CliContract/blob/main/docs/ERROR-TAXONOMY.md). JSON output places compatibility findings and tool errors in separate arrays.
 
-When package behavior is cited in a repository acceptance record, use a candidate-bound CI run, an exact command with captured output, a rerunnable checker, or an explicit judgement that names the relevant artifact and rationale. A package, fixture, or manifest path alone is not a proof anchor; the repository acceptance-map linter rejects path-only proof. The production acceptance-map path independently validates named CI runs through the application returned by `Get-Command gh -CommandType Application`, so a caller-defined PowerShell function cannot substitute metadata. Its self-test uses a non-exported internal fixture seam and requires no `gh`, network, or `GH_TOKEN`; judgement relevance remains reviewer attestation beyond the mechanical checks.
-
 ## Privacy and limitations
 
 After a successful comparison with a nonempty baseline, version 0.1 requests one best-effort activation through the published `KeelMatrix.Telemetry` package. No schema-derived values are passed; the shared package's bounded platform, tool-version, CI, and anonymous identity contract is used. `--no-telemetry`, `KEELMATRIX_NO_TELEMETRY=1`, `KEELMATRIX_DEVELOPMENT=true`, and `CI=true` disable the request; development and CI are always telemetry-suppressed, and telemetry failure cannot affect the result. The tool never sends schema contents, defaults, paths, command names, or diagnostics. Unknown versions, malformed input, invalid UTF-8, YAML aliases, remote references, duplicate normalized parameter names, duplicate normalized command paths, and unsupported constructs fail closed. A schema can be valid without being backward compatible.
+
+Analysis is bounded by input size, node/depth/string/collection, materialized-command, invocation-expansion, comparison-work, and canonical-output limits. These limits fail closed with exit code `3`; a successful snapshot is admitted by the same canonical-reader limits used by `check` and `diff`.
 
 ## License
 

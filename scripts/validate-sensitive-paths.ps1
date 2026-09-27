@@ -25,7 +25,7 @@ if ($SelfTest) {
     $samples = @('.env.local', 'config/appsettings.Development.json', 'logs/tool.log', 'secrets/token.key', 'candidate.nupkg')
     $matches = @(Find-PolicyMatches $samples)
     if ($matches.Count -ne $samples.Count) {
-        throw 'Sensitive-path policy self-test did not cover every acceptance-policy sample.'
+        throw 'Sensitive-path policy self-test did not cover every policy sample.'
     }
     Write-Output 'SENSITIVE_PATH_POLICY_SELF_TEST=PASS'
 }

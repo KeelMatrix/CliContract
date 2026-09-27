@@ -578,6 +578,41 @@ public sealed class NormalizationTests
     }
 
     [Fact]
+    public void DerivedInvocationExpansionIsRejectedBeforeCartesianAllocation()
+    {
+        var commands = new JsonObject();
+        var path = "tool";
+        for (var index = 1; index <= 24; index++)
+        {
+            path += " command" + index;
+            commands[path] = new JsonObject { ["aliases"] = new JsonArray("alias" + index) };
+        }
+
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize(
+            "opencli",
+            OpenCliDocument(new JsonObject { ["commands"] = commands }.ToJsonString()),
+            new NormalizationLimits(MaxDerivedInvocations: 10_000)));
+
+        Assert.Equal("DERIVED_INVOCATION_LIMIT", error.Code);
+    }
+
+    [Fact]
+    public void SnapshotAdmissionRejectsCanonicalOutputThatItsReaderCannotConsume()
+    {
+        var flags = new JsonArray(Enumerable.Range(0, 1_500).Select(index => (JsonNode)new JsonObject
+        {
+            ["name"] = "f" + index.ToString("D4", System.Globalization.CultureInfo.InvariantCulture),
+            ["type"] = "string"
+        }).ToArray());
+
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize(
+            "opencli",
+            OpenCliDocument(new JsonObject { ["commands"] = new JsonObject { ["tool"] = new JsonObject { ["flags"] = flags } } }.ToJsonString())));
+
+        Assert.Equal("NODE_LIMIT", error.Code);
+    }
+
+    [Fact]
     public void JsonAndYamlPreserveExactNumericDefaultsAcrossPrecisionAndMagnitude()
     {
         const string json = """

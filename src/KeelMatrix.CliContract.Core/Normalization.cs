@@ -13,7 +13,12 @@ public sealed record NormalizationLimits(
     int MaxNodes = 20_000,
     int MaxDepth = 64,
     int MaxStringLength = 16_384,
-    int MaxCollectionItems = 2_000);
+    int MaxCollectionItems = 2_000,
+    int MaxMaterializedCommands = 20_000,
+    int MaxDerivedInvocations = 100_000,
+    int MaxComparisonWork = 200_000,
+    int MaxCanonicalOutputBytes = 2 * 1024 * 1024,
+    int MaxCanonicalOutputNodes = 20_000);
 
 public sealed class NormalizationException(string code, string message) : Exception(message)
 {
@@ -68,8 +73,10 @@ public static class Normalizer
 
     public static string Serialize(CanonicalManifest manifest)
     {
-        return JsonSerializer.Serialize(manifest, JsonOptions) + "\n";
+        return SerializeUnchecked(manifest);
     }
+
+    internal static string SerializeUnchecked(CanonicalManifest manifest) => JsonSerializer.Serialize(manifest, JsonOptions) + "\n";
 
     internal static void ValidateCanonicalSource(CanonicalManifest manifest, NormalizationLimits limits)
     {
@@ -1103,7 +1110,7 @@ public static class Normalizer
 
         EnsureUniqueCommandPaths(normalized);
 
-        var canonicalCommands = MaterializeCommandTrie(normalized);
+        var canonicalCommands = MaterializeCommandTrie(normalized, limits);
 
         var globalNode = OptionalProperty(root, "global", "OPENCLI_GLOBAL");
         var global = globalNode is null ? null : RequireObject(globalNode, "OPENCLI_GLOBAL");
@@ -1142,9 +1149,14 @@ public static class Normalizer
         };
     }
 
-    private static CanonicalCommand[] MaterializeCommandTrie(IReadOnlyList<CanonicalCommand> explicitCommands)
+    private static CanonicalCommand[] MaterializeCommandTrie(IReadOnlyList<CanonicalCommand> explicitCommands, NormalizationLimits limits)
     {
         var byPath = explicitCommands.ToDictionary(command => command.Path, StringComparer.Ordinal);
+        if (byPath.Count > limits.MaxMaterializedCommands)
+        {
+            throw new NormalizationException("MATERIALIZED_COMMAND_LIMIT", "The command hierarchy exceeds the configured materialized-command limit.");
+        }
+
         foreach (var command in explicitCommands)
         {
             var segments = command.Path.Split(" / ", StringSplitOptions.None);
@@ -1153,6 +1165,11 @@ public static class Normalizer
                 var path = string.Join(" / ", segments[..length]);
                 if (!byPath.ContainsKey(path))
                 {
+                    if (byPath.Count >= limits.MaxMaterializedCommands)
+                    {
+                        throw new NormalizationException("MATERIALIZED_COMMAND_LIMIT", "The command hierarchy exceeds the configured materialized-command limit.");
+                    }
+
                     byPath[path] = new CanonicalCommand
                     {
                         Path = path,

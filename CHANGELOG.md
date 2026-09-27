@@ -6,25 +6,17 @@ This file records user-visible changes to KeelMatrix CliContract.
 
 ### Fixed
 
-- Source-producibility coverage now observes every serialized source field path, compares it with an independently authored source-schema contract, and names allow-listed projection fields that are absent from the catalog.
-- Acceptance-map generation now follows the current checklist order and linting verifies exact criterion text, criterion hashes, and criterion-specific candidate proof.
-- Acceptance-map proof now has no caller-supplied run-metadata path: generation and lint independently resolve named runs, reject stale or forged head metadata, reject path-only anchors, rerun repository-owned checkers, and visibly mark explicit judgement proof. Deterministic stale-run, forged-metadata, path-only, judgement, checker, and generic-proof regressions run in both CI workflows.
-- Acceptance-map production wrappers resolve and invoke the `gh` application only, so caller-defined PowerShell functions cannot substitute run metadata; the self-test's fixture resolver is a non-exported test seam.
-- Acceptance-map proof now states its trust boundary: candidate binding, criterion text/hashes, command/checker output, path containment, and proof shape are mechanical checks, while semantic relevance of `judgement` rationale remains reviewer attestation. The self-test remains hermetic across CI operating systems without `gh`, network access, or `GH_TOKEN`.
-- Preserve the complete alpha.14 option-name class: the canonical invariant now uses the normalizer's shared `--` + `TrimStart('-')` construction rule, including whitespace-containing and dash-only names and aliases at global, root, and command scope. Add a closed source-field edge matrix and installed-package round-trip guard.
-- Preserve nonempty whitespace-only alpha.14 source strings through canonical manifests while continuing to reject empty and duplicate aliases.
-- Canonical baseline validation now rejects every tested alpha.14-unrepresentable state in the source-producibility sweep, including empty contact/install presence, non-letter command segments, exact parameter types, required metadata fields, license/example required fields, and the existing arity, source, domain, status, file-source, and exit-code invariants; `check` and `diff` return bounded exit `3` for each invalid baseline.
+- Canonical baseline validation rejects states the pinned alpha.14 normalizer cannot produce, including invalid metadata, arity, source, domain, status, file-source, and exit-code invariants; `check` and `diff` return bounded exit `3` for invalid baselines.
 
 ### Added
 - Canonical manifest schema version `2` preserves global options separately from root-local options, materializes derived command groups, and compares inherited option surfaces at every command.
 - Canonical baseline reading now enforces the complete source-producible alpha.14 invariant—including requiredness-derived non-variadic arity, the variadic required/min/max matrix, scalar choice order, and non-empty global file-source configuration—and returns bounded exit `3` for malformed-but-valid baseline states.
-- CI history checks now require complete reachable history, with a deterministic earlier-commit regression test; first-release freshness checks record package, repository, product, and first-party diff-surface reviews.
 - OpenCLI `1.0.0-alpha.14` snapshot, validation, diff, and baseline-check commands.
 - Deterministic versioned canonical manifests with bounded offline parsing and exact cross-JSON/YAML finite-number canonicalization, including trailing-dot exponent mantissas.
 - Stable compatibility diagnostics, JSON/text output, explicit suppressions, and CI exit codes.
 - Informational `KMCLI005` findings for represented metadata, installation guidance, summary/description text, and choice descriptions, while preserving non-gating behavior for both failure thresholds.
 - Compatibility coverage for accepted command/option invocation graphs, retained aliases, all supported type-pair domains, constrained choices, binary identity, runnable command kind, positional slots, default-source resolution, global file-source configuration, and global/command exit-code warnings.
-- Pinned alpha.14 conformance corpus with variadic cross-field validation, deterministic JSON/YAML equivalence checks, role-aware input errors, and fail-closed package provenance and sensitive-path gates.
+- Pinned alpha.14 conformance corpus with variadic cross-field validation, deterministic JSON/YAML equivalence checks, and role-aware input errors.
 - Fail-closed packed-tool and symbol-package archive validation.
 - Alpha.14 command-key parsing now follows the tagged modifier grammar, and tagged logical validation covers groups, positional ordering, variadic flags, duplicate accepted names, `$FILE` prerequisites, and typed defaults.
 - Canonical manifests enforce accepted-invocation uniqueness after both source normalization and manifest parsing; exact numeric domains no longer use a decimal-range boundary.

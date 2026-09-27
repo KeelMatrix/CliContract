@@ -58,6 +58,12 @@ This is a selected compatibility-diagnostic catalog. The complete role-aware exi
 | `OPENCLI_CHOICE` | `3` | A constrained choice cannot be represented by its declared parameter type |
 | `OPENCLI_DEFAULT_SOURCE` | `3` | A `$FILE` alternative source has no applicable global config file source |
 | `OPENCLI_NUMBER` | `3` | An explicitly numeric scalar is not a supported finite canonical JSON number |
+| `NODE_LIMIT` | `3` | The source or canonical manifest exceeds the node limit |
+| `MATERIALIZED_COMMAND_LIMIT` | `3` | The normalized command tree exceeds the materialized-command limit |
+| `DERIVED_INVOCATION_LIMIT` | `3` | Alias/command invocation expansion would exceed the bounded limit |
+| `COMPARISON_WORK_LIMIT` | `3` | Compatibility comparison would exceed the bounded work limit |
+| `CANONICAL_OUTPUT_TOO_LARGE` | `3` | Canonical output exceeds its byte or node admission limit |
+| `INVALID_IGNORE` | `2` | The explicit suppression file is malformed, duplicated, oversized, or has an unsupported shape |
 | `UNEXPECTED_ERROR` | `4` | Unexpected tool failure |
 
 ## OpenCLI alpha.14 semantic coverage matrix
@@ -131,10 +137,6 @@ Diagnostics do not echo complete documents, defaults, descriptions, or schema fr
 Missing source or baseline paths return exit `2`; present but unreadable, invalid-UTF-8, oversized, malformed, unsupported, or otherwise invalid source/baseline files return exit `3`. Suppression/configuration and output failures return exit `2`; unexpected failures return exit `4`. See [`docs/ERROR-TAXONOMY.md`](docs/ERROR-TAXONOMY.md).
 
 File failures are role-aware: a missing source, baseline, or suppression file is an invocation/configuration error (exit `2`); unreadable, invalid-UTF-8, oversized, malformed, or unsupported source and canonical baseline data is a schema/baseline error (exit `3`); invalid, unreadable, invalid-UTF-8, or oversized suppression data is an invocation/configuration error (exit `2`); and an output write failure is an invocation/configuration error (exit `2`). Only unexpected failures reach exit `4`. Text and JSON output use the same taxonomy.
-
-## Verification references
-
-Compatibility claims used in a repository acceptance record are anchored by a candidate-bound CI run, an exact command plus captured output, a rerunnable checker, or an explicit judgement naming criterion-specific artifacts and rationale. An existing manifest or source path alone is not a compatibility result; the acceptance-map linter rejects that form and independently resolves every named CI run through the application returned by `Get-Command gh -CommandType Application`. A caller-defined PowerShell `gh` function cannot provide run metadata. The production generator and linter expose only production wrappers, while their self-test exercises a non-exported internal seam with fixture metadata and no `gh`, network, or `GH_TOKEN` dependency. Candidate binding and proof shape are mechanical; judgement relevance remains reviewer attestation.
 
 ## Schema validity versus compatibility
 

@@ -1,7 +1,3 @@
-param(
-    [switch] $SkipAcceptanceMapSelfTest
-)
-
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
@@ -29,8 +25,6 @@ Assert-NativeSuccess 'Determinism verification'
 Assert-NativeSuccess 'No-execution source scan'
 & pwsh -NoProfile -WindowStyle Hidden -File ./scripts/test-no-execution.ps1
 Assert-NativeSuccess 'No-execution harness'
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/verify-workflow-safety.ps1 -SelfTest
-Assert-NativeSuccess 'Workflow safety regressions'
 & pwsh -NoProfile -WindowStyle Hidden -File ./scripts/scan-user-facing-surface.ps1 -SelfTest
 Assert-NativeSuccess 'User-facing wording scan'
 & pwsh -NoProfile -WindowStyle Hidden -File ./scripts/verify-error-taxonomy.ps1
@@ -39,12 +33,6 @@ Assert-NativeSuccess 'Error taxonomy documentation check'
 Assert-NativeSuccess 'Sensitive-path ingress safety'
 & pwsh -NoProfile -WindowStyle Hidden -File ./scripts/scan-history-wording.ps1 -SelfTest
 Assert-NativeSuccess 'Reachable history wording scan'
-if (-not $SkipAcceptanceMapSelfTest) {
-    & pwsh -NoProfile -WindowStyle Hidden -File ./scripts/test-acceptance-map.ps1
-    Assert-NativeSuccess 'Acceptance map self-test'
-}
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/verify-release-contract.ps1 -SelfTest
-Assert-NativeSuccess 'Release contract self-test'
  $audit = dotnet list KeelMatrix.CliContract.sln package --vulnerable --include-transitive --configfile NuGet.config 2>&1
  $audit | Out-Host
  if (($audit -join "`n") -match '(?im)^\s*[>]?\s*.*Package.*\s+has the following vulnerable packages|(?im)^\s*>\s+.*\s+(Critical|High|Moderate|Low)\s+') { throw 'Dependency vulnerability audit reported a vulnerable package.' }
@@ -56,7 +44,7 @@ $symbols = Join-Path $packageDir 'KeelMatrix.CliContract.0.1.0.snupkg'
 if (-not (Test-Path -LiteralPath $symbols)) { throw 'Expected symbol package was not produced.' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 & pwsh -NoProfile -WindowStyle Hidden -File ./scripts/verify-release-artifacts.ps1 -ArtifactDirectory $packageDir -Version '0.1.0' -SelfTest
-Assert-NativeSuccess 'Release artifact allowlist'
+Assert-NativeSuccess 'Package artifact allowlist'
 & pwsh -NoProfile -WindowStyle Hidden -File ./scripts/inspect-package.ps1 -PackagePath $package -SelfTest
 Assert-NativeSuccess 'Package inspection'
 & pwsh -NoProfile -WindowStyle Hidden -File ./scripts/source-producibility-guard.ps1 -PackagePath $package

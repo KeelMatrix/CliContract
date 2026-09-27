@@ -6,6 +6,7 @@ internal static class CanonicalInvariantValidator
 {
     public static void Validate(CanonicalManifest manifest, NormalizationLimits? limits = null)
     {
+        var bounded = limits ?? new NormalizationLimits();
         if (manifest.SchemaVersion != CanonicalManifestReader.SupportedSchemaVersion ||
             !string.Equals(manifest.Adapter, "opencli", StringComparison.Ordinal) ||
             !string.Equals(manifest.SourceVersion, Normalizer.OpenCliVersion, StringComparison.Ordinal))
@@ -39,8 +40,9 @@ internal static class CanonicalInvariantValidator
         }
 
         ValidateEffectiveOptionCollisions(manifest, commands);
-        ValidateCommandInvocations(manifest, commands, byPath);
-        Normalizer.ValidateCanonicalSource(manifest, limits ?? new NormalizationLimits());
+        ValidateCommandInvocations(manifest, commands, byPath, bounded);
+        Normalizer.ValidateCanonicalSource(manifest, bounded);
+        CanonicalManifestReader.ValidateSerializedAdmission(Normalizer.SerializeUnchecked(manifest), bounded);
     }
 
     private static void ValidateCommandTree(CanonicalCommand root, IReadOnlyList<CanonicalCommand> commands, Dictionary<string, CanonicalCommand> byPath)
@@ -354,14 +356,21 @@ internal static class CanonicalInvariantValidator
         if (!SourceContractRules.IsNonEmpty(value)) throw new NormalizationException("INVALID_BASELINE", message);
     }
 
-    private static void ValidateCommandInvocations(CanonicalManifest manifest, IReadOnlyList<CanonicalCommand> commands, Dictionary<string, CanonicalCommand> byPath)
+    private static void ValidateCommandInvocations(CanonicalManifest manifest, IReadOnlyList<CanonicalCommand> commands, Dictionary<string, CanonicalCommand> byPath, NormalizationLimits limits)
     {
         var invocationOwners = new Dictionary<string, CanonicalCommand>(StringComparer.Ordinal);
         var invocationCache = new Dictionary<CanonicalCommand, IReadOnlyList<string>>();
+        var comparisonWork = 0;
 
         foreach (var command in commands.OrderBy(command => command.Path.Count(value => value == '/')).ThenBy(command => command.Path, StringComparer.Ordinal))
         {
-            var invocations = GetInvocations(command, manifest, byPath, invocationCache);
+            var invocations = GetInvocations(command, manifest, byPath, invocationCache, limits);
+            if (invocations.Count > limits.MaxComparisonWork - comparisonWork)
+            {
+                throw new NormalizationException("COMPARISON_WORK_LIMIT", "The command invocation comparison exceeds the configured work limit.");
+            }
+
+            comparisonWork += invocations.Count;
             foreach (var invocation in invocations)
             {
                 if (invocationOwners.TryGetValue(invocation, out var existing) && !ReferenceEquals(existing, command))
@@ -374,11 +383,11 @@ internal static class CanonicalInvariantValidator
         }
     }
 
-    private static IReadOnlyList<string> GetInvocations(CanonicalCommand command, CanonicalManifest manifest, Dictionary<string, CanonicalCommand> byPath, Dictionary<CanonicalCommand, IReadOnlyList<string>> cache)
+    private static IReadOnlyList<string> GetInvocations(CanonicalCommand command, CanonicalManifest manifest, Dictionary<string, CanonicalCommand> byPath, Dictionary<CanonicalCommand, IReadOnlyList<string>> cache, NormalizationLimits limits)
     {
         if (cache.TryGetValue(command, out var cached)) return cached;
 
-        string[] parentInvocations;
+        IReadOnlyList<string> parentInvocations;
         if (command.Path == "root")
         {
             var rootInvocations = new List<string> { "root", manifest.Info.Binary! };
@@ -390,7 +399,7 @@ internal static class CanonicalInvariantValidator
             var segments = command.Path.Split(" / ", StringSplitOptions.None);
             var parentPath = string.Join(" / ", segments[..^1]);
             parentInvocations = byPath.TryGetValue(parentPath, out var parent)
-                ? GetInvocations(parent, manifest, byPath, cache).ToArray()
+                ? GetInvocations(parent, manifest, byPath, cache, limits)
                 : [parentPath];
         }
 
@@ -398,6 +407,14 @@ internal static class CanonicalInvariantValidator
             .Concat(command.Path == "root" ? [] : command.Aliases)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
+
+        if (parentInvocations.Count > limits.MaxDerivedInvocations ||
+            names.Length > limits.MaxDerivedInvocations ||
+            parentInvocations.Count > limits.MaxDerivedInvocations / Math.Max(1, names.Length))
+        {
+            throw new NormalizationException("DERIVED_INVOCATION_LIMIT", "The accepted command invocation graph exceeds the configured limit.");
+        }
+
         var result = command.Path == "root"
             ? parentInvocations.Distinct(StringComparer.Ordinal).ToArray()
             : parentInvocations.SelectMany(parent => names.Select(name => parent + " / " + name)).Distinct(StringComparer.Ordinal).ToArray();

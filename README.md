@@ -72,8 +72,6 @@ Run the check in a build step and preserve the baseline in the application repos
 clicontract check ./opencli.yaml --baseline ./cli-contract.json --format json
 ```
 
-Repository acceptance records follow the same contract as the validation gates: a candidate-bound CI run, an exact command with captured output, a rerunnable repository checker, or an explicit judgement naming criterion-specific artifacts and rationale. A baseline or fixture path alone is not proof; the contributor workflow and acceptance-map scripts enforce this distinction. Production named-run validation resolves the application returned by `Get-Command gh -CommandType Application`, so a caller-defined PowerShell function cannot substitute for `gh`. Candidate binding, criterion text/hashes, command/checker output, and path containment are mechanical checks; the semantic relevance of a `judgement` rationale remains reviewer attestation. The acceptance-map self-test uses a non-exported fixture seam and does not require `gh`, network access, or `GH_TOKEN`.
-
 ## Troubleshooting
 
 - `MALFORMED_JSON` or `MALFORMED_YAML`: fix the source syntax; the tool never prints the whole input.
@@ -84,11 +82,12 @@ Repository acceptance records follow the same contract as the validation gates: 
 - `INPUT_UNREADABLE` or `BASELINE_UNREADABLE`: grant read access to the source or canonical baseline; present read failures remain schema/baseline errors with exit code `3`.
 - `IGNORE_NOT_FOUND`, `IGNORE_UNREADABLE`, `IGNORE_TOO_LARGE`, or `INVALID_IGNORE`: fix the explicit suppression/configuration file; these are invocation errors with exit code `2`.
 - `OUTPUT_NOT_WRITABLE`: choose a writable snapshot destination; this is an invocation error with exit code `2`.
-- `OPENCLI_GROUP_COMMAND`, `OPENCLI_ARGUMENT_ORDER`, `OPENCLI_VARIADIC`, or `OPENCLI_ARITY`: keep groups free of local parameters, required positionals after optional positionals, one variadic positional argument last, and item bounds only with `variadic: true`.
+- `OPENCLI_GROUP_COMMAND`, `OPENCLI_ARGUMENT_ORDER`, `OPENCLI_VARIADIC`, or `OPENCLI_ARITY`: keep groups free of local parameters, optional positionals after required positionals, one variadic positional argument last, and item bounds only with `variadic: true`.
 - `OPENCLI_DEFAULT` or `OPENCLI_DEFAULT_SOURCE`: use a default representable by its flag type and configure a global JSON, TOML, or YAML file source before using `$FILE`.
 - `UNSUPPORTED_OPENCLI_VERSION`: update the source to the pinned OpenCLI version or wait for a tool version that supports it.
 - `AMBIGUOUS_INPUT`: pass `--input opencli` after removing competing schema markers.
 - `DUPLICATE_OPTION`: provide each command-line option at most once.
+- `NODE_LIMIT`, `MATERIALIZED_COMMAND_LIMIT`, `DERIVED_INVOCATION_LIMIT`, `COMPARISON_WORK_LIMIT`, or `CANONICAL_OUTPUT_TOO_LARGE`: reduce the schema's breadth/depth or split an unusually large contract before retrying.
 - `OPENCLI_DUPLICATE_PARAMETER`: remove duplicate argument or option names after OpenCLI option-name normalization.
 - `OPENCLI_DUPLICATE_COMMAND_PATH`: rename one of the command keys so each normalized logical command path is unique.
 - `OPENCLI_REMOTE_REFERENCE`: remove the remote reference or include; this tool never resolves it or accesses the network.

@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using KeelMatrix.CliContract.Core;
 using KeelMatrix.Telemetry;
 
@@ -315,42 +314,93 @@ internal static class CliApplication
     {
         if (ignorePath is null) return findings;
         var input = ReadFile(ignorePath, FileRole.Suppression);
-        JsonNode document;
-        try { document = JsonNode.Parse(input) ?? throw new JsonException(); }
-        catch (JsonException) { throw new InvocationException("INVALID_IGNORE", "The ignore file must be valid JSON."); }
+        var (codes, paths) = ReadSuppressions(input);
+        return findings.Where(finding => !codes.Contains(finding.Code) && !paths.Contains(finding.Path)).ToArray();
+    }
 
-        var codes = new HashSet<string>(StringComparer.Ordinal);
-        var paths = new HashSet<string>(StringComparer.Ordinal);
-        if (document is JsonArray array)
+    private static (HashSet<string> Codes, HashSet<string> Paths) ReadSuppressions(string input)
+    {
+        try
         {
-            foreach (var item in array)
+            using var document = JsonDocument.Parse(input, new JsonDocumentOptions
             {
-                if (item is not JsonValue || item.GetValueKind() != JsonValueKind.String) throw new InvocationException("INVALID_IGNORE", "The ignore file array must contain strings.");
-                codes.Add(item.GetValue<string>());
-            }
+                MaxDepth = new NormalizationLimits().MaxDepth + 1,
+                AllowTrailingCommas = false,
+                CommentHandling = JsonCommentHandling.Disallow
+            });
+
+            var codes = new HashSet<string>(StringComparer.Ordinal);
+            var paths = new HashSet<string>(StringComparer.Ordinal);
+            var counter = 0;
+            ReadSuppressionDocument(document.RootElement, 0, ref counter, codes, paths);
+            return (codes, paths);
         }
-        else if (document is JsonObject objectNode)
+        catch (InvocationException)
         {
-            ReadIgnoreValues(objectNode["codes"], codes, "codes");
-            ReadIgnoreValues(objectNode["paths"], paths, "paths");
+            throw;
         }
-        else
+        catch (JsonException)
+        {
+            throw new InvocationException("INVALID_IGNORE", "The ignore file must be valid bounded JSON.");
+        }
+    }
+
+    private static void ReadSuppressionDocument(JsonElement value, int depth, ref int nodeCount, HashSet<string> codes, HashSet<string> paths)
+    {
+        var limits = new NormalizationLimits();
+        if (depth > limits.MaxDepth || ++nodeCount > limits.MaxNodes)
+        {
+            throw new InvocationException("INVALID_IGNORE", "The ignore file exceeds the configured structure limits.");
+        }
+
+        if (value.ValueKind == JsonValueKind.Array)
+        {
+            if (value.GetArrayLength() > limits.MaxCollectionItems) throw new InvocationException("INVALID_IGNORE", "The ignore file contains too many entries.");
+            foreach (var item in value.EnumerateArray())
+            {
+                AddSuppressionString(item, limits, codes);
+            }
+
+            return;
+        }
+
+        if (value.ValueKind != JsonValueKind.Object)
         {
             throw new InvocationException("INVALID_IGNORE", "The ignore file must be an array or object.");
         }
 
-        return findings.Where(finding => !codes.Contains(finding.Code) && !paths.Contains(finding.Path)).ToArray();
+        var properties = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in value.EnumerateObject())
+        {
+            if (!properties.Add(property.Name) || property.Name is not ("codes" or "paths"))
+            {
+                throw new InvocationException("INVALID_IGNORE", "The ignore file object may contain only unique codes and paths properties.");
+            }
+
+            if (property.Value.ValueKind != JsonValueKind.Array || property.Value.GetArrayLength() > limits.MaxCollectionItems)
+            {
+                throw new InvocationException("INVALID_IGNORE", $"The ignore file '{property.Name}' value must be an array.");
+            }
+
+            var target = property.Name == "codes" ? codes : paths;
+            foreach (var item in property.Value.EnumerateArray()) AddSuppressionString(item, limits, target);
+        }
     }
 
-    private static void ReadIgnoreValues(JsonNode? node, HashSet<string> output, string property)
+    private static void AddSuppressionString(JsonElement value, NormalizationLimits limits, HashSet<string> target)
     {
-        if (node is null) return;
-        if (node is not JsonArray array) throw new InvocationException("INVALID_IGNORE", $"The ignore file '{property}' value must be an array.");
-        foreach (var item in array)
+        if (value.ValueKind != JsonValueKind.String)
         {
-            if (item is not JsonValue || item.GetValueKind() != JsonValueKind.String) throw new InvocationException("INVALID_IGNORE", "Ignore entries must be strings.");
-            output.Add(item.GetValue<string>());
+            throw new InvocationException("INVALID_IGNORE", "Ignore entries must be nonempty strings.");
         }
+
+        var text = value.GetString() ?? string.Empty;
+        if (text.Length == 0 || text.Length > limits.MaxStringLength)
+        {
+            throw new InvocationException("INVALID_IGNORE", "Ignore entries must be nonempty bounded strings.");
+        }
+
+        if (!target.Add(text)) throw new InvocationException("INVALID_IGNORE", "The ignore file contains duplicate entries.");
     }
 
     private static int GatedExit(IReadOnlyList<CompatibilityFinding> findings, FailOn failOn)
@@ -379,9 +429,14 @@ internal static class CliApplication
 
     private static bool HasNonEmptyCommandSurface(CanonicalManifest manifest)
     {
-        var root = manifest.Root;
-        return root.Subcommands.Length > 0 || root.Arguments.Length > 0 || root.Options.Length > 0 || root.Aliases.Length > 0 ||
-            root.Summary is not null || root.Description is not null;
+        return HasMeaningfulCommand(manifest.Root);
+    }
+
+    internal static bool HasMeaningfulCommand(CanonicalCommand command)
+    {
+        if (string.Equals(command.Kind ?? "action", "action", StringComparison.Ordinal)) return true;
+        if (command.Arguments.Length > 0 || command.Options.Length > 0 || command.Aliases.Length > 0) return true;
+        return command.Subcommands.Any(HasMeaningfulCommand);
     }
 
     private static bool IsTelemetrySuppressedForDevelopmentOrCi()
@@ -409,7 +464,7 @@ internal static class CliApplication
 
         foreach (var finding in findings)
         {
-            Console.WriteLine($"{finding.Category.ToUpperInvariant()} {finding.Code} {finding.Message} Path: {finding.Path}");
+            Console.WriteLine($"{finding.Category.ToUpperInvariant()} {finding.Code} {SafeDisplay(finding.Message)} Path: {SafeDisplay(finding.Path)}");
         }
     }
 
@@ -425,7 +480,7 @@ internal static class CliApplication
         }
         else
         {
-            Console.WriteLine($"SNAPSHOT adapter={manifest.Adapter} schema={manifest.SchemaVersion} output={Path.GetFileName(output)}");
+            Console.WriteLine($"SNAPSHOT adapter={SafeDisplay(manifest.Adapter)} schema={manifest.SchemaVersion} output={SafeDisplay(Path.GetFileName(output))}");
         }
 
         return 0;
@@ -439,7 +494,7 @@ internal static class CliApplication
         }
         else
         {
-            Console.Error.WriteLine($"ERROR {code}: {message}");
+            Console.Error.WriteLine($"ERROR {SafeDisplay(code)}: {SafeDisplay(message)}");
         }
 
         return exitCode;
@@ -557,6 +612,46 @@ internal static class CliApplication
     private static void WriteJson<T>(T value)
     {
         Console.WriteLine(JsonSerializer.Serialize(value, OutputJsonOptions));
+    }
+
+    private static string SafeDisplay(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (character == ':' && index + 1 < value.Length && value[index + 1] == ':')
+            {
+                builder.Append("\\u003A\\u003A");
+                index++;
+                continue;
+            }
+
+            switch (character)
+            {
+                case '\n': builder.Append("\\n"); break;
+                case '\r': builder.Append("\\r"); break;
+                case '\t': builder.Append("\\t"); break;
+                case '\b': builder.Append("\\b"); break;
+                case '\f': builder.Append("\\f"); break;
+                case '\u001b': builder.Append("\\u001B"); break;
+                case '\u2028': builder.Append("\\u2028"); break;
+                case '\u2029': builder.Append("\\u2029"); break;
+                default:
+                    if (char.IsControl(character) || character == '\u007f')
+                    {
+                        builder.Append("\\u").Append(((int)character).ToString("X4", System.Globalization.CultureInfo.InvariantCulture));
+                    }
+                    else
+                    {
+                        builder.Append(character);
+                    }
+
+                    break;
+            }
+        }
+
+        return builder.ToString();
     }
 
     private sealed record Invocation(string Command, List<string> Positionals, InputKind InputKind, OutputFormat Format, FailOn FailOn, string? Output, string? Baseline, string? IgnoreFile, bool NoTelemetry);

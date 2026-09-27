@@ -42,7 +42,7 @@ The current serializer includes null optional values so null and omission have o
 - Option names use a `--` prefix in the manifest.
 - Omitted OpenCLI booleans use their documented defaults; null/default/alternative-source distinctions are preserved according to the supported adapter contract.
 - JSON escaping and indentation are produced by the stable .NET JSON serializer; no machine path or source-document metadata is retained.
-- Size, node, depth, string, and collection bounds apply while parsing.
+- Size, node, depth, string, and collection bounds apply while parsing. Materialized command count, derived invocation count, comparison work, and canonical output size/node count are bounded as well; a snapshot that succeeds remains admissible to the canonical reader.
 - Numeric scalars use exact invariant canonicalization with plain notation for ordinary magnitudes and scientific notation for extreme magnitudes; JSON numbers and recognized finite YAML integer/float values are reduced by numeric value without floating-point conversion. This includes decimal, exponent, trailing-dot exponent mantissas such as `5.e2`, underscore-separated, hexadecimal, octal, binary, and negative-zero spellings; equivalent values such as `7` and `7.0`, `5.e2` and `500`, `0.00001` and `1e-5`, and negative zero spellings produce identical bytes without floating-point range loss. Explicit YAML string tags remain strings. YAML `.inf` and `.nan` spellings are outside the JSON-number boundary: explicit `!!float` forms are rejected with `OPENCLI_NUMBER`, while untagged forms remain strings.
 
 Semantically equivalent OpenCLI JSON/YAML documents therefore produce byte-identical manifests across Windows, Linux, and macOS when run with the same tool version.
@@ -55,7 +55,7 @@ The manifest schema version is independent of the upstream OpenCLI version. Vers
 
 ## Verification references
 
-When a manifest path is cited in a repository acceptance record, path existence is not proof of a criterion. The record must also include an exact command and captured output, a rerunnable repository checker, a candidate-bound CI run, or an explicit `judgement=artifacts=...; rationale=...` anchor. Generated maps mark judgement proof separately; see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the validation contract. Production map generation and linting independently resolve named CI runs through the application-only `gh` lookup; a caller-defined PowerShell function is not accepted. The hermetic self-test uses only its non-exported internal fixture seam and does not invoke `gh` or the network. These mechanical checks do not prove that a judgement rationale is semantically relevant; that part remains reviewer attestation.
+The manifest limits are enforced before materializing unbounded command or alias products. Canonical serialization is admitted through the same bounded reader used for baselines, so a successful snapshot can be checked without exceeding the reader's limits.
 
 ## Unsupported constructs
 

@@ -224,6 +224,31 @@ public sealed class CompatibilityTests
     }
 
     [Fact]
+    public void CompleteBooleanChoiceSetIsEquivalentToUnconstrainedBooleanDomain()
+    {
+        var unconstrained = Normalize("""{"commands":{"tool":{"flags":[{"name":"enabled","type":"boolean"}]}}}""");
+        var constrained = Normalize("""{"commands":{"tool":{"flags":[{"name":"enabled","type":"boolean","choices":[{"value":true},{"value":false}]}]}}}""");
+
+        foreach (var findings in new[]
+        {
+            CompatibilityAnalyzer.Compare(unconstrained, constrained).Findings,
+            CompatibilityAnalyzer.Compare(constrained, unconstrained).Findings
+        })
+        {
+            Assert.DoesNotContain(findings, finding => finding.Code is "KMCLI107" or "KMCLI203");
+        }
+    }
+
+    [Fact]
+    public void BooleanChoiceSubsetRemainsBreaking()
+    {
+        var unconstrained = Normalize("""{"commands":{"tool":{"flags":[{"name":"enabled","type":"boolean"}]}}}""");
+        var narrowed = Normalize("""{"commands":{"tool":{"flags":[{"name":"enabled","type":"boolean","choices":[{"value":true}]}]}}}""");
+
+        Assert.Contains(CompatibilityAnalyzer.Compare(unconstrained, narrowed).Findings, finding => finding.Code == "KMCLI107" && finding.Category == "breaking");
+    }
+
+    [Fact]
     public void RemovingAChoiceRemainsBreakingWhenAnotherChoiceIsAdded()
     {
         var baseline = Normalize("""{"commands":{"tool":{"flags":[{"name":"colour","type":"string","choices":[{"value":"red"},{"value":"blue"}]}]}}}""");

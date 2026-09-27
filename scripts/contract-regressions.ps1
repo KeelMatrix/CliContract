@@ -366,6 +366,40 @@ try {
     Assert-Case 'requiredness-suppressed' $suppressed 0 'COMPATIBLE'
     if (($suppressed.Output -join "`n") -match 'KMCLI106') { throw 'Suppressing KMCLI105 left an implicit KMCLI106.' }
 
+    $duplicateIgnore = Join-Path $temp 'duplicate-ignore.json'
+    Write-Utf8 $duplicateIgnore '{"codes":[],"codes":[]}'
+    Assert-Case 'duplicate-ignore-properties' (Invoke-Tool @('diff', $optional, $required, '--ignore', $duplicateIgnore, '--format', 'json', '--no-telemetry')) 2 'INVALID_IGNORE'
+    $nullIgnore = Join-Path $temp 'null-ignore.json'
+    Write-Utf8 $nullIgnore '{"codes":null}'
+    Assert-Case 'null-ignore-property' (Invoke-Tool @('diff', $optional, $required, '--ignore', $nullIgnore, '--no-telemetry')) 2 'INVALID_IGNORE'
+
+    $hostileOld = $valid.Replace('"name":"region"', '"name":"safe\n::warning::clicontract-review-marker\r"')
+    $hostileNew = $valid.Replace('"flags":[{"name":"region","type":"string"}]', '"flags":[]')
+    $hostileOldPath = Join-Path $temp 'hostile-old.json'
+    $hostileNewPath = Join-Path $temp 'hostile-new.json'
+    Write-Utf8 $hostileOldPath $hostileOld
+    Write-Utf8 $hostileNewPath $hostileNew
+    $hostileOutput = Invoke-Tool @('diff', $hostileOldPath, $hostileNewPath, '--format', 'text', '--no-telemetry')
+    Assert-Case 'hostile-diagnostic-rendering' $hostileOutput 1 '\n'
+    if (($hostileOutput.Output -join "`n") -match '(?m)^::warning::' -or ($hostileOutput.Output -join "`n") -match 'safe`n') {
+        throw 'Hostile diagnostic data reached console output as a workflow marker or physical line break.'
+    }
+
+    $manyFlags = (0..1499 | ForEach-Object { '{"name":"f' + $_.ToString('D4') + '","type":"string"}' }) -join ','
+    $largeSourcePath = Join-Path $temp 'large-output-source.json'
+    Write-Utf8 $largeSourcePath ($valid.Replace('"flags":[{"name":"region","type":"string"}]', '"flags":[' + $manyFlags + ']'))
+    Assert-Case 'canonical-output-admission' (Invoke-Tool @('snapshot', $largeSourcePath, '--no-telemetry', '--output', (Join-Path $temp 'large-output.canonical.json'))) 3 'NODE_LIMIT'
+
+    $amplifiedCommands = @()
+    $commandPath = 'tool'
+    for ($index = 1; $index -le 24; $index++) {
+        $commandPath += ' command' + $index
+        $amplifiedCommands += '"' + $commandPath + '":{"aliases":["alias' + $index + '"]}'
+    }
+    $amplifiedSourcePath = Join-Path $temp 'amplified-invocations.json'
+    Write-Utf8 $amplifiedSourcePath ('{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{' + ($amplifiedCommands -join ',') + '}}')
+    Assert-Case 'bounded-invocation-amplification' (Invoke-Tool @('validate', $amplifiedSourcePath, '--no-telemetry')) 3 'DERIVED_INVOCATION_LIMIT'
+
     $defaultTelemetryOptOut = Invoke-Tool @('diff', $optional, $required, '--format', 'text')
     Assert-Case 'shared-telemetry-optout' $defaultTelemetryOptOut 1 'KMCLI105'
 

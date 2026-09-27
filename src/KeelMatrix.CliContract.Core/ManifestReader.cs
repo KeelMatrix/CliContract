@@ -8,6 +8,34 @@ public static class CanonicalManifestReader
 {
     public const int SupportedSchemaVersion = 2;
 
+    internal static void ValidateSerializedAdmission(string input, NormalizationLimits limits)
+    {
+        if (Encoding.UTF8.GetByteCount(input) > limits.MaxCanonicalOutputBytes)
+        {
+            throw new NormalizationException("CANONICAL_OUTPUT_TOO_LARGE", "The canonical manifest exceeds the configured serialized-output size limit.");
+        }
+
+        try
+        {
+            var outputLimits = limits with { MaxInputBytes = limits.MaxCanonicalOutputBytes, MaxNodes = limits.MaxCanonicalOutputNodes };
+            using var parsed = JsonDocument.Parse(input, new JsonDocumentOptions
+            {
+                MaxDepth = outputLimits.MaxDepth + 1,
+                AllowTrailingCommas = false,
+                CommentHandling = JsonCommentHandling.Disallow
+            });
+            ValidateJsonDocument(parsed.RootElement, 0, outputLimits, new Counter());
+        }
+        catch (NormalizationException)
+        {
+            throw;
+        }
+        catch (JsonException)
+        {
+            throw new NormalizationException("CANONICAL_OUTPUT_INVALID", "The canonical manifest could not be admitted as bounded JSON.");
+        }
+    }
+
     public static CanonicalManifest Read(string input, NormalizationLimits? limits = null)
     {
         var bounded = limits ?? new NormalizationLimits();
