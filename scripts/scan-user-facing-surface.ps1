@@ -111,7 +111,7 @@ if ($SelfTest) {
 
         $marker = 'pr' + 'obe'
         [IO.File]::AppendAllText((Join-Path $temp 'README.md'), "`n$marker`n")
-        $childOutput = @(& pwsh -NoProfile -WindowStyle Hidden -File $PSCommandPath -RootPath $temp 2>&1)
+        $childOutput = @(& pwsh -NoProfile -File $PSCommandPath -RootPath $temp 2>&1)
         $childExit = $LASTEXITCODE
         if ($childExit -eq 0) {
             throw 'Surface wording gate accepted an injected forbidden term.'

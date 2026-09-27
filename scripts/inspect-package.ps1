@@ -148,7 +148,7 @@ if ($SelfTest) {
         $mutatedPackage = Join-Path $selfTestRoot 'mutated.nupkg'
         Copy-Item -LiteralPath $packagePath -Destination $mutatedPackage
         Add-ArchiveMarker -ArchivePath $mutatedPackage -Marker ('pr' + 'obe')
-        $childOutput = @(& pwsh -NoProfile -WindowStyle Hidden -File $PSCommandPath -PackagePath $mutatedPackage -RepositoryRoot $root 2>&1)
+        $childOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $mutatedPackage -RepositoryRoot $root 2>&1)
         $childExit = $LASTEXITCODE
         if ($childExit -eq 0) {
             throw 'Package wording gate accepted an injected forbidden term.'
@@ -170,7 +170,7 @@ if ($SelfTest) {
             else {
                 Add-ArchiveEntry -ArchivePath $casePackage -EntryName $case.Entry
             }
-            $caseOutput = @(& pwsh -NoProfile -WindowStyle Hidden -File $PSCommandPath -PackagePath $casePackage -RepositoryRoot $root 2>&1)
+        $caseOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -RepositoryRoot $root 2>&1)
             $caseExit = $LASTEXITCODE
             if ($caseExit -eq 0) { throw "Package inspection accepted self-test case $($case.Name)." }
             Write-Output "PACKAGE_NEGATIVE_SELF_TEST=$($case.Name) child_exit=$caseExit"

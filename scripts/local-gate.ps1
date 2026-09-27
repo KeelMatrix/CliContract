@@ -17,23 +17,23 @@ dotnet build KeelMatrix.CliContract.sln -c Release --no-restore --nologo
 Assert-NativeSuccess 'Release build'
 dotnet test KeelMatrix.CliContract.sln -c Release --no-build --nologo
 Assert-NativeSuccess 'Release tests'
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/contract-regressions.ps1
+& pwsh -NoProfile -File ./scripts/contract-regressions.ps1
 Assert-NativeSuccess 'Consumer contract regressions'
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/verify-determinism.ps1
+& pwsh -NoProfile -File ./scripts/verify-determinism.ps1
 Assert-NativeSuccess 'Determinism verification'
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/check-no-execution.ps1
+& pwsh -NoProfile -File ./scripts/check-no-execution.ps1
 Assert-NativeSuccess 'No-execution source scan'
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/test-no-execution.ps1
+& pwsh -NoProfile -File ./scripts/test-no-execution.ps1
 Assert-NativeSuccess 'No-execution harness'
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/scan-user-facing-surface.ps1 -SelfTest
+& pwsh -NoProfile -File ./scripts/scan-user-facing-surface.ps1 -SelfTest
 Assert-NativeSuccess 'User-facing wording scan'
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/verify-error-taxonomy.ps1
+& pwsh -NoProfile -File ./scripts/verify-error-taxonomy.ps1
 Assert-NativeSuccess 'Error taxonomy documentation check'
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/validate-sensitive-paths.ps1 -SelfTest
+& pwsh -NoProfile -File ./scripts/validate-sensitive-paths.ps1 -SelfTest
 Assert-NativeSuccess 'Sensitive-path ingress safety'
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/scan-history-wording.ps1 -SelfTest
+& pwsh -NoProfile -File ./scripts/scan-history-wording.ps1 -SelfTest
 Assert-NativeSuccess 'Reachable history wording scan'
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/verify-release-contract.ps1 -SelfTest
+& pwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -SelfTest
 Assert-NativeSuccess 'Release contract self-test'
  $audit = dotnet list KeelMatrix.CliContract.sln package --vulnerable --include-transitive --configfile NuGet.config 2>&1
  $audit | Out-Host
@@ -45,11 +45,11 @@ $package = Join-Path $packageDir 'KeelMatrix.CliContract.0.1.0.nupkg'
 $symbols = Join-Path $packageDir 'KeelMatrix.CliContract.0.1.0.snupkg'
 if (-not (Test-Path -LiteralPath $symbols)) { throw 'Expected symbol package was not produced.' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/verify-release-artifacts.ps1 -ArtifactDirectory $packageDir -Version '0.1.0' -SelfTest
+& pwsh -NoProfile -File ./scripts/verify-release-artifacts.ps1 -ArtifactDirectory $packageDir -Version '0.1.0' -SelfTest
 Assert-NativeSuccess 'Package artifact allowlist'
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/inspect-package.ps1 -PackagePath $package -SelfTest
+& pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath $package -SelfTest
 Assert-NativeSuccess 'Package inspection'
-& pwsh -NoProfile -WindowStyle Hidden -File ./scripts/source-producibility-guard.ps1 -PackagePath $package
+& pwsh -NoProfile -File ./scripts/source-producibility-guard.ps1 -PackagePath $package
 Assert-NativeSuccess 'Source-producibility guard and package consumer smoke'
 $elapsed = (Get-Date) - $started
 Write-Output ("LOCAL_GATE=PASS duration_ms={0}" -f [Math]::Round($elapsed.TotalMilliseconds))

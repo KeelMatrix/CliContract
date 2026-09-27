@@ -100,7 +100,7 @@ if ($SelfTest) {
             finally { $stream.Dispose() }
         }
         finally { $archive.Dispose() }
-        $packageOutput = @(& pwsh -NoProfile -WindowStyle Hidden -File $PSCommandPath -ArtifactDirectory $selfTestRoot -Version $Version 2>&1)
+        $packageOutput = @(& pwsh -NoProfile -File $PSCommandPath -ArtifactDirectory $selfTestRoot -Version $Version 2>&1)
         $packageExit = $LASTEXITCODE
         if ($packageExit -eq 0) { throw 'Release artifact validation accepted an extra package metadata entry.' }
         Write-Output "PACKAGE_METADATA_NEGATIVE_SELF_TEST=PASS child_exit=$packageExit"
@@ -115,7 +115,7 @@ if ($SelfTest) {
             finally { $stream.Dispose() }
         }
         finally { $archive.Dispose() }
-        $childOutput = @(& pwsh -NoProfile -WindowStyle Hidden -File $PSCommandPath -ArtifactDirectory $selfTestRoot -Version $Version 2>&1)
+        $childOutput = @(& pwsh -NoProfile -File $PSCommandPath -ArtifactDirectory $selfTestRoot -Version $Version 2>&1)
         $childExit = $LASTEXITCODE
         if ($childExit -eq 0) { throw 'Release artifact validation accepted an extra symbol metadata entry.' }
         Write-Output "SYMBOL_METADATA_NEGATIVE_SELF_TEST=PASS child_exit=$childExit"

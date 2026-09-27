@@ -37,7 +37,7 @@ if ($SelfTest) {
         & git -C $selfTestRoot add history.txt
         & git -C $selfTestRoot commit --quiet -m 'Keep history clean'
 
-        $selfTestOutput = @(& pwsh -NoProfile -WindowStyle Hidden -File $PSCommandPath -RepositoryRoot $selfTestRoot 2>&1)
+        $selfTestOutput = @(& pwsh -NoProfile -File $PSCommandPath -RepositoryRoot $selfTestRoot 2>&1)
         $selfTestExit = $LASTEXITCODE
         if ($selfTestExit -eq 0 -or ($selfTestOutput -join "`n") -notmatch 'HISTORY_WORDING_HIT=') {
             throw 'History wording self-test failed to detect a forbidden earlier commit.'
