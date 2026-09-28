@@ -65,7 +65,7 @@ public sealed class NormalizationTests
     [InlineData(" ", true)]
     [InlineData("\t", true)]
     [InlineData("\f", true)]
-    [InlineData("\r", true)]
+    [InlineData("\r", false)]
     [InlineData("\n", false)]
     [InlineData("\v", false)]
     [InlineData("\u00a0", false)]
@@ -73,7 +73,7 @@ public sealed class NormalizationTests
     [InlineData("\u202f", false)]
     public void Alpha14CommandKeyDelimiterClassMatchesPinnedGoGrammar(string separator, bool isDelimiter)
     {
-        foreach (var document in new[] { CommandKeyJson(separator), CommandKeyYaml(separator) })
+        foreach (var document in new[] { CommandKeyJson("tool" + separator + "run"), CommandKeyYaml("tool" + separator + "run") })
         {
             if (isDelimiter)
             {
@@ -92,12 +92,41 @@ public sealed class NormalizationTests
     [InlineData(" ")]
     [InlineData("\t")]
     [InlineData("\f")]
-    [InlineData("\r")]
     public void Alpha14ParameterBoundaryUsesPinnedWhitespaceClass(string separator)
     {
-        var document = CommandKeyJson(separator, "<target>");
+        var document = CommandKeyJson("tool" + separator + "<target>");
         var manifest = Normalizer.Normalize("opencli", document);
         Assert.Equal("root", manifest.Root.Path);
+    }
+
+    [Fact]
+    public void Alpha14CommandKeyDifferentialTablePreservesPinnedRegexSegmentation()
+    {
+        // These expected values are derived from the tagged Go regexes, not
+        // from the implementation under test:
+        //   paramsRE.Split(key, -1)[0] with [^\S\r\n][^A-Za-z]
+        //   wsRE.Split(commandLine, -1) with [^\S\r\n]+.
+        // The project contract rejects empty edge segments because its
+        // canonical root is the nonempty info.binary command segment.
+        foreach (var testCase in PinnedCommandKeyCases)
+        {
+            Assert.Equal(testCase.ExpectedCommandLine, DeriveCommandLine(testCase.Key));
+            Assert.Equal(testCase.ExpectedSegments, DeriveSegments(testCase.ExpectedCommandLine));
+
+            foreach (var document in new[] { CommandKeyJson(testCase.Key), CommandKeyYaml(testCase.Key) })
+            {
+                if (testCase.ExpectedPath is not null)
+                {
+                    var manifest = Normalizer.Normalize("opencli", document);
+                    Assert.Contains(manifest.Root.Subcommands.Append(manifest.Root), command => command.Path == testCase.ExpectedPath);
+                }
+                else
+                {
+                    var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", document));
+                    Assert.Equal(testCase.ExpectedError, error.Code);
+                }
+            }
+        }
     }
 
     [Fact]
@@ -1549,35 +1578,111 @@ public sealed class NormalizationTests
         }.ToJsonString());
     }
 
-    private static string CommandKeyJson(string separator, string suffix = "run")
+    private sealed record PinnedCommandKeyCase(
+        string Name,
+        string Key,
+        string ExpectedCommandLine,
+        string[] ExpectedSegments,
+        string? ExpectedPath,
+        string? ExpectedError);
+
+    private static readonly PinnedCommandKeyCase[] PinnedCommandKeyCases =
+    [
+        new("ordinary-space", "tool run", "tool run", ["tool", "run"], "root / run", null),
+        new("tab", "tool\trun", "tool\trun", ["tool", "run"], "root / run", null),
+        new("form-feed", "tool\frun", "tool\frun", ["tool", "run"], "root / run", null),
+        new("vertical-tab-data", "tool\vrun", "tool\vrun", ["tool\vrun"], null, "OPENCLI_COMMAND_KEY"),
+        new("carriage-return-data", "tool\rrun", "tool\rrun", ["tool\rrun"], null, "OPENCLI_COMMAND_KEY"),
+        new("line-feed-data", "tool\nrun", "tool\nrun", ["tool\nrun"], null, "OPENCLI_COMMAND_KEY"),
+        new("nbsp-data", "tool\u00a0run", "tool\u00a0run", ["tool\u00a0run"], null, "OPENCLI_COMMAND_KEY"),
+        new("em-space-data", "tool\u2003run", "tool\u2003run", ["tool\u2003run"], null, "OPENCLI_COMMAND_KEY"),
+        new("narrow-nbsp-data", "tool\u202frun", "tool\u202frun", ["tool\u202frun"], null, "OPENCLI_COMMAND_KEY"),
+        new("doubled-space", "tool  run", "tool", ["tool"], "root", null),
+        new("leading-space", " tool sub", " tool sub", ["", "tool", "sub"], null, "OPENCLI_COMMAND_KEY"),
+        new("trailing-space", "tool ", "tool ", ["tool", ""], null, "OPENCLI_COMMAND_KEY"),
+        new("space-before-ascii-letter", "tool run", "tool run", ["tool", "run"], "root / run", null),
+        new("space-before-dash-modifier", "tool --flag", "tool", ["tool"], "root", null),
+        new("space-before-angle-modifier", "tool <value>", "tool", ["tool"], "root", null),
+        new("space-before-brace-modifier", "tool {command}", "tool", ["tool"], "root", null),
+        new("space-before-bracket-modifier", "tool [flags]", "tool", ["tool"], "root", null),
+        new("adjacent-dash-data", "tool run--flag", "tool run--flag", ["tool", "run--flag"], "root / run--flag", null),
+        new("adjacent-angle-data", "tool run<value>", "tool run<value>", ["tool", "run<value>"], "root / run<value>", null),
+        new("non-ascii-segment", "tool runé", "tool runé", ["tool", "runé"], "root / runé", null),
+        new("space-before-non-ascii", "tool é", "tool", ["tool"], "root", null),
+        new("non-ascii-root-data", "toolé", "toolé", ["toolé"], null, "OPENCLI_COMMAND_KEY")
+    ];
+
+    private static string DeriveCommandLine(string key)
+    {
+        for (var index = 0; index + 1 < key.Length; index++)
+        {
+            if (key[index] is not (' ' or '\t' or '\f')) continue;
+            if (!IsAsciiLetter(key[index + 1])) return key[..index];
+        }
+
+        return key;
+    }
+
+    private static string[] DeriveSegments(string commandLine)
+    {
+        var segments = new List<string>();
+        var start = 0;
+        var index = 0;
+        while (index < commandLine.Length)
+        {
+            if (commandLine[index] is not (' ' or '\t' or '\f'))
+            {
+                index++;
+                continue;
+            }
+
+            var delimiterStart = index;
+            while (index < commandLine.Length && commandLine[index] is ' ' or '\t' or '\f') index++;
+            segments.Add(commandLine[start..delimiterStart]);
+            start = index;
+        }
+
+        segments.Add(commandLine[start..]);
+        return segments.ToArray();
+    }
+
+    private static bool IsAsciiLetter(char value) => value is >= 'A' and <= 'Z' or >= 'a' and <= 'z';
+
+    private static string CommandKeyJson(string key)
     {
         var document = new JsonObject
         {
             ["commands"] = new JsonObject
             {
-                ["tool" + separator + suffix] = new JsonObject()
+                [key] = new JsonObject()
             }
         };
         return OpenCliDocument(document.ToJsonString());
     }
 
-    private static string CommandKeyYaml(string separator)
+    private static string CommandKeyYaml(string key)
     {
-        var escapedSeparator = separator switch
+        var escapedKey = new System.Text.StringBuilder();
+        foreach (var value in key)
         {
-            "\t" => "\\t",
-            "\f" => "\\f",
-            "\r" => "\\r",
-            "\n" => "\\n",
-            "\v" => "\\v",
-            _ => separator
-        };
+            _ = value switch
+            {
+                '\\' => escapedKey.Append("\\\\"),
+                '"' => escapedKey.Append("\\\""),
+                '\t' => escapedKey.Append("\\t"),
+                '\f' => escapedKey.Append("\\f"),
+                '\r' => escapedKey.Append("\\r"),
+                '\n' => escapedKey.Append("\\n"),
+                '\v' => escapedKey.Append("\\v"),
+                _ => escapedKey.Append(value)
+            };
+        }
 
         return $$"""
         opencliVersion: 1.0.0-alpha.14
         info: {title: Tool, binary: tool, version: '1'}
         commands:
-          "tool{{escapedSeparator}}run": {}
+          "{{escapedKey}}": {}
         """;
     }
 

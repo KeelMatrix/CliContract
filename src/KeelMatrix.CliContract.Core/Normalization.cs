@@ -1413,9 +1413,9 @@ public static class Normalizer
 
         var commandLine = commandEnd < 0 ? key : key[..commandEnd];
         var tokens = SplitPinnedOpenCliWhitespace(commandLine);
-        if (tokens.Length == 0)
+        if (tokens.Length == 0 || tokens.Any(token => token.Length == 0))
         {
-            throw new NormalizationException("OPENCLI_COMMAND_KEY", "An OpenCLI command key must contain a command name.");
+            throw new NormalizationException("OPENCLI_COMMAND_KEY", "An OpenCLI command key must contain nonempty command segments.");
         }
 
         if (!string.Equals(tokens[0], binary, StringComparison.Ordinal))
@@ -1426,22 +1426,33 @@ public static class Normalizer
         return tokens.Length == 1 ? "root" : "root / " + string.Join(" / ", tokens.Skip(1));
     }
 
-    // The pinned alpha.14 grammar uses Go's [^\S\n] class, which is
-    // [space, tab, form feed, carriage return]. It intentionally excludes
-    // LF, vertical tab, and all Unicode whitespace.
-    private static bool IsPinnedOpenCliWhitespace(char value) => value is ' ' or '\t' or '\f' or '\r';
+    // Go's regexp \s class is [space, tab, LF, form feed, CR]. The pinned
+    // [^\S\r\n] class therefore matches only space, tab, and form feed.
+    private static bool IsPinnedOpenCliWhitespace(char value) => value is ' ' or '\t' or '\f';
 
     private static string[] SplitPinnedOpenCliWhitespace(string value)
     {
         var tokens = new List<string>();
         var start = 0;
-        for (var index = 0; index <= value.Length; index++)
+        var index = 0;
+        while (index < value.Length)
         {
-            if (index < value.Length && !IsPinnedOpenCliWhitespace(value[index])) continue;
-            if (index > start) tokens.Add(value[start..index]);
-            start = index + 1;
+            if (!IsPinnedOpenCliWhitespace(value[index]))
+            {
+                index++;
+                continue;
+            }
+
+            var delimiterStart = index;
+            while (index < value.Length && IsPinnedOpenCliWhitespace(value[index])) index++;
+            tokens.Add(value[start..delimiterStart]);
+            start = index;
         }
 
+        // Go's regexp.Split keeps the empty substring before a leading
+        // separator and after a trailing separator. The + quantifier above
+        // collapses each run into one separator match.
+        tokens.Add(value[start..]);
         return tokens.ToArray();
     }
 

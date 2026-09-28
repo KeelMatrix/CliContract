@@ -62,7 +62,7 @@ The only supported upstream format is OpenCLI `1.0.0-alpha.14`. Unknown format v
 
 The OpenCLI adapter status is pinned to `1.0.0-alpha.14`; official examples and the regression corpus are revalidated before each material adapter release. A future upstream version is not accepted until its contract is explicitly reviewed and versioned.
 
-For command-key parsing, the pinned alpha.14 delimiter class is ASCII space, tab, form feed, and carriage return. LF, vertical tab, NBSP, em-space, and narrow NBSP remain command-key data; modifier boundaries use the same pinned class and require a following non-ASCII-letter character.
+For command-key parsing, the pinned alpha.14 grammar uses Go's `[^\S\r\n]` class: ASCII space, tab, and form feed only. CR, LF, vertical tab, NBSP, em-space, and narrow NBSP remain command-key data; `paramsRE` ends the command prefix at a pinned delimiter followed by a non-ASCII-letter character. Its `+` whitespace split preserves empty edge segments, so CliContract rejects leading or trailing pinned whitespace with `OPENCLI_COMMAND_KEY` rather than silently filtering it; repeated whitespace is handled by the preceding modifier boundary.
 
 The tool does not execute described CLIs, infer runtime behavior, generate clients or documentation, parse help output, fetch remote references, or provide a hosted registry.
 

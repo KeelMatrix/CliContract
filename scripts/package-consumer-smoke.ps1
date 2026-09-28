@@ -132,37 +132,59 @@ try {
         Write-Output "CASE=$Label exit=$exit code=$ExpectedCode"
     }
 
-    # Independent pinned alpha.14 oracle. This list is intentionally explicit
-    # rather than sharing parser helpers with the product under test.
-    function New-InstalledDelimiterDocument([string] $Separator, [bool] $Yaml) {
+    # Independent pinned alpha.14 oracle. Go's \s is space, tab, LF, form
+    # feed, and CR; [^\S\r\n] therefore matches only space, tab, and form
+    # feed. paramsRE ends before a delimiter followed by a non-ASCII letter.
+    # This list is intentionally explicit rather than sharing parser helpers.
+    function ConvertTo-InstalledYamlKey([string] $Value) {
+        $builder = [Text.StringBuilder]::new()
+        foreach ($character in $Value.ToCharArray()) {
+            switch ([int][char]$character) {
+                9 { [void]$builder.Append('\t') }
+                10 { [void]$builder.Append('\n') }
+                11 { [void]$builder.Append('\v') }
+                12 { [void]$builder.Append('\f') }
+                13 { [void]$builder.Append('\r') }
+                34 { [void]$builder.Append('\"') }
+                92 { [void]$builder.Append('\\') }
+                default { [void]$builder.Append($character) }
+            }
+        }
+        return $builder.ToString()
+    }
+
+    function New-InstalledCommandKeyDocument([string] $Key, [bool] $Yaml) {
         if (-not $Yaml) {
             $document = [ordered]@{ opencliVersion = '1.0.0-alpha.14'; info = [ordered]@{ title = 'Tool'; binary = 'tool'; version = '1' }; commands = [ordered]@{} }
-            $document.commands[('tool' + $Separator + 'run')] = [ordered]@{}
+            $document.commands[$Key] = [ordered]@{}
             return ($document | ConvertTo-Json -Depth 20 -Compress)
         }
-        $escape = switch ([int][char]$Separator) {
-            9 { '\t' }; 10 { '\n' }; 11 { '\v' }; 12 { '\f' }; 13 { '\r' }
-            160 { '\u00A0' }; 8195 { '\u2003' }; 8239 { '\u202F' }; default { $Separator }
-        }
+        $escapedKey = ConvertTo-InstalledYamlKey $Key
         return @"
 opencliVersion: 1.0.0-alpha.14
 info: {title: Tool, binary: tool, version: '1'}
 commands:
-  "tool${escape}run": {}
+  "$escapedKey": {}
 "@
     }
 
     $installedDelimiterCases = @(
-        @{ Name = 'space'; Separator = [char]0x20; Valid = $true }, @{ Name = 'tab'; Separator = [char]0x09; Valid = $true },
-        @{ Name = 'form-feed'; Separator = [char]0x0c; Valid = $true }, @{ Name = 'carriage-return'; Separator = [char]0x0d; Valid = $true },
-        @{ Name = 'line-feed'; Separator = [char]0x0a; Valid = $false }, @{ Name = 'vertical-tab'; Separator = [char]0x0b; Valid = $false },
-        @{ Name = 'nbsp'; Separator = [char]0x00a0; Valid = $false }, @{ Name = 'em-space'; Separator = [char]0x2003; Valid = $false },
-        @{ Name = 'narrow-nbsp'; Separator = [char]0x202f; Valid = $false }
+        @{ Name = 'ordinary-space'; Key = 'tool run'; Valid = $true }, @{ Name = 'tab'; Key = ('tool' + [char]0x09 + 'run'); Valid = $true },
+        @{ Name = 'form-feed'; Key = ('tool' + [char]0x0c + 'run'); Valid = $true }, @{ Name = 'vertical-tab-data'; Key = ('tool' + [char]0x0b + 'run'); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
+        @{ Name = 'carriage-return-data'; Key = ('tool' + [char]0x0d + 'run'); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' }, @{ Name = 'line-feed-data'; Key = ('tool' + [char]0x0a + 'run'); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
+        @{ Name = 'nbsp-data'; Key = ('tool' + [char]0x00a0 + 'run'); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' }, @{ Name = 'em-space-data'; Key = ('tool' + [char]0x2003 + 'run'); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
+        @{ Name = 'narrow-nbsp-data'; Key = ('tool' + [char]0x202f + 'run'); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' }, @{ Name = 'doubled-space'; Key = 'tool  run'; Valid = $true },
+        @{ Name = 'leading-space'; Key = ' tool sub'; Valid = $false; Code = 'OPENCLI_COMMAND_KEY' }, @{ Name = 'trailing-space'; Key = 'tool '; Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
+        @{ Name = 'space-before-ascii-letter'; Key = 'tool run'; Valid = $true }, @{ Name = 'space-before-dash-modifier'; Key = 'tool --flag'; Valid = $true },
+        @{ Name = 'space-before-angle-modifier'; Key = 'tool <value>'; Valid = $true }, @{ Name = 'space-before-brace-modifier'; Key = 'tool {command}'; Valid = $true },
+        @{ Name = 'space-before-bracket-modifier'; Key = 'tool [flags]'; Valid = $true }, @{ Name = 'adjacent-dash-data'; Key = 'tool run--flag'; Valid = $true },
+        @{ Name = 'adjacent-angle-data'; Key = 'tool run<value>'; Valid = $true }, @{ Name = 'non-ascii-segment'; Key = ('tool run' + [char]0x00e9); Valid = $true },
+        @{ Name = 'space-before-non-ascii'; Key = ('tool ' + [char]0x00e9); Valid = $true }, @{ Name = 'non-ascii-root-data'; Key = ('tool' + [char]0x00e9); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' }
     )
     foreach ($case in $installedDelimiterCases) {
         foreach ($format in @('json', 'yaml')) {
             $path = Join-Path $temp "installed-pinned-$($case.Name).$format"
-            [IO.File]::WriteAllText($path, (New-InstalledDelimiterDocument -Separator $case.Separator -Yaml ($format -eq 'yaml')), [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($path, (New-InstalledCommandKeyDocument -Key $case.Key -Yaml ($format -eq 'yaml')), [Text.UTF8Encoding]::new($false))
             $label = "installed-pinned-$($case.Name)-$format"
             if ($case.Valid) {
                 $baseline = Join-Path $temp "$label.canonical.json"
@@ -172,10 +194,10 @@ commands:
                 & $tool diff $path $path --input opencli --no-telemetry | Out-Host; if ($LASTEXITCODE -ne 0) { throw "$label diff failed." }
             }
             else {
-                Assert-InstalledError "$label-validate" 3 'OPENCLI_COMMAND_KEY' @('validate', $path, '--input', 'opencli', '--no-telemetry')
-                Assert-InstalledError "$label-snapshot" 3 'OPENCLI_COMMAND_KEY' @('snapshot', $path, '--input', 'opencli', '--output', (Join-Path $temp "$label.json"), '--no-telemetry')
-                Assert-InstalledError "$label-check" 3 'OPENCLI_COMMAND_KEY' @('check', $path, '--input', 'opencli', '--baseline', $officialBaseline, '--no-telemetry')
-                Assert-InstalledError "$label-diff" 3 'OPENCLI_COMMAND_KEY' @('diff', $path, $path, '--input', 'opencli', '--no-telemetry')
+                Assert-InstalledError "$label-validate" 3 $case.Code @('validate', $path, '--input', 'opencli', '--no-telemetry')
+                Assert-InstalledError "$label-snapshot" 3 $case.Code @('snapshot', $path, '--input', 'opencli', '--output', (Join-Path $temp "$label.json"), '--no-telemetry')
+                Assert-InstalledError "$label-check" 3 $case.Code @('check', $path, '--input', 'opencli', '--baseline', $officialBaseline, '--no-telemetry')
+                Assert-InstalledError "$label-diff" 3 $case.Code @('diff', $path, $path, '--input', 'opencli', '--no-telemetry')
             }
         }
     }

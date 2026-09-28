@@ -25,7 +25,7 @@ Use `--format json` for CI consumers, `--fail-on warning` to gate warnings, and 
 
 Input selection uses one role contract for every verb. `--input opencli` requires OpenCLI source for every source-schema operand and rejects canonical manifests. `diff --input auto` accepts source/source, canonical/canonical, and mixed operand pairs in either order; canonical input is not an undocumented explicit-OpenCLI mode. `snapshot`, `validate`, and the source operand of `check` reject canonical input, while `check --baseline` always reads a canonical manifest. Malformed or ambiguous canonical-like JSON fails closed.
 
-The alpha.14 command-key delimiter class is ASCII space, tab, form feed, and carriage return. LF, vertical tab, NBSP, em-space, and narrow NBSP are not delimiters; modifier boundaries use that same class and require a following non-ASCII-letter character.
+The alpha.14 command-key delimiter class is Go's `[^\S\r\n]`: ASCII space, tab, and form feed only. CR, LF, vertical tab, NBSP, em-space, and narrow NBSP are not delimiters; modifier boundaries use that same class and require a following non-ASCII-letter character. Whitespace-edge empty segments are preserved by the grammar and rejected with `OPENCLI_COMMAND_KEY` because the canonical root must be the nonempty `info.binary` segment.
 
 Text output escapes user-derived control and format characters, bidi overrides and isolates, zero-width characters, line separators, C0/C1 controls, and workflow-command marker delimiters at the final diagnostic boundary.
 
