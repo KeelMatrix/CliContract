@@ -11,6 +11,10 @@ and any relevant environment details. Do not include credentials or other sensit
 Security reports are separate from ordinary bug reports and community-conduct reports. We will review a report and
 coordinate a responsible fix and disclosure.
 
+## Diagnostic display safety
+
+Text diagnostics escape Unicode control and format characters, bidi overrides and isolates, zero-width characters, line separators, C0/C1 controls, and workflow-command marker delimiters before writing user-derived paths, aliases, findings, errors, or arguments.
+
 ## Supported Versions
 
 The maintained `0.1.x` version line is supported with security fixes. Older versions and unreleased development builds

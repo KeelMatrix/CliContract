@@ -114,22 +114,15 @@ internal static class CliApplication
     private static CanonicalManifest LoadSource(string path, InputKind inputKind)
     {
         var input = ReadFile(path, FileRole.SourceSchema);
-        if (inputKind == InputKind.OpenCli)
+        var kind = ClassifyInput(input);
+        if (kind == InputDocumentKind.Canonical)
         {
-            return Normalizer.Normalize("opencli", input);
+            throw new NormalizationException("UNSUPPORTED_INPUT", "Canonical manifests are accepted only as diff operands with --input auto.");
         }
 
-        var trimmed = input.TrimStart();
-        if (trimmed.StartsWith('{'))
+        if (kind == InputDocumentKind.Ambiguous)
         {
-            if (HasTopLevelProperty(input, "opencliVersion") && HasTopLevelProperty(input, "SchemaVersion"))
-            {
-                throw new NormalizationException("AMBIGUOUS_INPUT", "The input matches more than one supported schema shape.");
-            }
-            if (HasTopLevelProperty(input, "SchemaVersion") && HasTopLevelProperty(input, "Adapter"))
-            {
-                throw new NormalizationException("UNSUPPORTED_INPUT", "Canonical manifests are not source schemas for snapshot or validate.");
-            }
+            throw new NormalizationException("AMBIGUOUS_INPUT", "The input matches more than one supported schema shape.");
         }
 
         return Normalizer.Normalize("opencli", input);
@@ -138,23 +131,20 @@ internal static class CliApplication
     private static CanonicalManifest LoadDescription(string path, InputKind inputKind)
     {
         var input = ReadFile(path, FileRole.SourceSchema);
-        if (LooksLikeCanonicalManifest(input))
+        var kind = ClassifyInput(input);
+        if (kind == InputDocumentKind.Ambiguous)
         {
-            return CanonicalManifestReader.Read(input);
+            throw new NormalizationException("AMBIGUOUS_INPUT", "The input matches more than one supported schema shape.");
         }
 
-        if (inputKind == InputKind.OpenCli)
+        if (kind == InputDocumentKind.Canonical)
         {
-            return Normalizer.Normalize("opencli", input);
-        }
-
-        var trimmed = input.TrimStart();
-        if (trimmed.StartsWith('{'))
-        {
-            if (HasTopLevelProperty(input, "opencliVersion") && HasTopLevelProperty(input, "SchemaVersion"))
+            if (inputKind == InputKind.OpenCli)
             {
-                throw new NormalizationException("AMBIGUOUS_INPUT", "The input matches more than one supported schema shape.");
+                throw new NormalizationException("UNSUPPORTED_INPUT", "The --input opencli selection requires OpenCLI source schemas; canonical manifests are accepted only with --input auto.");
             }
+
+            return CanonicalManifestReader.Read(input);
         }
 
         return Normalizer.Normalize("opencli", input);
@@ -279,21 +269,9 @@ internal static class CliApplication
 
     private static string WriteFailureCode(FileRole role) => role == FileRole.OutputDestination ? "OUTPUT_NOT_WRITABLE" : "INVALID_INVOCATION";
 
-    private static bool LooksLikeCanonicalManifest(string input)
+    private static InputDocumentKind ClassifyInput(string input)
     {
-        if (!input.TrimStart().StartsWith('{')) return false;
-        try
-        {
-            return HasTopLevelProperty(input, "SchemaVersion") && HasTopLevelProperty(input, "Adapter") && HasTopLevelProperty(input, "Root");
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-    }
-
-    private static bool HasTopLevelProperty(string input, string property)
-    {
+        if (!input.TrimStart().StartsWith('{')) return InputDocumentKind.Source;
         try
         {
             using var document = JsonDocument.Parse(input, new JsonDocumentOptions
@@ -301,11 +279,22 @@ internal static class CliApplication
                 AllowTrailingCommas = false,
                 CommentHandling = JsonCommentHandling.Disallow
             });
-            return document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.TryGetProperty(property, out _);
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return InputDocumentKind.Source;
+
+            var hasOpenCli = document.RootElement.TryGetProperty("opencliVersion", out _);
+            var hasCanonical = document.RootElement.TryGetProperty("SchemaVersion", out _) ||
+                document.RootElement.TryGetProperty("Adapter", out _) ||
+                document.RootElement.TryGetProperty("Root", out _);
+            return (hasOpenCli, hasCanonical) switch
+            {
+                (true, true) => InputDocumentKind.Ambiguous,
+                (false, true) => InputDocumentKind.Canonical,
+                _ => InputDocumentKind.Source
+            };
         }
         catch (JsonException)
         {
-            return false;
+            return InputDocumentKind.Source;
         }
     }
 
@@ -624,32 +613,38 @@ internal static class CliApplication
                 continue;
             }
 
-            switch (character)
+            var isPair = char.IsHighSurrogate(character) && index + 1 < value.Length && char.IsLowSurrogate(value[index + 1]);
+            var codePoint = isPair ? char.ConvertToUtf32(value, index) : character;
+            var codePointLength = isPair ? 2 : 1;
+            var category = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(value, index);
+            if (category is System.Globalization.UnicodeCategory.Control or System.Globalization.UnicodeCategory.Format ||
+                codePoint is 0x2028 or 0x2029 || IsDefaultIgnorable(codePoint))
             {
-                case '\n': builder.Append("\\n"); break;
-                case '\r': builder.Append("\\r"); break;
-                case '\t': builder.Append("\\t"); break;
-                case '\b': builder.Append("\\b"); break;
-                case '\f': builder.Append("\\f"); break;
-                case '\u001b': builder.Append("\\u001B"); break;
-                case '\u2028': builder.Append("\\u2028"); break;
-                case '\u2029': builder.Append("\\u2029"); break;
-                default:
-                    if (char.IsControl(character) || character == '\u007f')
-                    {
-                        builder.Append("\\u").Append(((int)character).ToString("X4", System.Globalization.CultureInfo.InvariantCulture));
-                    }
-                    else
-                    {
-                        builder.Append(character);
-                    }
+                if (codePoint <= 0xffff)
+                {
+                    builder.Append("\\u").Append(codePoint.ToString("X4", System.Globalization.CultureInfo.InvariantCulture));
+                }
+                else
+                {
+                    builder.Append("\\U").Append(codePoint.ToString("X8", System.Globalization.CultureInfo.InvariantCulture));
+                }
 
-                    break;
+                index += codePointLength - 1;
+                continue;
             }
+
+            builder.Append(character);
         }
 
         return builder.ToString();
     }
+
+    private static bool IsDefaultIgnorable(int codePoint) =>
+        codePoint is 0x00ad or 0x034f or 0x061c or 0x180e or 0x200b or 0x200c or 0x200d or 0x200e or 0x200f or
+            (>= 0x115f and <= 0x1160) or (>= 0x17b4 and <= 0x17b5) or (>= 0x180b and <= 0x180d) or
+            (>= 0x202a and <= 0x202e) or (>= 0x2060 and <= 0x2064) or (>= 0x2066 and <= 0x206f) or
+            (>= 0xfe00 and <= 0xfe0f) or 0xfeff or (>= 0xfff0 and <= 0xfff8) or
+            (>= 0xe0000 and <= 0xe0fff);
 
     private sealed record Invocation(string Command, List<string> Positionals, InputKind InputKind, OutputFormat Format, FailOn FailOn, string? Output, string? Baseline, string? IgnoreFile, bool NoTelemetry);
     private sealed record ToolStatus(string Operation, string Result, string InputKind, int CommandCount, int ChangeCount);
@@ -658,6 +653,7 @@ internal static class CliApplication
     private sealed class InvocationException(string code, string message) : Exception(message) { public string Code { get; } = code; }
     private sealed class InputTooLargeException : Exception;
     private enum InputKind { Auto, OpenCli }
+    private enum InputDocumentKind { Source, Canonical, Ambiguous }
     private enum OutputFormat { Text, Json }
     private enum FailOn { Breaking, Warning }
     private enum FileRole { SourceSchema, CanonicalBaseline, Suppression, OutputDestination }
@@ -687,6 +683,9 @@ internal static class CliApplication
       aliases, parameters, help metadata, and group-only trees do not qualify.
 
     Canonicalization:
+      --input opencli requires OpenCLI source for every source-schema operand. Canonical manifests are accepted
+      only as diff operands with --input auto; auto accepts source/source, canonical/canonical, and mixed pairs.
+      snapshot, validate, and check source operands reject canonical manifests with UNSUPPORTED_INPUT.
       Finite JSON and recognized YAML numbers are compared by exact numeric value,
       including trailing-dot exponent mantissas such as 5.e2.
       YAML .inf and .nan are outside that boundary: tagged forms error; untagged forms are strings.

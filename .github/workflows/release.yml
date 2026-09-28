@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.release-tag.outputs.version }}
+    env:
+      CI: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      KEELMATRIX_NO_TELEMETRY: '1'
+      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_COMMIT: ${{ github.sha }}
+    steps:
+      - name: Checkout frozen candidate
+        uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4.3.1
+        with:
+          global-json-file: global.json
+      - name: Validate release tag
+        id: release-tag
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $result = & ./scripts/verify-release-tag.ps1 -Tag $env:TAG
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = [regex]::Match(($result -join "`n"), 'version=(\d+\.\d+\.\d+)').Groups[1].Value
+          if ([string]::IsNullOrWhiteSpace($version)) { throw 'Release tag validator did not return a version.' }
+          "version=$version" | Out-File -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - name: Build and validate exact release pair
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.release-tag.outputs.version }}
+        run: ./scripts/publish-release.ps1 -Version $env:RELEASE_VERSION -Tag $env:RELEASE_TAG -ExpectedCommit $env:RELEASE_COMMIT
+      - name: Upload validated artifact pair
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: validated-release-pair
+          if-no-files-found: error
+          path: |
+            artifacts/packages/KeelMatrix.CliContract.${{ steps.release-tag.outputs.version }}.nupkg
+            artifacts/packages/KeelMatrix.CliContract.${{ steps.release-tag.outputs.version }}.snupkg
+
+  publish:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      CI: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      KEELMATRIX_NO_TELEMETRY: '1'
+      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_COMMIT: ${{ github.sha }}
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout frozen candidate
+        uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4.3.1
+        with:
+          global-json-file: global.json
+      - name: Download validated artifact pair
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: validated-release-pair
+          path: artifacts/packages
+      - name: Authenticate to NuGet.org with OIDC
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: dmitriyzen
+      - name: Publish validated package pair
+        shell: pwsh
+        env:
+          RELEASE_NUGET_CREDENTIAL: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: ./scripts/publish-release.ps1 -Version $env:RELEASE_VERSION -Tag $env:RELEASE_TAG -ExpectedCommit $env:RELEASE_COMMIT -Publish -SkipPreparation
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2.2.2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artifacts/packages/KeelMatrix.CliContract.${{ needs.prepare.outputs.version }}.nupkg
+            artifacts/packages/KeelMatrix.CliContract.${{ needs.prepare.outputs.version }}.snupkg

@@ -50,6 +50,11 @@ function Test-ReleaseContract {
 
     $release = Get-ReleaseSection -Text (Get-Content -Raw -LiteralPath $changelogPath) -ExpectedVersion $ExpectedVersion
     if ($release.Body -match '(?im)\b(planned|unreleased|not yet published|tbd)\b') { throw "The $ExpectedVersion changelog entry is not final." }
+    if ($release.Body -notmatch '(?im)^###\s+(Added|Highlights|Features)\s*$') { throw "The $ExpectedVersion changelog entry has no finalized feature section." }
+    $internalReleaseTerms = '(?im)\b(now fixed|previously|formerly|used to|remediation|' + 'front' + 'ier review|rejection|regression fix|corrected|resolved)\b'
+    if ($release.Body -match $internalReleaseTerms) {
+        throw "The $ExpectedVersion changelog entry contains internal remediation wording."
+    }
     if ($release.Date -notmatch '^\d{4}-\d{2}-\d{2}$') { throw 'The changelog release date is invalid.' }
 
     Write-Output "RELEASE_CONTRACT=PASS version=$ExpectedVersion tag=$ExpectedTag date=$($release.Date)"
@@ -89,6 +94,16 @@ dotnet tool install --global KeelMatrix.CliContract
         }
         catch {
             if ($_.Exception.Message -eq 'A version mismatch was accepted.') { throw }
+        }
+        $planned = Get-Content -Raw -LiteralPath (Join-Path $selfTestRoot 'CHANGELOG.md')
+        $planned = $planned -replace '\[0\.1\.0\]', '[Unreleased]'
+        Set-Content -LiteralPath (Join-Path $selfTestRoot 'CHANGELOG.md') -Value $planned -Encoding utf8NoBOM
+        try {
+            Test-ReleaseContract -RepositoryRoot $selfTestRoot -ExpectedVersion '0.1.0' -ExpectedTag 'v0.1.0'
+            throw 'An unreleased changelog was accepted.'
+        }
+        catch {
+            if ($_.Exception.Message -eq 'An unreleased changelog was accepted.') { throw }
         }
         Write-Output 'RELEASE_CONTRACT_SELF_TEST=PASS'
     }

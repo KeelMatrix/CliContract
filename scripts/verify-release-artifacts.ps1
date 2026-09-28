@@ -1,10 +1,13 @@
 param(
     [Parameter(Mandatory = $true)] [string] $ArtifactDirectory,
     [Parameter(Mandatory = $true)] [string] $Version,
+    [Parameter(Mandatory = $true)] [string] $ExpectedCommit,
     [switch] $SelfTest
 )
 
 $ErrorActionPreference = 'Stop'
+$root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+if ($ExpectedCommit -notmatch '^[0-9a-f]{40}$') { throw 'Expected commit must be a 40-character hexadecimal SHA.' }
 $directory = (Resolve-Path -LiteralPath $ArtifactDirectory).Path
 $expected = @(
     "KeelMatrix.CliContract.$Version.nupkg",
@@ -27,7 +30,7 @@ function Assert-CorePropertiesEntry {
         [string] $ArchivePath,
         [string[]] $Entries,
         [string] $ExpectedPackageId = 'KeelMatrix.CliContract',
-        [string] $ExpectedVersion = '0.1.0'
+    [string] $ExpectedVersion
     )
 
     $metadataEntries = @($Entries | Where-Object { $_ -match '^package/services/metadata/core-properties/[^/]+\.psmdcp$' })
@@ -81,6 +84,8 @@ $unexpectedSymbolEntries = @($symbolEntries | Where-Object {
     $_ -notin $allowedSymbolEntries
 })
 if ($unexpectedSymbolEntries.Count -gt 0) { throw "Unexpected symbol package entries: $($unexpectedSymbolEntries -join ', ')" }
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'inspect-package.ps1') -PackagePath $packagePath -SymbolPackagePath $symbolsPath -RepositoryRoot $root -ExpectedCommit $ExpectedCommit
+if ($LASTEXITCODE -ne 0) { throw 'Package provenance and payload inspection failed.' }
 Write-Output "ARTIFACT_ALLOWLIST=PASS files=$($actual -join ',')"
 Write-Output "SYMBOL_ALLOWLIST=PASS entries=$($symbolEntries -join ',')"
 
@@ -92,6 +97,24 @@ if ($SelfTest) {
         $mutatedPackage = Join-Path $selfTestRoot "KeelMatrix.CliContract.$Version.nupkg"
         $mutatedSymbols = Join-Path $selfTestRoot "KeelMatrix.CliContract.$Version.snupkg"
         Copy-Item -LiteralPath $symbolsPath -Destination $mutatedSymbols
+        $missingRoot = Join-Path $selfTestRoot 'missing-artifact'
+        New-Item -ItemType Directory -Path $missingRoot | Out-Null
+        Copy-Item -LiteralPath $symbolsPath -Destination (Join-Path $missingRoot (Split-Path -Leaf $symbolsPath))
+        $missingOutput = @(& pwsh -NoProfile -File $PSCommandPath -ArtifactDirectory $missingRoot -Version $Version -ExpectedCommit $ExpectedCommit 2>&1)
+        $missingExit = $LASTEXITCODE
+        if ($missingExit -eq 0) { throw 'Release artifact validation accepted a missing package artifact.' }
+        Write-Output "PACKAGE_MISSING_NEGATIVE_SELF_TEST=PASS child_exit=$missingExit"
+
+        $extraRoot = Join-Path $selfTestRoot 'extra-artifact'
+        New-Item -ItemType Directory -Path $extraRoot | Out-Null
+        Copy-Item -LiteralPath $packagePath -Destination (Join-Path $extraRoot (Split-Path -Leaf $packagePath))
+        Copy-Item -LiteralPath $symbolsPath -Destination (Join-Path $extraRoot (Split-Path -Leaf $symbolsPath))
+        Set-Content -LiteralPath (Join-Path $extraRoot 'unexpected.txt') -Value 'unexpected' -Encoding utf8NoBOM
+        $extraOutput = @(& pwsh -NoProfile -File $PSCommandPath -ArtifactDirectory $extraRoot -Version $Version -ExpectedCommit $ExpectedCommit 2>&1)
+        $extraExit = $LASTEXITCODE
+        if ($extraExit -eq 0) { throw 'Release artifact validation accepted an extra artifact.' }
+        Write-Output "PACKAGE_EXTRA_NEGATIVE_SELF_TEST=PASS child_exit=$extraExit"
+
         $archive = [IO.Compression.ZipFile]::Open($mutatedPackage, [IO.Compression.ZipArchiveMode]::Update)
         try {
             $entry = $archive.CreateEntry('package/services/metadata/core-properties/unexpected.psmdcp')
@@ -100,7 +123,7 @@ if ($SelfTest) {
             finally { $stream.Dispose() }
         }
         finally { $archive.Dispose() }
-        $packageOutput = @(& pwsh -NoProfile -File $PSCommandPath -ArtifactDirectory $selfTestRoot -Version $Version 2>&1)
+        $packageOutput = @(& pwsh -NoProfile -File $PSCommandPath -ArtifactDirectory $selfTestRoot -Version $Version -ExpectedCommit $ExpectedCommit 2>&1)
         $packageExit = $LASTEXITCODE
         if ($packageExit -eq 0) { throw 'Release artifact validation accepted an extra package metadata entry.' }
         Write-Output "PACKAGE_METADATA_NEGATIVE_SELF_TEST=PASS child_exit=$packageExit"
@@ -115,7 +138,7 @@ if ($SelfTest) {
             finally { $stream.Dispose() }
         }
         finally { $archive.Dispose() }
-        $childOutput = @(& pwsh -NoProfile -File $PSCommandPath -ArtifactDirectory $selfTestRoot -Version $Version 2>&1)
+        $childOutput = @(& pwsh -NoProfile -File $PSCommandPath -ArtifactDirectory $selfTestRoot -Version $Version -ExpectedCommit $ExpectedCommit 2>&1)
         $childExit = $LASTEXITCODE
         if ($childExit -eq 0) { throw 'Release artifact validation accepted an extra symbol metadata entry.' }
         Write-Output "SYMBOL_METADATA_NEGATIVE_SELF_TEST=PASS child_exit=$childExit"

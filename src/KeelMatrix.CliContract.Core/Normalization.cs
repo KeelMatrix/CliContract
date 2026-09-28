@@ -1403,7 +1403,7 @@ public static class Normalizer
         var commandEnd = -1;
         for (var index = 0; index + 1 < key.Length; index++)
         {
-            if (!char.IsWhiteSpace(key[index]) || key[index] is '\r' or '\n') continue;
+            if (!IsPinnedOpenCliWhitespace(key[index])) continue;
             if (!char.IsAsciiLetter(key[index + 1]))
             {
                 commandEnd = index;
@@ -1412,7 +1412,7 @@ public static class Normalizer
         }
 
         var commandLine = commandEnd < 0 ? key : key[..commandEnd];
-        var tokens = commandLine.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var tokens = SplitPinnedOpenCliWhitespace(commandLine);
         if (tokens.Length == 0)
         {
             throw new NormalizationException("OPENCLI_COMMAND_KEY", "An OpenCLI command key must contain a command name.");
@@ -1424,6 +1424,25 @@ public static class Normalizer
         }
 
         return tokens.Length == 1 ? "root" : "root / " + string.Join(" / ", tokens.Skip(1));
+    }
+
+    // The pinned alpha.14 grammar uses Go's [^\S\n] class, which is
+    // [space, tab, form feed, carriage return]. It intentionally excludes
+    // LF, vertical tab, and all Unicode whitespace.
+    private static bool IsPinnedOpenCliWhitespace(char value) => value is ' ' or '\t' or '\f' or '\r';
+
+    private static string[] SplitPinnedOpenCliWhitespace(string value)
+    {
+        var tokens = new List<string>();
+        var start = 0;
+        for (var index = 0; index <= value.Length; index++)
+        {
+            if (index < value.Length && !IsPinnedOpenCliWhitespace(value[index])) continue;
+            if (index > start) tokens.Add(value[start..index]);
+            start = index + 1;
+        }
+
+        return tokens.ToArray();
     }
 
     private static JsonNode? ReadTypedDefault(JsonObject parameter, NormalizationLimits limits)

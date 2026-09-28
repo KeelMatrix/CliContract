@@ -23,6 +23,8 @@ clicontract check ./opencli.yaml --baseline cli-contract.json
 
 Commit the baseline with the CLI description, then run `check` in CI. The default input mode is `auto`; use `--input opencli` to require OpenCLI. `auto` recognizes a single OpenCLI shape and fails on ambiguity. No target CLI is started and no help text is scraped. Schema parsing and comparison require no network connection; after a successful comparison whose canonical baseline contains at least one runnable action—at the root or below a group—one bounded best-effort activation request may be sent through `KeelMatrix.Telemetry` unless telemetry is disabled. Groups with only aliases, parameters, or help metadata do not qualify. The request is automatically suppressed for `CI=true` and `KEELMATRIX_DEVELOPMENT=true` runs.
 
+Input roles are consistent across verbs: `--input opencli` requires every source-schema operand to be OpenCLI source and rejects canonical manifests. `diff --input auto` is the only command mode that accepts canonical manifests as operands, including source/source, canonical/canonical, and mixed pairs in either order. `snapshot`, `validate`, and the source operand of `check` reject canonical input; the `check --baseline` file is always the canonical baseline. Malformed or ambiguous canonical-like documents fail closed rather than being silently reinterpreted.
+
 ```bash
 clicontract diff ./old-opencli.yaml ./new-opencli.yaml --format json
 clicontract validate ./opencli.yaml
@@ -60,9 +62,13 @@ The only supported upstream format is OpenCLI `1.0.0-alpha.14`. Unknown format v
 
 The OpenCLI adapter status is pinned to `1.0.0-alpha.14`; official examples and the regression corpus are revalidated before each material adapter release. A future upstream version is not accepted until its contract is explicitly reviewed and versioned.
 
+For command-key parsing, the pinned alpha.14 delimiter class is ASCII space, tab, form feed, and carriage return. LF, vertical tab, NBSP, em-space, and narrow NBSP remain command-key data; modifier boundaries use the same pinned class and require a following non-ASCII-letter character.
+
 The tool does not execute described CLIs, infer runtime behavior, generate clients or documentation, parse help output, fetch remote references, or provide a hosted registry.
 
 The adapter is intentionally pinned to OpenCLI `1.0.0-alpha.14`. The current upstream specification and tooling have moved forward; the reviewed standards boundary and the .NET CLI-schema/System.CommandLine feasibility decision are recorded in [`docs/OPENCLI-FRESHNESS.md`](docs/OPENCLI-FRESHNESS.md).
+
+Text diagnostics escape Unicode control and format characters, bidi overrides and isolates, zero-width characters, line separators, C0/C1 controls, and workflow-command marker delimiters before writing user-derived paths, aliases, findings, errors, or arguments.
 
 ## CI
 

@@ -123,6 +123,94 @@ try {
     }
     Write-Output 'CASE=whitespace-source-fixtures-consumer validate_snapshot_check_diff=PASS'
 
+    function Assert-InstalledError {
+        param([string] $Label, [int] $ExpectedExit, [string] $ExpectedCode, [string[]] $Arguments)
+        $result = @(& $tool @Arguments 2>&1)
+        $exit = $LASTEXITCODE
+        $output = $result -join "`n"
+        if ($exit -ne $ExpectedExit -or $output -notmatch [regex]::Escape($ExpectedCode)) { throw "Installed-tool $Label failed: exit=$exit output=$output" }
+        Write-Output "CASE=$Label exit=$exit code=$ExpectedCode"
+    }
+
+    # Independent pinned alpha.14 oracle. This list is intentionally explicit
+    # rather than sharing parser helpers with the product under test.
+    function New-InstalledDelimiterDocument([string] $Separator, [bool] $Yaml) {
+        if (-not $Yaml) {
+            $document = [ordered]@{ opencliVersion = '1.0.0-alpha.14'; info = [ordered]@{ title = 'Tool'; binary = 'tool'; version = '1' }; commands = [ordered]@{} }
+            $document.commands[('tool' + $Separator + 'run')] = [ordered]@{}
+            return ($document | ConvertTo-Json -Depth 20 -Compress)
+        }
+        $escape = switch ([int][char]$Separator) {
+            9 { '\t' }; 10 { '\n' }; 11 { '\v' }; 12 { '\f' }; 13 { '\r' }
+            160 { '\u00A0' }; 8195 { '\u2003' }; 8239 { '\u202F' }; default { $Separator }
+        }
+        return @"
+opencliVersion: 1.0.0-alpha.14
+info: {title: Tool, binary: tool, version: '1'}
+commands:
+  "tool${escape}run": {}
+"@
+    }
+
+    $installedDelimiterCases = @(
+        @{ Name = 'space'; Separator = [char]0x20; Valid = $true }, @{ Name = 'tab'; Separator = [char]0x09; Valid = $true },
+        @{ Name = 'form-feed'; Separator = [char]0x0c; Valid = $true }, @{ Name = 'carriage-return'; Separator = [char]0x0d; Valid = $true },
+        @{ Name = 'line-feed'; Separator = [char]0x0a; Valid = $false }, @{ Name = 'vertical-tab'; Separator = [char]0x0b; Valid = $false },
+        @{ Name = 'nbsp'; Separator = [char]0x00a0; Valid = $false }, @{ Name = 'em-space'; Separator = [char]0x2003; Valid = $false },
+        @{ Name = 'narrow-nbsp'; Separator = [char]0x202f; Valid = $false }
+    )
+    foreach ($case in $installedDelimiterCases) {
+        foreach ($format in @('json', 'yaml')) {
+            $path = Join-Path $temp "installed-pinned-$($case.Name).$format"
+            [IO.File]::WriteAllText($path, (New-InstalledDelimiterDocument -Separator $case.Separator -Yaml ($format -eq 'yaml')), [Text.UTF8Encoding]::new($false))
+            $label = "installed-pinned-$($case.Name)-$format"
+            if ($case.Valid) {
+                $baseline = Join-Path $temp "$label.canonical.json"
+                & $tool validate $path --input opencli --no-telemetry | Out-Host; if ($LASTEXITCODE -ne 0) { throw "$label validate failed." }
+                & $tool snapshot $path --input opencli --output $baseline --no-telemetry | Out-Host; if ($LASTEXITCODE -ne 0) { throw "$label snapshot failed." }
+                & $tool check $path --input opencli --baseline $baseline --no-telemetry | Out-Host; if ($LASTEXITCODE -ne 0) { throw "$label check failed." }
+                & $tool diff $path $path --input opencli --no-telemetry | Out-Host; if ($LASTEXITCODE -ne 0) { throw "$label diff failed." }
+            }
+            else {
+                Assert-InstalledError "$label-validate" 3 'OPENCLI_COMMAND_KEY' @('validate', $path, '--input', 'opencli', '--no-telemetry')
+                Assert-InstalledError "$label-snapshot" 3 'OPENCLI_COMMAND_KEY' @('snapshot', $path, '--input', 'opencli', '--output', (Join-Path $temp "$label.json"), '--no-telemetry')
+                Assert-InstalledError "$label-check" 3 'OPENCLI_COMMAND_KEY' @('check', $path, '--input', 'opencli', '--baseline', $officialBaseline, '--no-telemetry')
+                Assert-InstalledError "$label-diff" 3 'OPENCLI_COMMAND_KEY' @('diff', $path, $path, '--input', 'opencli', '--no-telemetry')
+            }
+        }
+    }
+    Write-Output 'CASE=installed-pinned-command-key-delimiters json_yaml_validate_snapshot_check_diff=PASS'
+
+    $autoSource = Join-Path $temp 'input-role-source.json'
+    $autoChanged = Join-Path $temp 'input-role-changed.json'
+    $autoSourceText = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{}}}'
+    [IO.File]::WriteAllText($autoSource, $autoSourceText, [Text.UTF8Encoding]::new($false))
+    $autoCanonical = Join-Path $temp 'input-role-canonical.json'
+    & $tool snapshot $autoSource --input opencli --output $autoCanonical --no-telemetry | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw 'Input-role consumer baseline creation failed.' }
+    [IO.File]::WriteAllText($autoChanged, $autoSourceText, [Text.UTF8Encoding]::new($false))
+    & $tool diff $autoCanonical $autoCanonical --input auto --no-telemetry | Out-Host; if ($LASTEXITCODE -ne 0) { throw 'Canonical/canonical auto diff failed.' }
+    & $tool diff $autoSource $autoCanonical --input auto --no-telemetry | Out-Host; if ($LASTEXITCODE -ne 0) { throw 'Source/canonical auto diff failed.' }
+    & $tool diff $autoCanonical $autoSource --input auto --no-telemetry | Out-Host; if ($LASTEXITCODE -ne 0) { throw 'Canonical/source auto diff failed.' }
+    Assert-InstalledError 'explicit-canonical-left' 3 'UNSUPPORTED_INPUT' @('diff', $autoCanonical, $autoSource, '--input', 'opencli', '--no-telemetry')
+    Assert-InstalledError 'explicit-canonical-right' 3 'UNSUPPORTED_INPUT' @('diff', $autoSource, $autoCanonical, '--input', 'opencli', '--no-telemetry')
+    Assert-InstalledError 'canonical-snapshot' 3 'UNSUPPORTED_INPUT' @('snapshot', $autoCanonical, '--input', 'auto', '--output', (Join-Path $temp 'canonical-copy.json'), '--no-telemetry')
+    $ambiguous = Join-Path $temp 'installed-ambiguous.json'; [IO.File]::WriteAllText($ambiguous, '{"opencliVersion":"1.0.0-alpha.14","SchemaVersion":2}', [Text.UTF8Encoding]::new($false))
+    Assert-InstalledError 'ambiguous-auto' 3 'AMBIGUOUS_INPUT' @('diff', $ambiguous, $autoSource, '--input', 'auto', '--no-telemetry')
+    Write-Output 'CASE=installed-input-role-contract explicit_auto_mixed_orders=PASS'
+
+    $hostileOld = Join-Path $temp 'installed-hostile-old.json'
+    $hostileNew = Join-Path $temp 'installed-hostile-new.json'
+    $hostile = 'alias' + [char]0x202e + 'rtl' + [char]0x2066 + 'isolate' + [char]0x200b + 'zero' + [char]0x1b + 'esc' + [char]1 + 'c0' + [char]0x85 + 'c1' + [char]0x2028 + 'line' + [char]0x2029 + 'para::marker'
+    $oldObject = [ordered]@{ opencliVersion = '1.0.0-alpha.14'; info = [ordered]@{ title = 'Tool'; binary = 'tool'; version = '1' }; commands = [ordered]@{ tool = [ordered]@{ flags = @([ordered]@{ name = 'value'; type = 'string'; aliases = @($hostile) }) } } }
+    $newObject = [ordered]@{ opencliVersion = '1.0.0-alpha.14'; info = [ordered]@{ title = 'Tool'; binary = 'tool'; version = '1' }; commands = [ordered]@{ tool = [ordered]@{ flags = @([ordered]@{ name = 'value'; type = 'string' }) } } }
+    [IO.File]::WriteAllText($hostileOld, ($oldObject | ConvertTo-Json -Depth 20 -Compress), [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($hostileNew, ($newObject | ConvertTo-Json -Depth 20 -Compress), [Text.UTF8Encoding]::new($false))
+    $hostileResult = @(& $tool diff $hostileOld $hostileNew --input opencli --format text --no-telemetry 2>&1)
+    $hostileText = $hostileResult -join "`n"
+    if ($LASTEXITCODE -ne 1 -or $hostileText -notmatch '\\u202E' -or $hostileText -notmatch '\\u2066' -or $hostileText -notmatch '\\u200B' -or $hostileText -notmatch '\\u001B' -or $hostileText -notmatch '\\u0001' -or $hostileText -notmatch '\\u0085' -or $hostileText -notmatch '\\u2028' -or $hostileText -notmatch '\\u2029' -or $hostileText -notmatch '\\u003A\\u003A' -or $hostileText.Contains($hostile) -or $hostileText -match '::warning::') { throw 'Installed text boundary did not visibly encode the complete hostile display-control family.' }
+    Write-Output 'CASE=installed-safe-display-format-controls_findings_aliases=PASS'
+
     $optionNameScopeCases = @(
         @{ Name = 'global-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"---","type":"string","aliases":[" global alias "]}]},"commands":{"tool":{}}}' },
         @{ Name = 'root-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"---","type":"string","aliases":[" root alias "]}]}}}' },

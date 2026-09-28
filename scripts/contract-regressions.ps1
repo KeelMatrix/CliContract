@@ -41,6 +41,20 @@ try {
     Assert-Case 'duplicate-opencli' (Invoke-Tool @('validate', $duplicatePath, '--input', 'opencli', '--no-telemetry')) 3 'DUPLICATE_JSON_KEY'
     Assert-Case 'duplicate-auto' (Invoke-Tool @('validate', $duplicatePath, '--input', 'auto', '--no-telemetry')) 3 'DUPLICATE_JSON_KEY'
     Assert-Case 'valid-baseline' (Invoke-Tool @('snapshot', $source, '--input', 'opencli', '--output', $baselinePath, '--no-telemetry')) 0 'SNAPSHOT'
+    Assert-Case 'auto-canonical-canonical' (Invoke-Tool @('diff', $baselinePath, $baselinePath, '--input', 'auto', '--no-telemetry')) 0 'COMPATIBLE'
+    Assert-Case 'auto-source-canonical' (Invoke-Tool @('diff', $source, $baselinePath, '--input', 'auto', '--no-telemetry')) 0 'COMPATIBLE'
+    Assert-Case 'auto-canonical-source' (Invoke-Tool @('diff', $baselinePath, $source, '--input', 'auto', '--no-telemetry')) 0 'COMPATIBLE'
+    Assert-Case 'explicit-canonical-left-rejected' (Invoke-Tool @('diff', $baselinePath, $source, '--input', 'opencli', '--no-telemetry')) 3 'UNSUPPORTED_INPUT'
+    Assert-Case 'explicit-canonical-right-rejected' (Invoke-Tool @('diff', $source, $baselinePath, '--input', 'opencli', '--no-telemetry')) 3 'UNSUPPORTED_INPUT'
+    Assert-Case 'snapshot-canonical-rejected' (Invoke-Tool @('snapshot', $baselinePath, '--input', 'auto', '--output', (Join-Path $temp 'canonical-copy.json'), '--no-telemetry')) 3 'UNSUPPORTED_INPUT'
+    Assert-Case 'validate-canonical-rejected' (Invoke-Tool @('validate', $baselinePath, '--input', 'auto', '--no-telemetry')) 3 'UNSUPPORTED_INPUT'
+    $malformedCanonicalPath = Join-Path $temp 'malformed-canonical-like.json'
+    Write-Utf8 $malformedCanonicalPath '{"SchemaVersion":2}'
+    Assert-Case 'malformed-canonical-auto' (Invoke-Tool @('diff', $malformedCanonicalPath, $baselinePath, '--input', 'auto', '--no-telemetry')) 3 'INVALID_BASELINE'
+    $ambiguousInputPath = Join-Path $temp 'ambiguous-input.json'
+    Write-Utf8 $ambiguousInputPath '{"opencliVersion":"1.0.0-alpha.14","SchemaVersion":2}'
+    Assert-Case 'ambiguous-input-auto' (Invoke-Tool @('diff', $ambiguousInputPath, $source, '--input', 'auto', '--no-telemetry')) 3 'AMBIGUOUS_INPUT'
+    Write-Output 'CASE=input-role-contract explicit_auto_and_operand_orders=PASS'
     Assert-Case 'validate-rejects-baseline' (Invoke-Tool @('validate', $source, '--baseline', (Join-Path $temp 'missing.json'), '--no-telemetry')) 2 'UNSUPPORTED_OPTION'
     Assert-Case 'check-rejects-output' (Invoke-Tool @('check', $source, '--baseline', $baselinePath, '--output', (Join-Path $temp 'ignored.json'), '--no-telemetry')) 2 'UNSUPPORTED_OPTION'
 
@@ -61,6 +75,71 @@ try {
         Assert-Case "$fixtureName-diff" (Invoke-Tool @('diff', $fixturePath, $fixturePath, '--input', 'opencli', '--no-telemetry')) 0 'COMPATIBLE'
     }
     Write-Output 'CASE=whitespace-source-fixtures validate_snapshot_check_diff=PASS'
+
+    # Independent oracle for the pinned Go alpha.14 command-key grammar:
+    # [^\S\n] is space, tab, form feed, or carriage return only. LF, VT, and
+    # Unicode separators are data and must not become command delimiters.
+    function New-PinnedDelimiterDocument([string] $Separator, [bool] $Yaml) {
+        if (-not $Yaml) {
+            $document = [ordered]@{
+                opencliVersion = '1.0.0-alpha.14'
+                info = [ordered]@{ title = 'Tool'; binary = 'tool'; version = '1' }
+                commands = [ordered]@{}
+            }
+            $document.commands[('tool' + $Separator + 'run')] = [ordered]@{}
+            return ($document | ConvertTo-Json -Depth 20 -Compress)
+        }
+        $yamlEscape = switch ([int][char]$Separator) {
+            9 { '\t' }
+            10 { '\n' }
+            12 { '\f' }
+            13 { '\r' }
+            11 { '\v' }
+            160 { '\u00A0' }
+            8195 { '\u2003' }
+            8239 { '\u202F' }
+            default { $Separator }
+        }
+        return @"
+opencliVersion: 1.0.0-alpha.14
+info: {title: Tool, binary: tool, version: '1'}
+commands:
+  "tool${yamlEscape}run": {}
+"@
+    }
+
+    $pinnedDelimiterCases = @(
+        @{ Name = 'space'; Separator = [char]0x20; Valid = $true },
+        @{ Name = 'tab'; Separator = [char]0x09; Valid = $true },
+        @{ Name = 'form-feed'; Separator = [char]0x0c; Valid = $true },
+        @{ Name = 'carriage-return'; Separator = [char]0x0d; Valid = $true },
+        @{ Name = 'line-feed'; Separator = [char]0x0a; Valid = $false },
+        @{ Name = 'vertical-tab'; Separator = [char]0x0b; Valid = $false },
+        @{ Name = 'nbsp'; Separator = [char]0x00a0; Valid = $false },
+        @{ Name = 'em-space'; Separator = [char]0x2003; Valid = $false },
+        @{ Name = 'narrow-nbsp'; Separator = [char]0x202f; Valid = $false }
+    )
+    foreach ($case in $pinnedDelimiterCases) {
+        foreach ($format in @('json', 'yaml')) {
+            $path = Join-Path $temp ("pinned-$($case.Name).$format")
+            Write-Utf8 $path (New-PinnedDelimiterDocument -Separator $case.Separator -Yaml ($format -eq 'yaml'))
+            $label = "pinned-$($case.Name)-$format"
+            if ($case.Valid) {
+                $baseline = Join-Path $temp ("$label.canonical.json")
+                Assert-Case "$label-validate" (Invoke-Tool @('validate', $path, '--input', 'opencli', '--no-telemetry')) 0 'VALID'
+                Assert-Case "$label-snapshot" (Invoke-Tool @('snapshot', $path, '--input', 'opencli', '--output', $baseline, '--no-telemetry')) 0 'SNAPSHOT'
+                Assert-Case "$label-check" (Invoke-Tool @('check', $path, '--input', 'opencli', '--baseline', $baseline, '--no-telemetry')) 0 'COMPATIBLE'
+                Assert-Case "$label-diff" (Invoke-Tool @('diff', $path, $path, '--input', 'opencli', '--no-telemetry')) 0 'COMPATIBLE'
+            }
+            else {
+                Assert-Case "$label-validate" (Invoke-Tool @('validate', $path, '--input', 'opencli', '--no-telemetry')) 3 'OPENCLI_COMMAND_KEY'
+                Assert-Case "$label-snapshot" (Invoke-Tool @('snapshot', $path, '--input', 'opencli', '--output', (Join-Path $temp "$label.json"), '--no-telemetry')) 3 'OPENCLI_COMMAND_KEY'
+                Assert-Case "$label-check" (Invoke-Tool @('check', $path, '--input', 'opencli', '--baseline', $richBaselinePath, '--no-telemetry')) 3 'OPENCLI_COMMAND_KEY'
+                Assert-Case "$label-diff" (Invoke-Tool @('diff', $path, $path, '--input', 'opencli', '--no-telemetry')) 3 'OPENCLI_COMMAND_KEY'
+            }
+        }
+    }
+    Write-Output 'CASE=pinned-command-key-delimiters json_yaml_validate_snapshot_check_diff=PASS'
 
     $optionNameScopeCases = @(
         @{ Name = 'global-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"---","type":"string","aliases":[" global alias "]}]},"commands":{"tool":{}}}' },
@@ -337,7 +416,7 @@ try {
         $manifestPath = Join-Path $temp ($label + '.self.canonical.json')
         Assert-Case "$label-self-snapshot" (Invoke-Tool @('snapshot', $sourcePath, '--input', 'opencli', '--output', $manifestPath, '--no-telemetry')) 0 'SNAPSHOT'
         Assert-Case "$label-self-check" (Invoke-Tool @('check', $sourcePath, '--input', 'opencli', '--baseline', $manifestPath, '--no-telemetry')) 0 'COMPATIBLE'
-        Assert-Case "$label-self-diff" (Invoke-Tool @('diff', $manifestPath, $manifestPath, '--input', 'opencli', '--no-telemetry')) 0 'COMPATIBLE'
+        Assert-Case "$label-self-diff" (Invoke-Tool @('diff', $manifestPath, $manifestPath, '--input', 'auto', '--no-telemetry')) 0 'COMPATIBLE'
     }
 
     $configOld = Join-Path $root 'fixtures/opencli/global-config-order-a.json'
@@ -380,7 +459,7 @@ try {
     Write-Utf8 $hostileOldPath $hostileOld
     Write-Utf8 $hostileNewPath $hostileNew
     $hostileOutput = Invoke-Tool @('diff', $hostileOldPath, $hostileNewPath, '--format', 'text', '--no-telemetry')
-    Assert-Case 'hostile-diagnostic-rendering' $hostileOutput 1 '\n'
+    Assert-Case 'hostile-diagnostic-rendering' $hostileOutput 1 '\u000A'
     if (($hostileOutput.Output -join "`n") -match '(?m)^::warning::' -or ($hostileOutput.Output -join "`n") -match 'safe`n') {
         throw 'Hostile diagnostic data reached console output as a workflow marker or physical line break.'
     }

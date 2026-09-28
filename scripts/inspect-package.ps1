@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory = $true)] [string] $PackagePath,
     [string] $RepositoryRoot = (Split-Path -Parent $PSScriptRoot),
     [Parameter(Mandatory = $true)] [string] $SymbolPackagePath,
+    [string] $ExpectedCommit,
     [switch] $AllowMissingIcon,
     [switch] $SelfTest
 )
@@ -9,6 +10,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $packagePath = (Resolve-Path -LiteralPath $PackagePath).Path
+$ExpectedCommit = if ([string]::IsNullOrWhiteSpace($ExpectedCommit)) { (& git -C $root rev-parse HEAD).Trim() } else { $ExpectedCommit.Trim().ToLowerInvariant() }
+if ($LASTEXITCODE -ne 0 -and [string]::IsNullOrWhiteSpace($ExpectedCommit)) { throw 'Could not determine the expected candidate commit.' }
+if ($ExpectedCommit -notmatch '^[0-9a-f]{40}$') { throw "Expected commit must be a 40-character hexadecimal SHA: $ExpectedCommit" }
 $hasSymbolPackage = -not [string]::IsNullOrWhiteSpace($SymbolPackagePath)
 if ($hasSymbolPackage) {
     $symbolPackagePath = (Resolve-Path -LiteralPath $SymbolPackagePath).Path
@@ -197,6 +201,101 @@ function Get-ArchiveEntryBytes {
     finally { $memory.Dispose() }
 }
 
+function Get-ArchiveEntryText {
+    param([IO.Compression.ZipArchive] $Archive, [string] $EntryName)
+    $entry = $Archive.GetEntry($EntryName)
+    if ($null -eq $entry) { throw "Archive entry is missing: $EntryName" }
+    $utf8 = [Text.UTF8Encoding]::new($false, $true)
+    $stream = $entry.Open()
+    try {
+        $reader = [IO.StreamReader]::new($stream, $utf8, $false)
+        try { return $reader.ReadToEnd().TrimStart([char]0xfeff) }
+        finally { $reader.Dispose() }
+    }
+    finally { $stream.Dispose() }
+}
+
+function Get-NuspecDocument {
+    param([IO.Compression.ZipArchive] $Archive, [string] $ArchiveLabel)
+    $nuspecs = @($Archive.Entries | Where-Object { $_.FullName -match '(?i)^[^/]+\.nuspec$' })
+    if ($nuspecs.Count -ne 1) { throw "$ArchiveLabel must contain exactly one root nuspec." }
+    try { [xml] $document = Get-ArchiveEntryText -Archive $Archive -EntryName $nuspecs[0].FullName }
+    catch { throw "$ArchiveLabel nuspec is not valid UTF-8 XML: $($_.Exception.Message)" }
+    return [pscustomobject]@{ Name = $nuspecs[0].FullName; Document = $document }
+}
+
+function Assert-CommitFields {
+    param([xml] $Document, [string] $Expected, [string] $ArchiveLabel)
+    $commitNodes = @($Document.SelectNodes('//*[local-name()="commit"]')) + @($Document.SelectNodes('//@commit'))
+    if ($commitNodes.Count -eq 0) { throw "$ArchiveLabel has no repository commit field." }
+    foreach ($node in $commitNodes) {
+        $value = if ($node -is [Xml.XmlAttribute]) { $node.Value } else { $node.InnerText }
+        if ($value -ne $Expected) { throw "$ArchiveLabel repository commit does not match the frozen candidate $Expected." }
+    }
+}
+
+function Get-PdbProvenance {
+    param([byte[]] $Bytes, [string] $EntryName)
+    Add-Type -AssemblyName System.Reflection.Metadata
+    Add-Type -AssemblyName System.Collections.Immutable
+    $stream = [IO.MemoryStream]::new($Bytes, $false)
+    try {
+        $provider = [Reflection.Metadata.MetadataReaderProvider]::FromPortablePdbStream($stream)
+        try {
+            $reader = $provider.GetMetadataReader()
+            $documents = @($reader.Documents | ForEach-Object { $reader.GetString($reader.GetDocument($_).Name) })
+            $sourceLink = $null
+            $sourceLinkGuid = [Guid]'CC110556-A091-4D38-9FEC-25AB9A351A6A'
+            foreach ($handle in $reader.CustomDebugInformation) {
+                $custom = $reader.GetCustomDebugInformation($handle)
+                if ($reader.GetGuid($custom.Kind) -eq $sourceLinkGuid) {
+                    $sourceLink = [Text.UTF8Encoding]::new($false, $true).GetString($reader.GetBlobBytes($custom.Value))
+                }
+            }
+            if ([string]::IsNullOrWhiteSpace($sourceLink)) { throw "$EntryName has no SourceLink custom debug information." }
+            return [pscustomobject]@{ Documents = $documents; SourceLink = $sourceLink }
+        }
+        finally { $provider.Dispose() }
+    }
+    finally { $stream.Dispose() }
+}
+
+function Assert-PdbProvenance {
+    param([byte[]] $Bytes, [string] $EntryName, [string] $Expected)
+    try { $provenance = Get-PdbProvenance -Bytes $Bytes -EntryName $EntryName }
+    catch { throw "Could not parse portable PDB ${EntryName}: $($_.Exception.Message)" }
+    foreach ($document in $provenance.Documents) {
+        if ($document -match '\\|^[A-Za-z]:|^//|^/Users/|^/home/|^/private/|^/Volumes/|\.\.([/\\]|$)' -or ($document.StartsWith('/') -and -not $document.StartsWith('/_/'))) {
+            throw "Portable PDB contains a private or absolute document path: $EntryName -> $document"
+        }
+        if ([string]::IsNullOrWhiteSpace($document)) { throw "Portable PDB contains an empty document path: $EntryName" }
+    }
+    try { $sourceLink = $provenance.SourceLink | ConvertFrom-Json }
+    catch { throw "SourceLink data in $EntryName is not valid JSON." }
+    $documents = @($sourceLink.documents.PSObject.Properties)
+    if ($documents.Count -ne 1 -or $documents[0].Name -ne '/_/*' -or $documents[0].Value -ne "https://raw.githubusercontent.com/KeelMatrix/CliContract/$Expected/*") {
+        throw "SourceLink data in $EntryName does not point to the frozen candidate $Expected."
+    }
+    return $provenance
+}
+
+function Assert-ArchiveProvenance {
+    param([string] $ArchivePath, [string] $ArchiveLabel, [string] $Expected)
+    $archive = [IO.Compression.ZipFile]::OpenRead($ArchivePath)
+    try {
+        $nuspec = Get-NuspecDocument -Archive $archive -ArchiveLabel $ArchiveLabel
+        Assert-CommitFields -Document $nuspec.Document -Expected $Expected -ArchiveLabel $ArchiveLabel
+        $pdbs = @($archive.Entries | Where-Object { $_.FullName -match '(?i)\.pdb$' })
+        if ($pdbs.Count -eq 0) { throw "$ArchiveLabel contains no portable PDB entries." }
+        $provenance = @{}
+        foreach ($entry in $pdbs) {
+            $provenance[$entry.FullName] = Assert-PdbProvenance -Bytes (Get-ArchiveEntryBytes -Entry $entry) -EntryName "$ArchiveLabel/$($entry.FullName)" -Expected $Expected
+        }
+        return [pscustomobject]@{ Nuspec = $nuspec; Pdbs = $pdbs; Provenance = $provenance }
+    }
+    finally { $archive.Dispose() }
+}
+
 function Assert-ArchiveTextSurface {
     param(
         [string] $ArchivePath,
@@ -236,6 +335,22 @@ function Replace-ArchiveEntryBytes {
         finally { $stream.Dispose() }
     }
     finally { $archive.Dispose() }
+}
+
+function Replace-ByteSequence {
+    param([byte[]] $Bytes, [byte[]] $Old, [byte[]] $New)
+    if ($Old.Length -ne $New.Length) { throw 'Self-test byte replacements must preserve length.' }
+    for ($start = 0; $start -le $Bytes.Length - $Old.Length; $start++) {
+        $match = $true
+        for ($offset = 0; $offset -lt $Old.Length; $offset++) { if ($Bytes[$start + $offset] -ne $Old[$offset]) { $match = $false; break } }
+        if ($match) {
+            $copy = [byte[]]::new($Bytes.Length)
+            [Buffer]::BlockCopy($Bytes, 0, $copy, 0, $Bytes.Length)
+            [Buffer]::BlockCopy($New, 0, $copy, $start, $New.Length)
+            return ,$copy
+        }
+    }
+    throw 'Self-test byte sequence was not found.'
 }
 
 function Add-ArchiveMarker {
@@ -381,6 +496,38 @@ if ($SelfTest) {
         }
         Write-Output 'PACKAGE_NEGATIVE_SELF_TEST=PASS'
 
+        $provenanceCases = @(
+            @{ Name = 'wrong-valid-commit'; Archive = 'nupkg'; Entry = 'KeelMatrix.CliContract.nuspec'; Old = [Text.Encoding]::UTF8.GetBytes($ExpectedCommit); New = [Text.Encoding]::UTF8.GetBytes(('0' * 40)) },
+            @{ Name = 'incorrect-sourcelink-url'; Archive = 'nupkg'; Entry = 'tools/net8.0/any/KeelMatrix.CliContract.pdb'; Old = [Text.Encoding]::UTF8.GetBytes('raw.githubusercontent.com'); New = [Text.Encoding]::UTF8.GetBytes('bad.githubusercontent.com') },
+            @{ Name = 'absolute-pdb-path'; Archive = 'nupkg'; Entry = 'tools/net8.0/any/KeelMatrix.CliContract.pdb'; Old = [Text.Encoding]::UTF8.GetBytes('src'); New = [Text.Encoding]::UTF8.GetBytes('C:\') },
+            @{ Name = 'stale-symbol-pdb'; Archive = 'snupkg'; Entry = 'tools/net8.0/any/KeelMatrix.CliContract.pdb'; Old = $null; New = $null }
+        )
+        foreach ($case in $provenanceCases) {
+            $casePackage = Join-Path $selfTestRoot ($case.Name + '.nupkg')
+            $caseSymbols = Join-Path $selfTestRoot ($case.Name + '.snupkg')
+            Copy-Item -LiteralPath $packagePath -Destination $casePackage
+            Copy-Item -LiteralPath $symbolPackagePath -Destination $caseSymbols
+            if ($case.Name -eq 'stale-symbol-pdb') {
+                $archive = [IO.Compression.ZipFile]::OpenRead($caseSymbols)
+                try { $bytes = Get-ArchiveEntryBytes -Entry $archive.GetEntry($case.Entry) }
+                finally { $archive.Dispose() }
+                $bytes[$bytes.Length - 1] = $bytes[$bytes.Length - 1] -bxor 1
+                Replace-ArchiveEntryBytes -ArchivePath $caseSymbols -EntryName $case.Entry -Bytes $bytes
+            }
+            else {
+                $target = if ($case.Archive -eq 'nupkg') { $casePackage } else { $caseSymbols }
+                $archive = [IO.Compression.ZipFile]::OpenRead($target)
+                try { $bytes = Get-ArchiveEntryBytes -Entry $archive.GetEntry($case.Entry) }
+                finally { $archive.Dispose() }
+                Replace-ArchiveEntryBytes -ArchivePath $target -EntryName $case.Entry -Bytes (Replace-ByteSequence -Bytes $bytes -Old $case.Old -New $case.New)
+            }
+            $caseOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $caseSymbols -RepositoryRoot $root -ExpectedCommit $ExpectedCommit 2>&1)
+            $caseExit = $LASTEXITCODE
+            if ($caseExit -eq 0) { throw "Package provenance inspection accepted self-test case $($case.Name)." }
+            Write-Output "PACKAGE_PROVENANCE_NEGATIVE_SELF_TEST=$($case.Name) child_exit=$caseExit"
+        }
+        Write-Output 'PACKAGE_PROVENANCE_NEGATIVE_SELF_TEST=PASS'
+
         $utf8 = [Text.UTF8Encoding]::new($false, $true)
         $utf8Bom = [Text.UTF8Encoding]::new($true, $true)
         $utf16le = [Text.UnicodeEncoding]::new($false, $false, $true)
@@ -412,11 +559,11 @@ if ($SelfTest) {
                     Replace-ArchiveEntryBytes -ArchivePath $casePackage -EntryName 'README.md' -Bytes $case.Bytes
                 }
                 else {
-                    Replace-ArchiveEntryBytes -ArchivePath $caseSymbols -EntryName 'KeelMatrix.CliContract.nuspec' -Bytes $case.Bytes
+                    Replace-ArchiveEntryBytes -ArchivePath $caseSymbols -EntryName '[Content_Types].xml' -Bytes $case.Bytes
                 }
                 $caseOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $caseSymbols -RepositoryRoot $root 2>&1)
                 $caseExit = $LASTEXITCODE
-                if ($caseExit -ne 0 -or ($caseOutput -join "`n") -notmatch 'PACKAGE_INSPECTION=PASS') { throw "Package strict-decoder self-test rejected clean $archiveCase fixture $($case.Name)." }
+                if ($caseExit -ne 0 -or ($caseOutput -join "`n") -notmatch 'PACKAGE_INSPECTION=PASS') { throw "Package strict-decoder self-test rejected clean $archiveCase fixture $($case.Name): $($caseOutput -join ' | ')" }
                 Write-Output "PACKAGE_TEXT_FIXTURE=$archiveCase-$($case.Name) EXPECTED=ACCEPT exit=$caseExit"
             }
         }
@@ -445,7 +592,7 @@ if ($SelfTest) {
                     Replace-ArchiveEntryBytes -ArchivePath $casePackage -EntryName 'README.md' -Bytes $case.Bytes
                 }
                 else {
-                    Replace-ArchiveEntryBytes -ArchivePath $caseSymbols -EntryName 'KeelMatrix.CliContract.nuspec' -Bytes $case.Bytes
+                    Replace-ArchiveEntryBytes -ArchivePath $caseSymbols -EntryName '[Content_Types].xml' -Bytes $case.Bytes
                 }
                 $caseOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $caseSymbols -RepositoryRoot $root 2>&1)
                 $caseExit = $LASTEXITCODE
@@ -470,6 +617,7 @@ try {
     $nuspecName = $entries | Where-Object { $_ -like '*.nuspec' }
     if (@($nuspecName).Count -ne 1) { throw 'Package must contain exactly one nuspec.' }
     [xml]$nuspec = Get-Content -Raw (Join-Path $temp $nuspecName)
+    Assert-CommitFields -Document $nuspec -Expected $ExpectedCommit -ArchiveLabel 'nupkg'
     $metadata = $nuspec.package.metadata
     $iconVerified = $false
     $allowedMetadata = @('id', 'version', 'authors', 'license', 'licenseUrl', 'icon', 'readme', 'projectUrl', 'description', 'tags', 'packageTypes', 'repository')
@@ -488,7 +636,7 @@ try {
         Write-Output 'ICON_GATE=UNVERIFIED package icon metadata and package-root icon are absent.'
     }
     if ($metadata.projectUrl -ne 'https://github.com/KeelMatrix/CliContract') { throw 'Project URL metadata is incorrect.' }
-    if ($metadata.repository.type -ne 'git' -or $metadata.repository.url -ne 'https://github.com/KeelMatrix/CliContract' -or $metadata.repository.commit -notmatch '^[0-9a-f]{40}$') { throw 'Repository metadata is incorrect.' }
+    if ($metadata.repository.type -ne 'git' -or $metadata.repository.url -ne 'https://github.com/KeelMatrix/CliContract' -or $metadata.repository.commit -ne $ExpectedCommit) { throw "Repository metadata must point to frozen candidate $ExpectedCommit." }
     $packageTypes = @($metadata.packageTypes.packageType | ForEach-Object { $_.name })
     if ($packageTypes.Count -ne 1 -or $packageTypes[0] -ne 'DotnetTool') { throw 'Package type metadata is not the expected DotnetTool contract.' }
     $dependencyNodes = @($metadata.dependencies.group | ForEach-Object { $_.dependency } | Where-Object { $null -ne $_ })
@@ -511,14 +659,40 @@ try {
         'tools/net8.0/any/KeelMatrix.Telemetry.dll',
         'tools/net8.0/any/YamlDotNet.dll'
     )
-    $required = @('README.md', 'KeelMatrix.CliContract.nuspec') + $requiredToolPayload
+    $required = @('README.md', 'LICENSE', 'THIRD-PARTY-NOTICES', 'KeelMatrix.CliContract.nuspec') + $requiredToolPayload
     foreach ($entry in $required) { if ($entries -notcontains $entry) { throw "Required package entry is missing: $entry" } }
     if ($entries -notcontains 'LICENSE') { throw 'The package must contain LICENSE.' }
-    $allowedEntries = @('_rels/.rels', '[Content_Types].xml', 'README.md', 'LICENSE', 'icon.png', $nuspecName) + $requiredToolPayload + $metadataEntries
+    $allowedEntries = @('_rels/.rels', '[Content_Types].xml', 'README.md', 'LICENSE', 'THIRD-PARTY-NOTICES', 'icon.png', $nuspecName) + $requiredToolPayload + $metadataEntries
     $unexpected = @($entries | Where-Object {
         $_ -notin $allowedEntries
     })
     if ($unexpected.Count -gt 0) { throw "Unexpected package entries: $($unexpected -join ', ')" }
+    $noticePath = Join-Path $temp 'THIRD-PARTY-NOTICES'
+    $notice = Get-Content -Raw -LiteralPath $noticePath
+    $yamlNotice = @'
+Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014 Antoine Aubry and contributors
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to
+do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+'@
+    if ($notice -notmatch 'YamlDotNet\s+v16\.3\.0' -or $notice -notmatch [regex]::Escape($yamlNotice.Trim())) { throw 'THIRD-PARTY-NOTICES does not contain the exact YamlDotNet v16.3.0 notice.' }
+    $runtimeAssemblies = @($entries | Where-Object { $_ -match '^tools/net8\.0/any/[^/]+\.dll$' } | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension($_) })
+    foreach ($assembly in $runtimeAssemblies) {
+        if ($assembly -notlike 'KeelMatrix.*' -and $notice -notmatch [regex]::Escape($assembly)) { throw "Bundled third-party assembly $assembly has no matching redistribution notice." }
+        Write-Output "BUNDLED_ASSEMBLY=$assembly NOTICE=PASS"
+    }
     $sensitive = @($entries | Where-Object {
         $entry = $_
         @($sensitivePatterns | Where-Object { $entry -match $_ }).Count -gt 0 -or $entry -match '(?i)(^|/)AGENTS\.md$|.*test.*'
@@ -529,6 +703,31 @@ try {
     if ((@($pdbEntries | Sort-Object) -join '|') -ne (@($expectedPdbEntries | Sort-Object) -join '|')) { throw "Unexpected or missing package symbol entries: $($pdbEntries -join ', ')" }
     Assert-ArchiveTextSurface -ArchivePath $packagePath -ArchiveName 'nupkg'
     if ($hasSymbolPackage) { Assert-ArchiveTextSurface -ArchivePath $symbolPackagePath -ArchiveName 'snupkg' }
+    $nupkgProvenance = Assert-ArchiveProvenance -ArchivePath $packagePath -ArchiveLabel 'nupkg' -Expected $ExpectedCommit
+    if ($hasSymbolPackage) {
+        $snupkgProvenance = Assert-ArchiveProvenance -ArchivePath $symbolPackagePath -ArchiveLabel 'snupkg' -Expected $ExpectedCommit
+        $nupkgMetadata = $nupkgProvenance.Nuspec.Document.package.metadata
+        $snupkgMetadata = $snupkgProvenance.Nuspec.Document.package.metadata
+        if ($nupkgMetadata.id -ne $snupkgMetadata.id -or $nupkgMetadata.version -ne $snupkgMetadata.version -or $nupkgMetadata.repository.commit -ne $snupkgMetadata.repository.commit) {
+            throw 'nupkg and snupkg nuspec identity/version/commit do not match.'
+        }
+        $nupkgPdbNames = @($nupkgProvenance.Pdbs | ForEach-Object FullName | ForEach-Object { [IO.Path]::GetFileName($_) } | Sort-Object)
+        $snupkgPdbNames = @($snupkgProvenance.Pdbs | ForEach-Object FullName | ForEach-Object { [IO.Path]::GetFileName($_) } | Sort-Object)
+        if (($nupkgPdbNames -join '|') -ne ($snupkgPdbNames -join '|')) { throw 'nupkg and snupkg PDB assembly sets do not match.' }
+        $nupkgArchive = [IO.Compression.ZipFile]::OpenRead($packagePath)
+        $snupkgArchive = [IO.Compression.ZipFile]::OpenRead($symbolPackagePath)
+        try {
+            foreach ($name in @($nupkgProvenance.Pdbs | ForEach-Object FullName)) {
+                $symbolName = $snupkgProvenance.Pdbs | Where-Object { [IO.Path]::GetFileName($_.FullName) -eq [IO.Path]::GetFileName($name) } | Select-Object -First 1 -ExpandProperty FullName
+                $left = Get-ArchiveEntryBytes -Entry $nupkgArchive.GetEntry($name)
+                $right = if ($null -eq $symbolName) { [byte[]]::new(0) } else { Get-ArchiveEntryBytes -Entry $snupkgArchive.GetEntry($symbolName) }
+                if ($null -eq $symbolName -or $left.Length -ne $right.Length) { throw "Symbol PDB does not correspond to $name." }
+                for ($index = 0; $index -lt $left.Length; $index++) { if ($left[$index] -ne $right[$index]) { throw "Symbol PDB does not correspond to $name." } }
+            }
+        }
+        finally { $nupkgArchive.Dispose(); $snupkgArchive.Dispose() }
+        Write-Output 'PACKAGE_PROVENANCE=PASS source_link=pdb_paths=pair=PASS'
+    }
     if (-not (Test-Path -LiteralPath $iconPath)) {
         if (-not $AllowMissingIcon) { throw 'Required icon path is missing: repository-root icon.png' }
         Write-Output 'ICON_GATE=UNVERIFIED repository-root icon.png is absent.'

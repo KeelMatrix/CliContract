@@ -61,6 +61,45 @@ public sealed class NormalizationTests
         Assert.Equal(manifest.Info.Binary, CanonicalManifestReader.Read(Normalizer.Serialize(manifest)).Info.Binary);
     }
 
+    [Theory]
+    [InlineData(" ", true)]
+    [InlineData("\t", true)]
+    [InlineData("\f", true)]
+    [InlineData("\r", true)]
+    [InlineData("\n", false)]
+    [InlineData("\v", false)]
+    [InlineData("\u00a0", false)]
+    [InlineData("\u2003", false)]
+    [InlineData("\u202f", false)]
+    public void Alpha14CommandKeyDelimiterClassMatchesPinnedGoGrammar(string separator, bool isDelimiter)
+    {
+        foreach (var document in new[] { CommandKeyJson(separator), CommandKeyYaml(separator) })
+        {
+            if (isDelimiter)
+            {
+                var manifest = Normalizer.Normalize("opencli", document);
+                Assert.Equal("root / run", manifest.Root.Subcommands.Single().Path);
+            }
+            else
+            {
+                var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", document));
+                Assert.Equal("OPENCLI_COMMAND_KEY", error.Code);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("\t")]
+    [InlineData("\f")]
+    [InlineData("\r")]
+    public void Alpha14ParameterBoundaryUsesPinnedWhitespaceClass(string separator)
+    {
+        var document = CommandKeyJson(separator, "<target>");
+        var manifest = Normalizer.Normalize("opencli", document);
+        Assert.Equal("root", manifest.Root.Path);
+    }
+
     [Fact]
     public void Alpha14OptionNamesPreserveWhitespaceAndTrimmedDashOnlyFormsAtEveryScope()
     {
@@ -1508,6 +1547,38 @@ public sealed class NormalizationTests
         {
             ["commands"] = new JsonObject { ["tool"] = command }
         }.ToJsonString());
+    }
+
+    private static string CommandKeyJson(string separator, string suffix = "run")
+    {
+        var document = new JsonObject
+        {
+            ["commands"] = new JsonObject
+            {
+                ["tool" + separator + suffix] = new JsonObject()
+            }
+        };
+        return OpenCliDocument(document.ToJsonString());
+    }
+
+    private static string CommandKeyYaml(string separator)
+    {
+        var escapedSeparator = separator switch
+        {
+            "\t" => "\\t",
+            "\f" => "\\f",
+            "\r" => "\\r",
+            "\n" => "\\n",
+            "\v" => "\\v",
+            _ => separator
+        };
+
+        return $$"""
+        opencliVersion: 1.0.0-alpha.14
+        info: {title: Tool, binary: tool, version: '1'}
+        commands:
+          "tool{{escapedSeparator}}run": {}
+        """;
     }
 
     private static string Fixture(params string[] parts)
