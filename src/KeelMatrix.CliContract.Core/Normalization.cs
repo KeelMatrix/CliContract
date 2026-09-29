@@ -1105,6 +1105,7 @@ public static class Normalizer
         var normalized = new List<CanonicalCommand>();
         foreach (var property in commands.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
+            EnsureSupportedOpenCliCommandKey(property.Key);
             normalized.Add(NormalizeOpenCliCommand(property.Key, RequireObject(property.Value, "OPENCLI_COMMAND"), binary, limits));
         }
 
@@ -1400,18 +1401,7 @@ public static class Normalizer
 
     private static string ParseOpenCliPath(string key, string binary)
     {
-        var commandEnd = -1;
-        for (var index = 0; index + 1 < key.Length; index++)
-        {
-            if (!IsPinnedOpenCliWhitespace(key[index])) continue;
-            if (!char.IsAsciiLetter(key[index + 1]))
-            {
-                commandEnd = index;
-                break;
-            }
-        }
-
-        var commandLine = commandEnd < 0 ? key : key[..commandEnd];
+        var commandLine = PinnedOpenCliCommandLine(key);
         var tokens = SplitPinnedOpenCliWhitespace(commandLine);
         if (tokens.Length == 0 || tokens.Any(token => token.Length == 0))
         {
@@ -1424,6 +1414,30 @@ public static class Normalizer
         }
 
         return tokens.Length == 1 ? "root" : "root / " + string.Join(" / ", tokens.Skip(1));
+    }
+
+    private static void EnsureSupportedOpenCliCommandKey(string key)
+    {
+        var tokens = SplitPinnedOpenCliWhitespace(PinnedOpenCliCommandLine(key));
+        if (tokens.Any(token => token.Length == 0))
+        {
+            throw new NormalizationException(
+                "OPENCLI_COMMAND_KEY",
+                "OpenCLI command keys with pinned whitespace-edge segments are unsupported because the canonical root and command segments must be nonempty.");
+        }
+    }
+
+    private static string PinnedOpenCliCommandLine(string key)
+    {
+        for (var index = 0; index + 1 < key.Length; index++)
+        {
+            if (IsPinnedOpenCliWhitespace(key[index]) && !char.IsAsciiLetter(key[index + 1]))
+            {
+                return key[..index];
+            }
+        }
+
+        return key;
     }
 
     // Go's regexp \s class is [space, tab, LF, form feed, CR]. The pinned

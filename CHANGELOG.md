@@ -6,7 +6,7 @@ This file records user-visible changes to KeelMatrix.CliContract.
 
 ### Fixed
 
-- Corrected the pinned alpha.14 command-key grammar to exclude CR from its delimiter class, preserve regex whitespace-edge segmentation, and reject empty leading/trailing command segments instead of normalizing them.
+- Corrected the pinned alpha.14 command-key grammar to exclude CR from its delimiter class and preserve regex whitespace-edge segmentation. Keys whose pinned derivation contains an empty edge segment are rejected before canonical path parsing with a documented `OPENCLI_COMMAND_KEY` supported-input diagnostic because canonical schema version 2 cannot represent an empty root or command segment.
 - Canonical baseline validation rejects states the pinned alpha.14 normalizer cannot produce, including invalid metadata, arity, source, domain, status, file-source, and exit-code invariants; `check` and `diff` return bounded exit `3` for invalid baselines.
 - Telemetry activation now follows the canonical runnable-action surface; aliases, parameters, help metadata, and group-only command trees do not activate telemetry.
 - Repository wording guards now cover attribution keywords split at internal character boundaries and Markdown hard-wrap whitespace, while packed text inspection strictly decodes and scans both `.nupkg` and `.snupkg` entries.

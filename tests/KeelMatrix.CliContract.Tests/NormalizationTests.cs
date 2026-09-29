@@ -106,8 +106,11 @@ public sealed class NormalizationTests
         // from the implementation under test:
         //   paramsRE.Split(key, -1)[0] with [^\S\r\n][^A-Za-z]
         //   wsRE.Split(commandLine, -1) with [^\S\r\n]+.
-        // The project contract rejects empty edge segments because its
-        // canonical root is the nonempty info.binary command segment.
+        // The pinned source accepts arbitrary command-key strings, but the
+        // canonical model cannot represent an empty root or command segment.
+        // The supported-input boundary therefore rejects exactly the cases
+        // whose pinned derivation contains an empty edge segment, before the
+        // command key is converted into a canonical path.
         foreach (var testCase in PinnedCommandKeyCases)
         {
             Assert.Equal(testCase.ExpectedCommandLine, DeriveCommandLine(testCase.Key));
@@ -124,6 +127,10 @@ public sealed class NormalizationTests
                 {
                     var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", document));
                     Assert.Equal(testCase.ExpectedError, error.Code);
+                    if (testCase.ExpectedErrorMessage is not null)
+                    {
+                        Assert.Equal(testCase.ExpectedErrorMessage, error.Message);
+                    }
                 }
             }
         }
@@ -1584,7 +1591,11 @@ public sealed class NormalizationTests
         string ExpectedCommandLine,
         string[] ExpectedSegments,
         string? ExpectedPath,
-        string? ExpectedError);
+        string? ExpectedError,
+        string? ExpectedErrorMessage = null);
+
+    private const string UnsupportedWhitespaceEdgeMessage =
+        "OpenCLI command keys with pinned whitespace-edge segments are unsupported because the canonical root and command segments must be nonempty.";
 
     private static readonly PinnedCommandKeyCase[] PinnedCommandKeyCases =
     [
@@ -1598,8 +1609,17 @@ public sealed class NormalizationTests
         new("em-space-data", "tool\u2003run", "tool\u2003run", ["tool\u2003run"], null, "OPENCLI_COMMAND_KEY"),
         new("narrow-nbsp-data", "tool\u202frun", "tool\u202frun", ["tool\u202frun"], null, "OPENCLI_COMMAND_KEY"),
         new("doubled-space", "tool  run", "tool", ["tool"], "root", null),
-        new("leading-space", " tool sub", " tool sub", ["", "tool", "sub"], null, "OPENCLI_COMMAND_KEY"),
-        new("trailing-space", "tool ", "tool ", ["tool", ""], null, "OPENCLI_COMMAND_KEY"),
+        new("doubled-mixed-whitespace", "tool \t\frun", "tool", ["tool"], "root", null),
+        new("leading-space", " tool sub", " tool sub", ["", "tool", "sub"], null, "OPENCLI_COMMAND_KEY", UnsupportedWhitespaceEdgeMessage),
+        new("leading-tab", "\ttool sub", "\ttool sub", ["", "tool", "sub"], null, "OPENCLI_COMMAND_KEY", UnsupportedWhitespaceEdgeMessage),
+        new("leading-form-feed", "\ftool sub", "\ftool sub", ["", "tool", "sub"], null, "OPENCLI_COMMAND_KEY", UnsupportedWhitespaceEdgeMessage),
+        new("leading-mixed-whitespace", " \t\ftool sub", "", [""], null, "OPENCLI_COMMAND_KEY", UnsupportedWhitespaceEdgeMessage),
+        new("trailing-space", "tool ", "tool ", ["tool", ""], null, "OPENCLI_COMMAND_KEY", UnsupportedWhitespaceEdgeMessage),
+        new("trailing-tab", "tool\t", "tool\t", ["tool", ""], null, "OPENCLI_COMMAND_KEY", UnsupportedWhitespaceEdgeMessage),
+        new("trailing-form-feed", "tool\f", "tool\f", ["tool", ""], null, "OPENCLI_COMMAND_KEY", UnsupportedWhitespaceEdgeMessage),
+        new("trailing-mixed-whitespace", "tool \t\f", "tool", ["tool"], "root", null),
+        new("only-space", " ", " ", ["", ""], null, "OPENCLI_COMMAND_KEY", UnsupportedWhitespaceEdgeMessage),
+        new("only-mixed-whitespace", " \t\f", "", [""], null, "OPENCLI_COMMAND_KEY", UnsupportedWhitespaceEdgeMessage),
         new("space-before-ascii-letter", "tool run", "tool run", ["tool", "run"], "root / run", null),
         new("space-before-dash-modifier", "tool --flag", "tool", ["tool"], "root", null),
         new("space-before-angle-modifier", "tool <value>", "tool", ["tool"], "root", null),

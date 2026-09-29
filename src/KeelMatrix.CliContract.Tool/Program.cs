@@ -691,7 +691,9 @@ internal static class CliApplication
       YAML .inf and .nan are outside that boundary: tagged forms error; untagged forms are strings.
       Pinned alpha.14 command keys delimit on ASCII space, tab, and form feed only; CR, LF, VT,
       and Unicode whitespace remain data. Modifier boundaries use the same class and require a
-      following non-ASCII-letter character; empty leading/trailing segments fail closed.
+      following non-ASCII-letter character. The pinned split keeps empty edge segments; because
+      canonical schema version 2 cannot represent them, those keys fail before canonical path
+      parsing with OPENCLI_COMMAND_KEY (exit 3) and a stable whitespace-edge diagnostic.
       Accepted command names include aliases at every command segment; retained aliases preserve old paths.
       All supported string, number, integer, and boolean type domains are compared, and exit-code changes warn.
       Choices and defaults must match their declared type; non-integral integer values fail with exit 3.

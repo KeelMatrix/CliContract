@@ -80,7 +80,10 @@ try {
     # Go's \s is space, tab, LF, form feed, and CR; [^\S\r\n] therefore
     # matches only space, tab, and form feed. paramsRE then ends the command
     # before a delimiter followed by a non-ASCII-letter character. This table
-    # intentionally stays independent from the product parser.
+    # intentionally stays independent from the product parser. The pinned
+    # source accepts these keys; the local canonical model cannot represent
+    # an empty root or command segment, so the complete empty-edge family is
+    # an explicit supported-input boundary with OPENCLI_COMMAND_KEY.
     function ConvertTo-PinnedYamlKey([string] $Value) {
         $builder = [Text.StringBuilder]::new()
         foreach ($character in $Value.ToCharArray()) {
@@ -128,8 +131,17 @@ commands:
         @{ Name = 'em-space-data'; Key = ('tool' + [char]0x2003 + 'run'); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
         @{ Name = 'narrow-nbsp-data'; Key = ('tool' + [char]0x202f + 'run'); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
         @{ Name = 'doubled-space'; Key = 'tool  run'; Valid = $true },
+        @{ Name = 'doubled-mixed-whitespace'; Key = ('tool ' + [char]0x09 + [char]0x0c + 'run'); Valid = $true },
         @{ Name = 'leading-space'; Key = ' tool sub'; Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
+        @{ Name = 'leading-tab'; Key = ([char]0x09 + 'tool sub'); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
+        @{ Name = 'leading-form-feed'; Key = ([char]0x0c + 'tool sub'); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
+        @{ Name = 'leading-mixed-whitespace'; Key = (' ' + [char]0x09 + [char]0x0c + 'tool sub'); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
         @{ Name = 'trailing-space'; Key = 'tool '; Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
+        @{ Name = 'trailing-tab'; Key = ('tool' + [char]0x09); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
+        @{ Name = 'trailing-form-feed'; Key = ('tool' + [char]0x0c); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
+        @{ Name = 'trailing-mixed-whitespace'; Key = ('tool ' + [char]0x09 + [char]0x0c); Valid = $true },
+        @{ Name = 'only-space'; Key = ' '; Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
+        @{ Name = 'only-mixed-whitespace'; Key = (' ' + [char]0x09 + [char]0x0c); Valid = $false; Code = 'OPENCLI_COMMAND_KEY' },
         @{ Name = 'space-before-ascii-letter'; Key = 'tool run'; Valid = $true },
         @{ Name = 'space-before-dash-modifier'; Key = 'tool --flag'; Valid = $true },
         @{ Name = 'space-before-angle-modifier'; Key = 'tool <value>'; Valid = $true },
