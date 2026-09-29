@@ -136,7 +136,7 @@ try {
     # feed, and CR; [^\S\r\n] therefore matches only space, tab, and form
     # feed. paramsRE ends before a delimiter followed by a non-ASCII letter.
     # This list is intentionally explicit rather than sharing parser helpers.
-    # The pinned source accepts edge-whitespace keys; the canonical model does
+    # The pinned source accepts edge-whitespace keys; the canonical representation does
     # not represent an empty root or command segment, so that complete family
     # is rejected with OPENCLI_COMMAND_KEY before canonical path parsing.
     function ConvertTo-InstalledYamlKey([string] $Value) {

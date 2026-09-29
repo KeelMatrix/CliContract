@@ -107,7 +107,7 @@ public sealed class NormalizationTests
         //   paramsRE.Split(key, -1)[0] with [^\S\r\n][^A-Za-z]
         //   wsRE.Split(commandLine, -1) with [^\S\r\n]+.
         // The pinned source accepts arbitrary command-key strings, but the
-        // canonical model cannot represent an empty root or command segment.
+        // canonical representation cannot represent an empty root or command segment.
         // The supported-input boundary therefore rejects exactly the cases
         // whose pinned derivation contains an empty edge segment, before the
         // command key is converted into a canonical path.

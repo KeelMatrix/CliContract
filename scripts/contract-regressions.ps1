@@ -81,7 +81,7 @@ try {
     # matches only space, tab, and form feed. paramsRE then ends the command
     # before a delimiter followed by a non-ASCII-letter character. This table
     # intentionally stays independent from the product parser. The pinned
-    # source accepts these keys; the local canonical model cannot represent
+    # source accepts these keys; the local canonical representation cannot represent
     # an empty root or command segment, so the complete empty-edge family is
     # an explicit supported-input boundary with OPENCLI_COMMAND_KEY.
     function ConvertTo-PinnedYamlKey([string] $Value) {
