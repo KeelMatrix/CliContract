@@ -5,7 +5,13 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../build/Invoke-NestedPwsh.ps1')
 $root = Split-Path -Parent $PSScriptRoot
+$launchGuard = Join-Path $root 'build/Test-NestedPwshLaunch.ps1'
+& $launchGuard -SelfTest
+if ($LASTEXITCODE -ne 0) { throw 'Nested PowerShell launch guard self-test failed.' }
+& $launchGuard
+if ($LASTEXITCODE -ne 0) { throw 'Nested PowerShell launch guard failed.' }
 Set-Location $root
 if ([string]::IsNullOrWhiteSpace($ExpectedCommit)) {
     $ExpectedCommit = (& git rev-parse HEAD).Trim()
@@ -30,32 +36,32 @@ dotnet build KeelMatrix.CliContract.sln -c Release --no-restore --nologo
 Assert-NativeSuccess 'Release build'
 dotnet test KeelMatrix.CliContract.sln -c Release --no-build --nologo
 Assert-NativeSuccess 'Release tests'
-& pwsh -NoProfile -File ./scripts/contract-regressions.ps1
+Invoke-NestedPwsh -NoProfile -File ./scripts/contract-regressions.ps1
 Assert-NativeSuccess 'Consumer contract regressions'
-& pwsh -NoProfile -File ./scripts/verify-determinism.ps1
+Invoke-NestedPwsh -NoProfile -File ./scripts/verify-determinism.ps1
 Assert-NativeSuccess 'Determinism verification'
-& pwsh -NoProfile -File ./scripts/check-no-execution.ps1
+Invoke-NestedPwsh -NoProfile -File ./scripts/check-no-execution.ps1
 Assert-NativeSuccess 'No-execution source scan'
-& pwsh -NoProfile -File ./scripts/test-no-execution.ps1
+Invoke-NestedPwsh -NoProfile -File ./scripts/test-no-execution.ps1
 Assert-NativeSuccess 'No-execution harness'
-& pwsh -NoProfile -File ./scripts/scan-user-facing-surface.ps1 -SelfTest
+Invoke-NestedPwsh -NoProfile -File ./scripts/scan-user-facing-surface.ps1 -SelfTest
 Assert-NativeSuccess 'User-facing wording scan'
-& pwsh -NoProfile -File ./scripts/verify-error-taxonomy.ps1
+Invoke-NestedPwsh -NoProfile -File ./scripts/verify-error-taxonomy.ps1
 Assert-NativeSuccess 'Error taxonomy documentation check'
-& pwsh -NoProfile -File ./scripts/validate-sensitive-paths.ps1 -SelfTest
+Invoke-NestedPwsh -NoProfile -File ./scripts/validate-sensitive-paths.ps1 -SelfTest
 Assert-NativeSuccess 'Sensitive-path ingress safety'
-& pwsh -NoProfile -File ./scripts/scan-history-wording.ps1 -SelfTest
+Invoke-NestedPwsh -NoProfile -File ./scripts/scan-history-wording.ps1 -SelfTest
 Assert-NativeSuccess 'Reachable history wording scan'
-& pwsh -NoProfile -File ./scripts/verify-release-tag.ps1 -SelfTest
+Invoke-NestedPwsh -NoProfile -File ./scripts/verify-release-tag.ps1 -SelfTest
 Assert-NativeSuccess 'Release tag self-test'
-& pwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -SelfTest
+Invoke-NestedPwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -SelfTest
 Assert-NativeSuccess 'Release contract self-test'
-& pwsh -NoProfile -File ./scripts/verify-workflow-safety.ps1 -SelfTest
+Invoke-NestedPwsh -NoProfile -File ./scripts/verify-workflow-safety.ps1 -SelfTest
 Assert-NativeSuccess 'Workflow safety self-test'
-& pwsh -NoProfile -File ./scripts/verify-workflow-safety.ps1
+Invoke-NestedPwsh -NoProfile -File ./scripts/verify-workflow-safety.ps1
 Assert-NativeSuccess 'Workflow safety validation'
 if ($RequireFinalizedChangelog) {
-    & pwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -Version $Version -Tag "v$Version"
+    Invoke-NestedPwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -Version $Version -Tag "v$Version"
     Assert-NativeSuccess 'Finalized release contract'
 }
 $audit = dotnet list KeelMatrix.CliContract.sln package --vulnerable --include-transitive --configfile NuGet.config 2>&1
@@ -67,13 +73,13 @@ Assert-NativeSuccess 'Package build'
 $package = Join-Path $packageDir "KeelMatrix.CliContract.$Version.nupkg"
 $symbols = Join-Path $packageDir "KeelMatrix.CliContract.$Version.snupkg"
 if (-not (Test-Path -LiteralPath $symbols)) { throw 'Expected symbol package was not produced.' }
-& pwsh -NoProfile -File ./scripts/verify-package-reproducibility.ps1 -PackagePath $package -SymbolPackagePath $symbols -SelfTest
+Invoke-NestedPwsh -NoProfile -File ./scripts/verify-package-reproducibility.ps1 -PackagePath $package -SymbolPackagePath $symbols -SelfTest
 Assert-NativeSuccess 'Package reproducibility'
-& pwsh -NoProfile -File ./scripts/verify-release-artifacts.ps1 -ArtifactDirectory $packageDir -Version $Version -ExpectedCommit $ExpectedCommit -SelfTest
+Invoke-NestedPwsh -NoProfile -File ./scripts/verify-release-artifacts.ps1 -ArtifactDirectory $packageDir -Version $Version -ExpectedCommit $ExpectedCommit -SelfTest
 Assert-NativeSuccess 'Package artifact provenance and allowlist'
-& pwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath $package -SymbolPackagePath $symbols -ExpectedCommit $ExpectedCommit -SelfTest
+Invoke-NestedPwsh -NoProfile -File ./scripts/inspect-package.ps1 -PackagePath $package -SymbolPackagePath $symbols -ExpectedCommit $ExpectedCommit -SelfTest
 Assert-NativeSuccess 'Package inspection'
-& pwsh -NoProfile -File ./scripts/source-producibility-guard.ps1 -PackagePath $package
+Invoke-NestedPwsh -NoProfile -File ./scripts/source-producibility-guard.ps1 -PackagePath $package
 Assert-NativeSuccess 'Source-producibility guard and package consumer smoke'
 $elapsed = (Get-Date) - $started
 Write-Output ("LOCAL_GATE=PASS version={0} commit={1} duration_ms={2}" -f $Version, $ExpectedCommit, [Math]::Round($elapsed.TotalMilliseconds))

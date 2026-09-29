@@ -8,6 +8,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../build/Invoke-NestedPwsh.ps1')
 $root = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $packagePath = (Resolve-Path -LiteralPath $PackagePath).Path
 $ExpectedCommit = if ([string]::IsNullOrWhiteSpace($ExpectedCommit)) { (& git -C $root rev-parse HEAD).Trim() } else { $ExpectedCommit.Trim().ToLowerInvariant() }
@@ -467,7 +468,7 @@ if ($SelfTest) {
         Copy-Item -LiteralPath $packagePath -Destination $mutatedPackage
         Copy-Item -LiteralPath $symbolPackagePath -Destination $mutatedSymbols
         Add-ArchiveMarker -ArchivePath $mutatedPackage -Marker ('pr' + 'obe')
-        $childOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $mutatedPackage -SymbolPackagePath $mutatedSymbols -RepositoryRoot $root 2>&1)
+        $childOutput = @(Invoke-NestedPwsh -NoProfile -File $PSCommandPath -PackagePath $mutatedPackage -SymbolPackagePath $mutatedSymbols -RepositoryRoot $root 2>&1)
         $childExit = $LASTEXITCODE
         if ($childExit -eq 0) {
             throw 'Package wording gate accepted an injected forbidden term.'
@@ -489,7 +490,7 @@ if ($SelfTest) {
             else {
                 Add-ArchiveEntry -ArchivePath $casePackage -EntryName $case.Entry
             }
-            $caseOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $mutatedSymbols -RepositoryRoot $root 2>&1)
+            $caseOutput = @(Invoke-NestedPwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $mutatedSymbols -RepositoryRoot $root 2>&1)
             $caseExit = $LASTEXITCODE
             if ($caseExit -eq 0) { throw "Package inspection accepted self-test case $($case.Name)." }
             Write-Output "PACKAGE_NEGATIVE_SELF_TEST=$($case.Name) child_exit=$caseExit"
@@ -521,7 +522,7 @@ if ($SelfTest) {
                 finally { $archive.Dispose() }
                 Replace-ArchiveEntryBytes -ArchivePath $target -EntryName $case.Entry -Bytes (Replace-ByteSequence -Bytes $bytes -Old $case.Old -New $case.New)
             }
-            $caseOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $caseSymbols -RepositoryRoot $root -ExpectedCommit $ExpectedCommit 2>&1)
+            $caseOutput = @(Invoke-NestedPwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $caseSymbols -RepositoryRoot $root -ExpectedCommit $ExpectedCommit 2>&1)
             $caseExit = $LASTEXITCODE
             if ($caseExit -eq 0) { throw "Package provenance inspection accepted self-test case $($case.Name)." }
             Write-Output "PACKAGE_PROVENANCE_NEGATIVE_SELF_TEST=$($case.Name) child_exit=$caseExit"
@@ -561,7 +562,7 @@ if ($SelfTest) {
                 else {
                     Replace-ArchiveEntryBytes -ArchivePath $caseSymbols -EntryName '[Content_Types].xml' -Bytes $case.Bytes
                 }
-                $caseOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $caseSymbols -RepositoryRoot $root 2>&1)
+                $caseOutput = @(Invoke-NestedPwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $caseSymbols -RepositoryRoot $root 2>&1)
                 $caseExit = $LASTEXITCODE
                 if ($caseExit -ne 0 -or ($caseOutput -join "`n") -notmatch 'PACKAGE_INSPECTION=PASS') { throw "Package strict-decoder self-test rejected clean $archiveCase fixture $($case.Name): $($caseOutput -join ' | ')" }
                 Write-Output "PACKAGE_TEXT_FIXTURE=$archiveCase-$($case.Name) EXPECTED=ACCEPT exit=$caseExit"
@@ -594,7 +595,7 @@ if ($SelfTest) {
                 else {
                     Replace-ArchiveEntryBytes -ArchivePath $caseSymbols -EntryName '[Content_Types].xml' -Bytes $case.Bytes
                 }
-                $caseOutput = @(& pwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $caseSymbols -RepositoryRoot $root 2>&1)
+                $caseOutput = @(Invoke-NestedPwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $caseSymbols -RepositoryRoot $root 2>&1)
                 $caseExit = $LASTEXITCODE
                 if ($caseExit -eq 0) { throw "Package strict-decoder self-test accepted $archiveCase fixture $($case.Name)." }
                 Write-Output "PACKAGE_TEXT_FIXTURE=$archiveCase-$($case.Name) EXPECTED=REJECT exit=$caseExit"

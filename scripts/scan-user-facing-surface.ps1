@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../build/Invoke-NestedPwsh.ps1')
 $root = (Resolve-Path -LiteralPath $RootPath).Path
 
 $nonTextExceptions = [ordered]@{
@@ -307,7 +308,7 @@ function New-SurfaceFixture {
 
 function Invoke-ChildSurfaceScan {
     param([string] $Path)
-    $output = @(& pwsh -NoProfile -File $PSCommandPath -RootPath $Path 2>&1)
+    $output = @(Invoke-NestedPwsh -NoProfile -File $PSCommandPath -RootPath $Path 2>&1)
     [pscustomobject]@{
         ExitCode = $LASTEXITCODE
         Text = ($output | ForEach-Object { $_.ToString() }) -join "`n"

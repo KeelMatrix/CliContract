@@ -42,6 +42,12 @@ jobs:
       - name: Verify workflow definitions
         shell: pwsh
         run: ./scripts/verify-workflow-safety.ps1
+      - name: Verify hidden child PowerShell launches
+        shell: pwsh
+        run: ./build/Test-NestedPwshLaunch.ps1 -SelfTest
+      - name: Verify repository child PowerShell launches
+        shell: pwsh
+        run: ./build/Test-NestedPwshLaunch.ps1
       - name: Run release-equivalent validation
         shell: pwsh
         run: ./scripts/local-gate.ps1

@@ -1,8 +1,9 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../build/Invoke-NestedPwsh.ps1')
 $root = Split-Path -Parent $PSScriptRoot
 $check = Join-Path $root 'scripts/check-no-execution.ps1'
 $fixture = Join-Path $root 'fixtures/no-execution/forbidden-reference.txt'
-$output = & pwsh -NoProfile -File $check -AdditionalPath $fixture 2>&1
+$output = Invoke-NestedPwsh -NoProfile -File $check -AdditionalPath $fixture 2>&1
 $exitCode = $LASTEXITCODE
 $output | Out-Host
 if ($exitCode -eq 0) { throw 'The no-execution check accepted the forbidden-reference fixture.' }
@@ -19,14 +20,14 @@ try {
     Expand-Archive -LiteralPath $archive -DestinationPath $extracted
     $archiveCheck = Join-Path $extracted 'scripts/check-no-execution.ps1'
 
-$cleanOutput = & pwsh -NoProfile -File $archiveCheck 2>&1
+$cleanOutput = Invoke-NestedPwsh -NoProfile -File $archiveCheck 2>&1
     $cleanExitCode = $LASTEXITCODE
     $cleanOutput | Out-Host
     if ($cleanExitCode -eq 0) { throw 'The no-execution check accepted a clean archive without .git.' }
     if (-not ($cleanOutput -match 'git ls-files')) { throw 'The clean-archive failure did not identify git ls-files enumeration.' }
 
     $archiveFixture = Join-Path $extracted 'fixtures/no-execution/forbidden-reference.txt'
-$explicitOutput = & pwsh -NoProfile -File $archiveCheck -AdditionalPath $archiveFixture 2>&1
+$explicitOutput = Invoke-NestedPwsh -NoProfile -File $archiveCheck -AdditionalPath $archiveFixture 2>&1
     $explicitExitCode = $LASTEXITCODE
     $explicitOutput | Out-Host
     if ($explicitExitCode -eq 0) { throw 'The no-execution check accepted an explicit file from a clean archive.' }

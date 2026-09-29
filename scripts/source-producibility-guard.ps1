@@ -3,6 +3,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../build/Invoke-NestedPwsh.ps1')
 $started = Get-Date
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
@@ -23,7 +24,7 @@ try {
         $PackagePath = Join-Path $packageDirectory 'KeelMatrix.CliContract.0.1.0.nupkg'
     }
 
-    & pwsh -NoProfile -File ./scripts/package-consumer-smoke.ps1 -PackagePath $PackagePath -SelfTest
+    Invoke-NestedPwsh -NoProfile -File ./scripts/package-consumer-smoke.ps1 -PackagePath $PackagePath -SelfTest
     if ($LASTEXITCODE -ne 0) { throw 'The installed-package source-producibility guard failed.' }
     Write-Output 'CASE=installed-source-round-trip-and-hostile-set PASS'
     $durationMs = [math]::Round(((Get-Date) - $started).TotalMilliseconds)

@@ -8,6 +8,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../build/Invoke-NestedPwsh.ps1')
 $root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 if ($Tag -ne "v$Version") { throw "Release tag $Tag does not match version $Version." }
 if ($ExpectedCommit -notmatch '^[0-9a-f]{40}$') { throw 'Expected commit must be a 40-character hexadecimal SHA.' }
@@ -17,15 +18,15 @@ function Assert-NativeSuccess([string] $Step) {
 }
 
 if (-not $SkipPreparation) {
-    & pwsh -NoProfile -File (Join-Path $root 'scripts/verify-release-tag.ps1') -Tag $Tag
+    Invoke-NestedPwsh -NoProfile -File (Join-Path $root 'scripts/verify-release-tag.ps1') -Tag $Tag
     Assert-NativeSuccess 'Release tag validation'
-    & pwsh -NoProfile -File (Join-Path $root 'scripts/local-gate.ps1') -Version $Version -ExpectedCommit $ExpectedCommit -RequireFinalizedChangelog
+    Invoke-NestedPwsh -NoProfile -File (Join-Path $root 'scripts/local-gate.ps1') -Version $Version -ExpectedCommit $ExpectedCommit -RequireFinalizedChangelog
     Assert-NativeSuccess 'Release-equivalent validation'
 }
 else {
-    & pwsh -NoProfile -File (Join-Path $root 'scripts/verify-release-contract.ps1') -Version $Version -Tag $Tag
+    Invoke-NestedPwsh -NoProfile -File (Join-Path $root 'scripts/verify-release-contract.ps1') -Version $Version -Tag $Tag
     Assert-NativeSuccess 'Finalized release contract validation'
-    & pwsh -NoProfile -File (Join-Path $root 'scripts/verify-release-artifacts.ps1') -ArtifactDirectory $ArtifactDirectory -Version $Version -ExpectedCommit $ExpectedCommit
+    Invoke-NestedPwsh -NoProfile -File (Join-Path $root 'scripts/verify-release-artifacts.ps1') -ArtifactDirectory $ArtifactDirectory -Version $Version -ExpectedCommit $ExpectedCommit
     Assert-NativeSuccess 'Validated artifact set'
 }
 
