@@ -16,6 +16,7 @@ public sealed record NormalizationLimits(
     int MaxCollectionItems = 2_000,
     int MaxMaterializedCommands = 20_000,
     int MaxDerivedInvocations = 100_000,
+    int MaxDerivedInvocationCharacters = 4 * 1024 * 1024,
     int MaxComparisonWork = 200_000,
     int MaxCanonicalOutputBytes = 2 * 1024 * 1024,
     int MaxCanonicalOutputNodes = 20_000);
@@ -1315,8 +1316,13 @@ public static class Normalizer
             var alternativeSources = option
                 ? ReadAlternativeSources(OptionalProperty(parameter, "alternativeSources", "OPENCLI_DEFAULT_SOURCES"), limits)
                 : [];
-            var normalizedName = option ? SourceContractRules.NormalizeOptionName(name) : name;
             var aliases = option ? Strings(parameter["aliases"], limits).OrderBy(x => x, StringComparer.Ordinal).ToArray() : [];
+            if (option && (!SourceContractRules.IsRepresentableOptionName(name) || aliases.Any(alias => !SourceContractRules.IsRepresentableOptionName(alias))))
+            {
+                throw new NormalizationException("OPENCLI_OPTION_NAME", "An OpenCLI option name or alias cannot begin with '-' because the pinned alpha.14 invocation form would be invalid.");
+            }
+
+            var normalizedName = option ? SourceContractRules.NormalizeOptionName(name) : name;
             var nameIdentity = option ? SourceContractRules.OptionIdentity(normalizedName) : normalizedName;
             if (!names.Add(nameIdentity) || aliases.Any(alias => !names.Add(SourceContractRules.OptionIdentity(alias))))
             {

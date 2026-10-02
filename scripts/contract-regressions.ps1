@@ -64,7 +64,7 @@ try {
     Write-Utf8 $richSourcePath $richSource
     Assert-Case 'rich-baseline' (Invoke-Tool @('snapshot', $richSourcePath, '--input', 'opencli', '--output', $richBaselinePath, '--no-telemetry')) 0 'SNAPSHOT'
 
-    $whitespaceFixtures = @('valid-whitespace-source.json', 'valid-whitespace-binary.json', 'fix-round21-option-name-edge-values.json')
+    $whitespaceFixtures = @('valid-whitespace-source.json', 'valid-whitespace-binary.json')
     foreach ($fixture in $whitespaceFixtures) {
         $fixturePath = Join-Path $root ('fixtures/opencli/' + $fixture)
         $fixtureName = [IO.Path]::GetFileNameWithoutExtension($fixture)
@@ -176,12 +176,9 @@ commands:
     Write-Output 'CASE=pinned-command-key-delimiters json_yaml_validate_snapshot_check_diff=PASS'
 
     $optionNameScopeCases = @(
-        @{ Name = 'global-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"---","type":"string","aliases":[" global alias "]}]},"commands":{"tool":{}}}' },
-        @{ Name = 'root-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"---","type":"string","aliases":[" root alias "]}]}}}' },
-        @{ Name = 'command-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run":{"flags":[{"name":"---","type":"string","aliases":[" command alias "]}]}}}' },
-        @{ Name = 'global-option-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"value","type":"string","aliases":["---"]}]},"commands":{"tool":{}}}' },
-        @{ Name = 'root-option-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["---"]}]}}}' },
-        @{ Name = 'command-option-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run":{"flags":[{"name":"value","type":"string","aliases":["---"]}]}}}' }
+        @{ Name = 'global-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"global bad name","type":"string","aliases":[" global alias ","global-alias"]}]},"commands":{"tool":{}}}' },
+        @{ Name = 'root-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"root bad name","type":"string","aliases":[" root alias ","root-alias"]}]}}}' },
+        @{ Name = 'command-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run":{"flags":[{"name":"command.bad","type":"string","aliases":[" command alias ","command-alias"]}]}}}' }
     )
     foreach ($case in $optionNameScopeCases) {
         $sourcePath = Join-Path $temp ($case.Name + '.json')
@@ -193,6 +190,21 @@ commands:
         Assert-Case "$($case.Name)-diff" (Invoke-Tool @('diff', $sourcePath, $sourcePath, '--input', 'opencli', '--no-telemetry')) 0 'COMPATIBLE'
     }
     Write-Output 'CASE=option-name-edge-class global_root_command_names_and_aliases=PASS'
+
+    $invalidOptionNameCases = @(
+        @{ Name = 'global-option-leading-dash'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"-value","type":"string"}]},"commands":{"tool":{}}}' },
+        @{ Name = 'root-option-leading-dash-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["--value"]}]}}}' },
+        @{ Name = 'command-option-leading-dash'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run":{"flags":[{"name":"--value","type":"string"}]}}}' }
+    )
+    foreach ($case in $invalidOptionNameCases) {
+        $sourcePath = Join-Path $temp ($case.Name + '.json')
+        Write-Utf8 $sourcePath $case.Text
+        Assert-Case "$($case.Name)-validate" (Invoke-Tool @('validate', $sourcePath, '--input', 'opencli', '--no-telemetry')) 3 'OPENCLI_OPTION_NAME'
+        Assert-Case "$($case.Name)-snapshot" (Invoke-Tool @('snapshot', $sourcePath, '--input', 'opencli', '--output', (Join-Path $temp "$($case.Name).canonical.json"), '--no-telemetry')) 3 'OPENCLI_OPTION_NAME'
+        Assert-Case "$($case.Name)-check" (Invoke-Tool @('check', $sourcePath, '--input', 'opencli', '--baseline', $richBaselinePath, '--no-telemetry')) 3 'OPENCLI_OPTION_NAME'
+        Assert-Case "$($case.Name)-diff" (Invoke-Tool @('diff', $sourcePath, $sourcePath, '--input', 'opencli', '--no-telemetry')) 3 'OPENCLI_OPTION_NAME'
+    }
+    Write-Output 'CASE=option-name-leading-dash-fail-closed global_root_command=PASS'
 
     foreach ($case in @(
         @{ Name = 'invalid-empty-source-value'; File = 'invalid-empty-source-value.json'; Code = 'OPENCLI_INFO' },
@@ -287,16 +299,18 @@ commands:
 
     $duplicateFlag = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"region","type":"string"},{"name":"region","type":"string"}]}}}'
     $duplicateArgument = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run <region> <region>":{"args":[{"name":"region"},{"name":"region"}]}}}'
-    $normalizedCollision = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"region","type":"string"},{"name":"--region","type":"string"}]}}}'
     foreach ($case in @(
         @{ Name = 'duplicate-flag-name'; Value = $duplicateFlag },
-        @{ Name = 'duplicate-argument-name'; Value = $duplicateArgument },
-        @{ Name = 'normalized-parameter-collision'; Value = $normalizedCollision }
+        @{ Name = 'duplicate-argument-name'; Value = $duplicateArgument }
     )) {
         $path = Join-Path $temp ($case.Name + '.json')
         Write-Utf8 $path $case.Value
         Assert-Case $case.Name (Invoke-Tool @('validate', $path, '--input', 'opencli', '--no-telemetry')) 3 'OPENCLI_DUPLICATE_PARAMETER'
     }
+    $normalizedCollision = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"region","type":"string"},{"name":"--region","type":"string"}]}}}'
+    $normalizedCollisionPath = Join-Path $temp 'normalized-parameter-collision.json'
+    Write-Utf8 $normalizedCollisionPath $normalizedCollision
+    Assert-Case 'normalized-parameter-collision' (Invoke-Tool @('validate', $normalizedCollisionPath, '--input', 'opencli', '--no-telemetry')) 3 'OPENCLI_OPTION_NAME'
 
     $duplicateNestedCommandPath = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run <first>":{},"tool run <second>":{}}}'
     $duplicateRootCommandPath = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{},"tool <arg>":{}}}'
@@ -512,6 +526,19 @@ commands:
     $amplifiedSourcePath = Join-Path $temp 'amplified-invocations.json'
     Write-Utf8 $amplifiedSourcePath ('{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{' + ($amplifiedCommands -join ',') + '}}')
     Assert-Case 'bounded-invocation-amplification' (Invoke-Tool @('validate', $amplifiedSourcePath, '--no-telemetry')) 3 'DERIVED_INVOCATION_LIMIT'
+
+    $longAliasCommands = @()
+    $longAliasPath = 'tool'
+    for ($level = 1; $level -le 4; $level++) {
+        $longAliasPath += ' command' + $level
+        $longAliases = (1..15 | ForEach-Object { '"' + (('a' * 12000) + $_.ToString('D2')) + '"' }) -join ','
+        $longAliasCommands += '"' + $longAliasPath + '":{"aliases":[' + $longAliases + ']}'
+    }
+    $longAliasSourcePath = Join-Path $temp 'long-alias-invocations.json'
+    Write-Utf8 $longAliasSourcePath ('{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{' + ($longAliasCommands -join ',') + '}}')
+    $longAliasResult = Invoke-Tool @('validate', $longAliasSourcePath, '--no-telemetry')
+    Assert-Case 'bounded-invocation-aggregate-size' $longAliasResult 3 'DERIVED_INVOCATION_LIMIT'
+    if (($longAliasResult.Output -join "`n") -match 'UNEXPECTED_ERROR') { throw 'Aggregate derived-invocation rejection reached UNEXPECTED_ERROR.' }
 
     $defaultTelemetryOptOut = Invoke-Tool @('diff', $optional, $required, '--format', 'text')
     Assert-Case 'shared-telemetry-optout' $defaultTelemetryOptOut 1 'KMCLI105'

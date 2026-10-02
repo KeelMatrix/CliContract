@@ -15,7 +15,7 @@ public sealed class NormalizationTests
 
         Assert.Equal("1.0.0-alpha.14", manifest.SourceVersion);
         Assert.Equal("--region", deploy.Options.Single().Name);
-        Assert.Equal(["-r"], deploy.Options.Single().Aliases);
+        Assert.Equal(["r"], deploy.Options.Single().Aliases);
         Assert.Equal(["eu", "us"], deploy.Options.Single().AllowedValues.Select(value => value.GetValue<string>()));
         Assert.Equal("us", deploy.Options.Single().DefaultValue!.GetValue<string>());
         Assert.Contains("🚀", deploy.Summary);
@@ -137,16 +137,24 @@ public sealed class NormalizationTests
     }
 
     [Fact]
-    public void Alpha14OptionNamesPreserveWhitespaceAndTrimmedDashOnlyFormsAtEveryScope()
+    public void Alpha14OptionNamesPreserveAcceptedWhitespaceAndPunctuationAtEveryScope()
     {
-        var manifest = Normalizer.Normalize("opencli", File.ReadAllText(Fixture("opencli", "fix-round21-option-name-edge-values.json")));
+        var manifest = Normalizer.Normalize("opencli", OpenCliDocument("""
+        {
+          "global": {"flags": [{"name": "global bad name", "type": "string", "aliases": [" global alias "]}]},
+          "commands": {
+            "tool": {"flags": [{"name": "root bad name", "type": "string", "aliases": [" root alias "]}]},
+            "tool run": {"flags": [{"name": "command bad name", "type": "string", "aliases": ["command_alias", "é"]}]}
+          }
+        }
+        """));
 
         Assert.Equal("--global bad name", manifest.GlobalOptions.Single().Name);
         Assert.Equal("--root bad name", manifest.Root.Options.Single().Name);
         Assert.Equal("--command bad name", manifest.Root.Subcommands.Single().Options.Single().Name);
-        Assert.Equal([" global alias ", "---"], manifest.GlobalOptions.Single().Aliases);
-        Assert.Equal([" root alias ", "é"], manifest.Root.Options.Single().Aliases);
-        Assert.Equal([" command alias ", "!@#"], manifest.Root.Subcommands.Single().Options.Single().Aliases);
+        Assert.Equal([" global alias "], manifest.GlobalOptions.Single().Aliases);
+        Assert.Equal([" root alias "], manifest.Root.Options.Single().Aliases);
+        Assert.Equal(["command_alias", "é"], manifest.Root.Subcommands.Single().Options.Single().Aliases);
 
         var serialized = Normalizer.Serialize(manifest);
         Assert.Equal(serialized, Normalizer.Serialize(CanonicalManifestReader.Read(serialized)));
@@ -156,7 +164,7 @@ public sealed class NormalizationTests
     [InlineData("global")]
     [InlineData("root")]
     [InlineData("command")]
-    public void Alpha14DashesOnlyOptionNamesAndAliasesRemainSourceProducibleAtEveryScope(string scope)
+    public void PinnedOptionNameSpellingsThatBeginWithDashFailClosedAtEveryScope(string scope)
     {
         var nameDocument = OpenCliDocument(scope switch
         {
@@ -173,12 +181,45 @@ public sealed class NormalizationTests
 
         foreach (var document in new[] { nameDocument, aliasDocument })
         {
-            var manifest = Normalizer.Normalize("opencli", document);
-            var option = (scope == "global" ? manifest.GlobalOptions : scope == "root" ? manifest.Root.Options : manifest.Root.Subcommands.Single().Options).Single();
-            Assert.Equal(document == nameDocument ? "--" : "--value", option.Name);
-            if (document == aliasDocument) Assert.Equal(["---"], option.Aliases);
-            Assert.Equal(Normalizer.Serialize(manifest), Normalizer.Serialize(CanonicalManifestReader.Read(Normalizer.Serialize(manifest))));
+            var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", document));
+            Assert.Equal("OPENCLI_OPTION_NAME", error.Code);
         }
+    }
+
+    [Theory]
+    [InlineData("foo", "-foo")]
+    [InlineData("foo", "--foo")]
+    public void InvocationBreakingOptionSpellingsNeverReturnCompatible(string baselineName, string changedName)
+    {
+        var baseline = Normalizer.Normalize("opencli", OpenCliDocument($"{{\"commands\":{{\"tool\":{{\"flags\":[{{\"name\":\"{baselineName}\",\"type\":\"string\"}}]}}}}}}"));
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", OpenCliDocument($"{{\"commands\":{{\"tool\":{{\"flags\":[{{\"name\":\"{changedName}\",\"type\":\"string\"}}]}}}}}}")));
+
+        Assert.Equal("OPENCLI_OPTION_NAME", error.Code);
+        Assert.NotNull(baseline);
+    }
+
+    [Fact]
+    public void AcceptedOptionNamesRoundTripWithoutChangingInvocationIdentity()
+    {
+        var source = OpenCliDocument("""
+        {
+          "global": {"flags": [{"name": "global", "type": "string", "aliases": ["g", "global-name"]}]},
+          "commands": {
+            "tool": {"flags": [{"name": "root", "type": "string", "aliases": ["r"]}]},
+            "tool run": {"flags": [{"name": "local", "type": "string", "aliases": ["l", "local-name"]}]}
+          }
+        }
+        """);
+
+        var manifest = Normalizer.Normalize("opencli", source);
+        var roundTrip = CanonicalManifestReader.Read(Normalizer.Serialize(manifest));
+
+        Assert.Equal("--global", roundTrip.GlobalOptions.Single().Name);
+        Assert.Equal(["g", "global-name"], roundTrip.GlobalOptions.Single().Aliases);
+        Assert.Equal("--root", roundTrip.Root.Options.Single().Name);
+        Assert.Equal("--local", roundTrip.Root.Subcommands.Single().Options.Single().Name);
+        Assert.Equal(Normalizer.Serialize(manifest), Normalizer.Serialize(roundTrip));
+        Assert.Empty(CompatibilityAnalyzer.Compare(manifest, roundTrip).Findings);
     }
 
     [Fact]
@@ -597,15 +638,15 @@ public sealed class NormalizationTests
     }
 
     [Theory]
-    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"region\",\"type\":\"string\"},{\"name\":\"region\",\"type\":\"string\"}]}}}")]
-    [InlineData("{\"commands\":{\"tool run <region> <region>\":{\"args\":[{\"name\":\"region\"},{\"name\":\"region\"}]}}}")]
-    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"region\",\"type\":\"string\"},{\"name\":\"--region\",\"type\":\"string\"}]}}}")]
-    [InlineData("{\"global\":{\"flags\":[{\"name\":\"region\",\"type\":\"string\"}]},\"commands\":{\"tool\":{\"flags\":[{\"name\":\"--region\",\"type\":\"string\"}]}}}")]
-    public void DuplicateNormalizedParameterNamesFailClosed(string commands)
+    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"region\",\"type\":\"string\"},{\"name\":\"region\",\"type\":\"string\"}]}}}", "OPENCLI_DUPLICATE_PARAMETER")]
+    [InlineData("{\"commands\":{\"tool run <region> <region>\":{\"args\":[{\"name\":\"region\"},{\"name\":\"region\"}]}}}", "OPENCLI_DUPLICATE_PARAMETER")]
+    [InlineData("{\"commands\":{\"tool\":{\"flags\":[{\"name\":\"region\",\"type\":\"string\"},{\"name\":\"--region\",\"type\":\"string\"}]}}}", "OPENCLI_OPTION_NAME")]
+    [InlineData("{\"global\":{\"flags\":[{\"name\":\"region\",\"type\":\"string\"}]},\"commands\":{\"tool\":{\"flags\":[{\"name\":\"--region\",\"type\":\"string\"}]}}}", "OPENCLI_OPTION_NAME")]
+    public void DuplicateNormalizedParameterNamesFailClosed(string commands, string expectedCode)
     {
         var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", OpenCliDocument(commands)));
 
-        Assert.Equal("OPENCLI_DUPLICATE_PARAMETER", error.Code);
+        Assert.Equal(expectedCode, error.Code);
     }
 
     [Fact]
@@ -667,6 +708,60 @@ public sealed class NormalizationTests
             "opencli",
             OpenCliDocument(new JsonObject { ["commands"] = commands }.ToJsonString()),
             new NormalizationLimits(MaxDerivedInvocations: 10_000)));
+
+        Assert.Equal("DERIVED_INVOCATION_LIMIT", error.Code);
+    }
+
+    [Fact]
+    public void DerivedInvocationCharacterBudgetAcceptsExactBoundaryAndRejectsOneOver()
+    {
+        var source = OpenCliDocument("""
+        {"commands":{"tool child":{"aliases":["c"]}}}
+        """);
+
+        Normalizer.Normalize("opencli", source, new NormalizationLimits(MaxDerivedInvocationCharacters: 40));
+
+        var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize(
+            "opencli",
+            source,
+            new NormalizationLimits(MaxDerivedInvocationCharacters: 39)));
+
+        Assert.Equal("DERIVED_INVOCATION_LIMIT", error.Code);
+    }
+
+    [Fact]
+    public void CanonicalBaselineDerivedInvocationCharacterBudgetUsesTheSameBoundary()
+    {
+        var manifest = Normalizer.Normalize("opencli", OpenCliDocument("""
+        {"commands":{"tool child":{"aliases":["c"]}}}
+        """));
+        var serialized = Normalizer.Serialize(manifest);
+
+        CanonicalManifestReader.Read(serialized, new NormalizationLimits(MaxDerivedInvocationCharacters: 40));
+
+        var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(
+            serialized,
+            new NormalizationLimits(MaxDerivedInvocationCharacters: 39)));
+
+        Assert.Equal("DERIVED_INVOCATION_LIMIT", error.Code);
+    }
+
+    [Fact]
+    public void DerivedInvocationCharacterBudgetAppliesToCompatibilityComparison()
+    {
+        var manifest = Normalizer.Normalize("opencli", OpenCliDocument("""
+        {"commands":{"tool child":{"aliases":["c"]}}}
+        """));
+
+        CompatibilityAnalyzer.Compare(
+            manifest,
+            manifest,
+            new NormalizationLimits(MaxDerivedInvocationCharacters: 20));
+
+        var error = Assert.Throws<CompatibilityException>(() => CompatibilityAnalyzer.Compare(
+            manifest,
+            manifest,
+            new NormalizationLimits(MaxDerivedInvocationCharacters: 19)));
 
         Assert.Equal("DERIVED_INVOCATION_LIMIT", error.Code);
     }
@@ -1106,6 +1201,19 @@ public sealed class NormalizationTests
             Assert.NotEqual("UNEXPECTED_ERROR", normalizationError.Code);
             Assert.False(string.IsNullOrWhiteSpace(normalizationError.Message), name);
         }
+    }
+
+    [Theory]
+    [InlineData("Name", "---verbose")]
+    [InlineData("Aliases", "-v")]
+    public void CanonicalManifestReaderRejectsInvocationUnrepresentableOptionSpellings(string property, string value)
+    {
+        var document = JsonNode.Parse(Normalizer.Serialize(Normalizer.Normalize("opencli", HostileCanonicalSeed())))!.AsObject();
+        document["GlobalOptions"]![0]![property] = property == "Aliases" ? new JsonArray(value) : value;
+
+        var error = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(document.ToJsonString()));
+
+        Assert.Equal("OPENCLI_OPTION_NAME", error.Code);
     }
 
     [Theory]
@@ -1554,7 +1662,7 @@ public sealed class NormalizationTests
             {
                 ["value"] = $"value{index}"
             }).ToArray()),
-            "aliases" => new JsonArray(Enumerable.Range(0, count).Select(index => (JsonNode)$"-v{index}").ToArray()),
+            "aliases" => new JsonArray(Enumerable.Range(0, count).Select(index => (JsonNode)$"v{index}").ToArray()),
             "alternativeSources" => new JsonArray(Enumerable.Range(0, count).Select(index => (JsonNode)new JsonObject
             {
                 ["type"] = "$ENV",

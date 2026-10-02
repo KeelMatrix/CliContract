@@ -29,7 +29,7 @@ commands:
     flags:
       - name: region
         aliases:
-          - -r
+          - r
         type: string
         required: false
         choices:

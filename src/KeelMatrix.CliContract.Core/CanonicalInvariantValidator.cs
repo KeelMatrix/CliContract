@@ -221,14 +221,15 @@ internal static class CanonicalInvariantValidator
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var option in options)
         {
+            if (!SourceContractRules.IsNormalizedOptionName(option.Name) ||
+                option.Aliases.Any(alias => !SourceContractRules.IsRepresentableOptionName(alias)))
+            {
+                throw new NormalizationException("OPENCLI_OPTION_NAME", "A canonical option name or alias is not representable by the pinned alpha.14 invocation form.");
+            }
+
             if (!names.Add(SourceContractRules.OptionIdentity(option.Name)) || option.Aliases.Any(alias => !names.Add(SourceContractRules.OptionIdentity(alias))))
             {
                 throw new NormalizationException("OPENCLI_DUPLICATE_PARAMETER", $"The canonical option collection at {commandPath} contains duplicate accepted invocation names.");
-            }
-
-            if (!SourceContractRules.IsNormalizedOptionName(option.Name))
-            {
-                throw new NormalizationException("INVALID_BASELINE", "A canonical option name must be produced by the source normalizer.");
             }
 
             ValidateStringCollection(option.Aliases, "option aliases", requireSorted: true);
@@ -360,11 +361,12 @@ internal static class CanonicalInvariantValidator
     {
         var invocationOwners = new Dictionary<string, CanonicalCommand>(StringComparer.Ordinal);
         var invocationCache = new Dictionary<CanonicalCommand, IReadOnlyList<string>>();
+        var expansionBudget = new InvocationExpansionBudget();
         var comparisonWork = 0;
 
         foreach (var command in commands.OrderBy(command => command.Path.Count(value => value == '/')).ThenBy(command => command.Path, StringComparer.Ordinal))
         {
-            var invocations = GetInvocations(command, manifest, byPath, invocationCache, limits);
+            var invocations = GetInvocations(command, manifest, byPath, invocationCache, limits, expansionBudget);
             if (invocations.Count > limits.MaxComparisonWork - comparisonWork)
             {
                 throw new NormalizationException("COMPARISON_WORK_LIMIT", "The command invocation comparison exceeds the configured work limit.");
@@ -383,7 +385,7 @@ internal static class CanonicalInvariantValidator
         }
     }
 
-    private static IReadOnlyList<string> GetInvocations(CanonicalCommand command, CanonicalManifest manifest, Dictionary<string, CanonicalCommand> byPath, Dictionary<CanonicalCommand, IReadOnlyList<string>> cache, NormalizationLimits limits)
+    private static IReadOnlyList<string> GetInvocations(CanonicalCommand command, CanonicalManifest manifest, Dictionary<string, CanonicalCommand> byPath, Dictionary<CanonicalCommand, IReadOnlyList<string>> cache, NormalizationLimits limits, InvocationExpansionBudget expansionBudget)
     {
         if (cache.TryGetValue(command, out var cached)) return cached;
 
@@ -393,13 +395,15 @@ internal static class CanonicalInvariantValidator
             var rootInvocations = new List<string> { "root", manifest.Info.Binary! };
             rootInvocations.AddRange(manifest.Root.Aliases);
             parentInvocations = rootInvocations.Distinct(StringComparer.Ordinal).ToArray();
+            cache[command] = parentInvocations;
+            return parentInvocations;
         }
         else
         {
             var segments = command.Path.Split(" / ", StringSplitOptions.None);
             var parentPath = string.Join(" / ", segments[..^1]);
             parentInvocations = byPath.TryGetValue(parentPath, out var parent)
-                ? GetInvocations(parent, manifest, byPath, cache, limits)
+                ? GetInvocations(parent, manifest, byPath, cache, limits, expansionBudget)
                 : [parentPath];
         }
 
@@ -408,18 +412,54 @@ internal static class CanonicalInvariantValidator
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        if (parentInvocations.Count > limits.MaxDerivedInvocations ||
-            names.Length > limits.MaxDerivedInvocations ||
-            parentInvocations.Count > limits.MaxDerivedInvocations / Math.Max(1, names.Length))
-        {
-            throw new NormalizationException("DERIVED_INVOCATION_LIMIT", "The accepted command invocation graph exceeds the configured limit.");
-        }
+        expansionBudget.Reserve(parentInvocations, names, limits);
 
         var result = command.Path == "root"
             ? parentInvocations.Distinct(StringComparer.Ordinal).ToArray()
             : parentInvocations.SelectMany(parent => names.Select(name => parent + " / " + name)).Distinct(StringComparer.Ordinal).ToArray();
         cache[command] = result;
         return result;
+    }
+
+    private sealed class InvocationExpansionBudget
+    {
+        private long _reservedCharacters;
+
+        public void Reserve(IReadOnlyList<string> parentInvocations, IReadOnlyList<string> names, NormalizationLimits limits)
+        {
+            if (parentInvocations.Count > limits.MaxDerivedInvocations || names.Count > limits.MaxDerivedInvocations)
+            {
+                throw new NormalizationException("DERIVED_INVOCATION_LIMIT", "The accepted command invocation graph exceeds its count or aggregate-size limit.");
+            }
+
+            long pairCount;
+            long parentCharacters;
+            long nameCharacters;
+            long expansionCharacters;
+            try
+            {
+                pairCount = checked((long)parentInvocations.Count * names.Count);
+                parentCharacters = parentInvocations.Sum(value => checked((long)value.Length));
+                nameCharacters = names.Sum(value => checked((long)value.Length));
+                expansionCharacters = checked(
+                    checked(parentCharacters * names.Count) +
+                    checked(nameCharacters * parentInvocations.Count) +
+                    checked(pairCount * " / ".Length));
+            }
+            catch (OverflowException)
+            {
+                throw new NormalizationException("DERIVED_INVOCATION_LIMIT", "The accepted command invocation graph exceeds its count or aggregate-size limit.");
+            }
+
+            if (pairCount > limits.MaxDerivedInvocations ||
+                expansionCharacters > limits.MaxDerivedInvocationCharacters ||
+                _reservedCharacters > limits.MaxDerivedInvocationCharacters - expansionCharacters)
+            {
+                throw new NormalizationException("DERIVED_INVOCATION_LIMIT", "The accepted command invocation graph exceeds its count or aggregate-size limit.");
+            }
+
+            _reservedCharacters += expansionCharacters;
+        }
     }
 
     private static IEnumerable<CanonicalCommand> Flatten(CanonicalCommand root)

@@ -695,6 +695,9 @@ internal static class CliApplication
       canonical schema version 2 cannot represent them, those keys fail before canonical path
       parsing with OPENCLI_COMMAND_KEY (exit 3) and a stable whitespace-edge diagnostic.
       Accepted command names include aliases at every command segment; retained aliases preserve old paths.
+      Primary option names are canonicalized as -- plus the source name. Option names and aliases beginning with -
+      fail with OPENCLI_OPTION_NAME because the pinned alpha.14 invocation form would not preserve their identity.
+      Derived command-invocation expansion is bounded by both count and aggregate characters before paths are allocated.
       All supported string, number, integer, and boolean type domains are compared, and exit-code changes warn.
       Choices and defaults must match their declared type; non-integral integer values fail with exit 3.
       Exact numeric representation and integer detection are shared by validation and compatibility comparison.

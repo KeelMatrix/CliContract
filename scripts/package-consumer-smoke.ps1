@@ -108,7 +108,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Installed tool could not check the tagged alpha.14 command-key fixture against itself.' }
     Write-Output 'CASE=official-alpha14-command-key-grammar exit=0'
 
-    foreach ($fixture in @('valid-whitespace-source.json', 'valid-whitespace-binary.json', 'fix-round21-option-name-edge-values.json')) {
+    foreach ($fixture in @('valid-whitespace-source.json', 'valid-whitespace-binary.json')) {
         $fixturePath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot ('..\fixtures\opencli\' + $fixture))).Path
         $fixtureName = [IO.Path]::GetFileNameWithoutExtension($fixture)
         $fixtureBaseline = Join-Path $temp ($fixtureName + '.canonical.json')
@@ -242,12 +242,9 @@ commands:
     Write-Output 'CASE=installed-safe-display-format-controls_findings_aliases=PASS'
 
     $optionNameScopeCases = @(
-        @{ Name = 'global-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"---","type":"string","aliases":[" global alias "]}]},"commands":{"tool":{}}}' },
-        @{ Name = 'root-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"---","type":"string","aliases":[" root alias "]}]}}}' },
-        @{ Name = 'command-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run":{"flags":[{"name":"---","type":"string","aliases":[" command alias "]}]}}}' },
-        @{ Name = 'global-option-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"value","type":"string","aliases":["---"]}]},"commands":{"tool":{}}}' },
-        @{ Name = 'root-option-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["---"]}]}}}' },
-        @{ Name = 'command-option-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run":{"flags":[{"name":"value","type":"string","aliases":["---"]}]}}}' }
+        @{ Name = 'global-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"global bad name","type":"string","aliases":[" global alias ","global-alias"]}]},"commands":{"tool":{}}}' },
+        @{ Name = 'root-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"root bad name","type":"string","aliases":[" root alias ","root-alias"]}]}}}' },
+        @{ Name = 'command-option-name'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run":{"flags":[{"name":"command.bad","type":"string","aliases":[" command alias ","command-alias"]}]}}}' }
     )
     foreach ($case in $optionNameScopeCases) {
         $sourcePath = Join-Path $temp ($case.Name + '.json')
@@ -263,6 +260,31 @@ commands:
         if ($LASTEXITCODE -ne 0) { throw "Installed tool could not diff $($case.Name) source against itself." }
     }
     Write-Output 'CASE=option-name-edge-class-consumer global_root_command_names_and_aliases=PASS'
+
+    $invalidOptionNameCases = @(
+        @{ Name = 'global-option-leading-dash'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"-value","type":"string"}]},"commands":{"tool":{}}}' },
+        @{ Name = 'root-option-leading-dash-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["--value"]}]}}}' },
+        @{ Name = 'command-option-leading-dash'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run":{"flags":[{"name":"--value","type":"string"}]}}}' }
+    )
+    foreach ($case in $invalidOptionNameCases) {
+        $sourcePath = Join-Path $temp ($case.Name + '.json')
+        [IO.File]::WriteAllText($sourcePath, $case.Text, [Text.UTF8Encoding]::new($false))
+        Assert-InstalledError -Label "$($case.Name) validate" -ExpectedExit 3 -ExpectedCode 'OPENCLI_OPTION_NAME' -Arguments @('validate', $sourcePath, '--input', 'opencli', '--no-telemetry')
+        Assert-InstalledError -Label "$($case.Name) snapshot" -ExpectedExit 3 -ExpectedCode 'OPENCLI_OPTION_NAME' -Arguments @('snapshot', $sourcePath, '--input', 'opencli', '--output', (Join-Path $temp "$($case.Name).canonical.json"), '--no-telemetry')
+    }
+    Write-Output 'CASE=option-name-leading-dash-consumer global_root_command=PASS'
+
+    $longAliasCommands = @()
+    $longAliasPath = 'tool'
+    for ($level = 1; $level -le 4; $level++) {
+        $longAliasPath += ' command' + $level
+        $longAliases = (1..15 | ForEach-Object { '"' + (('a' * 12000) + $_.ToString('D2')) + '"' }) -join ','
+        $longAliasCommands += '"' + $longAliasPath + '":{"aliases":[' + $longAliases + ']}'
+    }
+    $longAliasSourcePath = Join-Path $temp 'installed-long-alias-invocations.json'
+    [IO.File]::WriteAllText($longAliasSourcePath, ('{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{' + ($longAliasCommands -join ',') + '}}'), [Text.UTF8Encoding]::new($false))
+    Assert-InstalledError -Label 'aggregate derived-invocation budget' -ExpectedExit 3 -ExpectedCode 'DERIVED_INVOCATION_LIMIT' -Arguments @('validate', $longAliasSourcePath, '--input', 'opencli', '--no-telemetry')
+    Write-Output 'CASE=installed-aggregate-derived-invocation-budget exit=3 code=DERIVED_INVOCATION_LIMIT'
 
     function Assert-ToolError {
         param(

@@ -18,7 +18,10 @@ internal static class SourceContractRules
 
     public static bool IsNonWhitespace(string? value) => IsNonEmpty(value) && !string.IsNullOrWhiteSpace(value);
 
-    public static string NormalizeOptionName(string sourceName) => "--" + sourceName.TrimStart('-');
+    public static string NormalizeOptionName(string sourceName) => "--" + sourceName;
+
+    public static bool IsRepresentableOptionName(string sourceName) =>
+        IsNonEmpty(sourceName) && sourceName[0] != '-';
 
     public static bool IsNormalizedOptionName(string canonicalName)
     {
@@ -27,19 +30,13 @@ internal static class SourceContractRules
             return false;
         }
 
-        if (canonicalName == "--")
-        {
-            // A nonempty source name containing only dashes normalizes to this form.
-            return true;
-        }
-
-        return string.Equals(
-            canonicalName,
-            NormalizeOptionName(canonicalName[2..]),
-            StringComparison.Ordinal);
+        return canonicalName.Length > 2 &&
+            IsRepresentableOptionName(canonicalName[2..]) &&
+            string.Equals(canonicalName, NormalizeOptionName(canonicalName[2..]), StringComparison.Ordinal);
     }
 
-    public static string OptionIdentity(string name) => name.TrimStart('-');
+    public static string OptionIdentity(string name) =>
+        name.StartsWith("--", StringComparison.Ordinal) ? name[2..] : name;
 
     public static bool IsSupportedType(string? type) => SupportedTypes.Contains(type, StringComparer.Ordinal);
 

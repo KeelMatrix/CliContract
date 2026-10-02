@@ -24,7 +24,7 @@ public sealed class CompatibilityResult
 
 public static class CompatibilityAnalyzer
 {
-    public static CompatibilityResult Compare(CanonicalManifest baseline, CanonicalManifest current)
+    public static CompatibilityResult Compare(CanonicalManifest baseline, CanonicalManifest current, NormalizationLimits? limits = null)
     {
         if (baseline.SchemaVersion != current.SchemaVersion)
         {
@@ -37,8 +37,9 @@ public static class CompatibilityAnalyzer
             throw new CompatibilityException("BASELINE_VERSION_MISMATCH", "The baseline and current descriptions use different supported input versions.");
         }
 
-        var baselineGraph = InvocationNameGraph.Create(baseline);
-        var currentGraph = InvocationNameGraph.Create(current);
+        var bounded = limits ?? new NormalizationLimits();
+        var baselineGraph = InvocationNameGraph.Create(baseline, bounded);
+        var currentGraph = InvocationNameGraph.Create(current, bounded);
         var findings = new List<CompatibilityFinding>();
 
         CompareInfo(baseline.Info, current.Info, findings);
@@ -540,9 +541,10 @@ public static class CompatibilityAnalyzer
             var paths = new Dictionary<CanonicalCommand, IReadOnlyList<string>>();
             var byInvocation = new Dictionary<string, CanonicalCommand>(StringComparer.Ordinal);
             var comparisonWork = 0;
+            var expansionBudget = new InvocationExpansionBudget();
             foreach (var command in commands.OrderBy(command => command.Path.Count(character => character == '/')).ThenBy(command => command.Path, StringComparer.Ordinal))
             {
-                var invocations = command.Path == "root" ? ["root"] : BuildChildPaths(command, byPath, paths, bounded);
+                var invocations = command.Path == "root" ? ["root"] : BuildChildPaths(command, byPath, paths, bounded, expansionBudget);
                 if (invocations.Length > bounded.MaxComparisonWork - comparisonWork)
                 {
                     throw new CompatibilityException("COMPARISON_WORK_LIMIT", "The command invocation comparison exceeds the configured work limit.");
@@ -560,7 +562,7 @@ public static class CompatibilityAnalyzer
             return new InvocationNameGraph { Commands = commands.Where(command => command.Path != "root").ToArray(), ByInvocation = byInvocation, Paths = paths };
         }
 
-        private static string[] BuildChildPaths(CanonicalCommand command, Dictionary<string, CanonicalCommand> byPath, Dictionary<CanonicalCommand, IReadOnlyList<string>> paths, NormalizationLimits limits)
+        private static string[] BuildChildPaths(CanonicalCommand command, Dictionary<string, CanonicalCommand> byPath, Dictionary<CanonicalCommand, IReadOnlyList<string>> paths, NormalizationLimits limits, InvocationExpansionBudget expansionBudget)
         {
             var segments = command.Path.Split(" / ", StringSplitOptions.None);
             var parentPath = string.Join(" / ", segments[..^1]);
@@ -569,14 +571,50 @@ public static class CompatibilityAnalyzer
                 parentPaths = [parentPath];
             }
             var names = new[] { segments[^1] }.Concat(command.Aliases).Distinct(StringComparer.Ordinal).ToArray();
-            if (parentPaths.Count > limits.MaxDerivedInvocations ||
-                names.Length > limits.MaxDerivedInvocations ||
-                parentPaths.Count > limits.MaxDerivedInvocations / Math.Max(1, names.Length))
-            {
-                throw new CompatibilityException("DERIVED_INVOCATION_LIMIT", "The accepted command invocation graph exceeds the configured limit.");
-            }
+            expansionBudget.Reserve(parentPaths, names, limits);
 
             return parentPaths.SelectMany(parentInvocation => names.Select(name => parentInvocation + " / " + name)).Distinct(StringComparer.Ordinal).ToArray();
+        }
+
+        private sealed class InvocationExpansionBudget
+        {
+            private long _reservedCharacters;
+
+            public void Reserve(IReadOnlyList<string> parentPaths, IReadOnlyList<string> names, NormalizationLimits limits)
+            {
+                if (parentPaths.Count > limits.MaxDerivedInvocations || names.Count > limits.MaxDerivedInvocations)
+                {
+                    throw new CompatibilityException("DERIVED_INVOCATION_LIMIT", "The accepted command invocation graph exceeds its count or aggregate-size limit.");
+                }
+
+                long pairCount;
+                long parentCharacters;
+                long nameCharacters;
+                long expansionCharacters;
+                try
+                {
+                    pairCount = checked((long)parentPaths.Count * names.Count);
+                    parentCharacters = parentPaths.Sum(value => checked((long)value.Length));
+                    nameCharacters = names.Sum(value => checked((long)value.Length));
+                    expansionCharacters = checked(
+                        checked(parentCharacters * names.Count) +
+                        checked(nameCharacters * parentPaths.Count) +
+                        checked(pairCount * " / ".Length));
+                }
+                catch (OverflowException)
+                {
+                    throw new CompatibilityException("DERIVED_INVOCATION_LIMIT", "The accepted command invocation graph exceeds its count or aggregate-size limit.");
+                }
+
+                if (pairCount > limits.MaxDerivedInvocations ||
+                    expansionCharacters > limits.MaxDerivedInvocationCharacters ||
+                    _reservedCharacters > limits.MaxDerivedInvocationCharacters - expansionCharacters)
+                {
+                    throw new CompatibilityException("DERIVED_INVOCATION_LIMIT", "The accepted command invocation graph exceeds its count or aggregate-size limit.");
+                }
+
+                _reservedCharacters += expansionCharacters;
+            }
         }
 
         private static IEnumerable<CanonicalCommand> Flatten(CanonicalCommand root)

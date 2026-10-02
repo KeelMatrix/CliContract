@@ -140,8 +140,8 @@ internal static class SourceContractFields
             Field("global.exitCodes.summary", "summary", (document, value) => ExitCodeObject(document, "global")["summary"] = value, RequiredValue),
             Field("global.exitCodes.description", "description", (document, value) => ExitCodeObject(document, "global")["description"] = value, AnyValue)),
         new SourceParameterFields(
-            Field("global.flag.name", "name", (document, value) => ParameterObject(document, "global", "flag")["name"] = value, RequiredValue),
-            Field("global.flag.aliases", "aliases", (document, value) => ParameterObject(document, "global", "flag")["aliases"] = Strings(value), NonEmptyValue),
+            Field("global.flag.name", "name", (document, value) => ParameterObject(document, "global", "flag")["name"] = value, OptionNameValue),
+            Field("global.flag.aliases", "aliases", (document, value) => ParameterObject(document, "global", "flag")["aliases"] = Strings(value), OptionNameValue),
             Field("global.flag.summary", "summary", (document, value) => ParameterObject(document, "global", "flag")["summary"] = value, AnyValue),
             Field("global.flag.description", "description", (document, value) => ParameterObject(document, "global", "flag")["description"] = value, AnyValue),
             Field("global.flag.type", "type", (document, value) => ParameterObject(document, "global", "flag")["type"] = value, _ => false),
@@ -214,8 +214,8 @@ internal static class SourceContractFields
         Field($"{scope}.examples.content", "content", (document, value) => ExampleObject(document, key)["content"] = value, RequiredValue));
 
     private static SourceParameterFields Parameters(string scope, string commandScope, string kind, bool option) => new(
-        Field($"{scope}.name", "name", (document, value) => ParameterObject(document, commandScope, kind)["name"] = value, RequiredValue),
-        option ? Field($"{scope}.aliases", "aliases", (document, value) => ParameterObject(document, commandScope, kind)["aliases"] = Strings(value), NonEmptyValue) : null,
+        option ? Field($"{scope}.name", "name", (document, value) => ParameterObject(document, commandScope, kind)["name"] = value, OptionNameValue) : Field($"{scope}.name", "name", (document, value) => ParameterObject(document, commandScope, kind)["name"] = value, RequiredValue),
+        option ? Field($"{scope}.aliases", "aliases", (document, value) => ParameterObject(document, commandScope, kind)["aliases"] = Strings(value), OptionNameValue) : null,
         Field($"{scope}.summary", "summary", (document, value) => ParameterObject(document, commandScope, kind)["summary"] = value, AnyValue),
         Field($"{scope}.description", "description", (document, value) => ParameterObject(document, commandScope, kind)["description"] = value, AnyValue),
         Field($"{scope}.type", "type", (document, value) => ParameterObject(document, commandScope, kind)["type"] = value, _ => false),
@@ -265,6 +265,7 @@ internal static class SourceContractFields
 
     private static bool RequiredValue(string value) => value.Length > 0;
     private static bool NonEmptyValue(string value) => value.Length > 0;
+    private static bool OptionNameValue(string value) => value.Length > 0 && value[0] != '-';
     private static bool NonWhitespaceValue(string value) => !string.IsNullOrWhiteSpace(value);
     private static bool AnyValue(string _) => true;
 }

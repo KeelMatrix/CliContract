@@ -176,7 +176,7 @@ internal static class SourceContractProjection
             throw new NormalizationException("INVALID_BASELINE", "A canonical option name is not produced by the source normalizer.");
         }
 
-        return option.Name == "--" ? "-" : option.Name[2..];
+        return option.Name[2..];
     }
 
     private static JsonObject ProjectChoice(CanonicalChoice choice, SourceChoiceFields fields, SourceProjectionTrace? trace)

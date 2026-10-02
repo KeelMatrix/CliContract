@@ -36,7 +36,7 @@
       "flags": [
         {
           "name": "region",
-          "aliases": ["-r"],
+          "aliases": ["r"],
           "type": "string",
           "required": false,
           "choices": [{"value": "us"}, {"value": "eu"}],

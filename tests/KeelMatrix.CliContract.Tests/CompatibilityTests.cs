@@ -21,8 +21,8 @@ public sealed class CompatibilityTests
     [Fact]
     public void RequirednessArityAliasDefaultAndDescriptionChangesUseStableCategories()
     {
-        var oldManifest = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["-v"],"required":false,"default":"one","description":"old"},{"name":"items","type":"string","variadic":true,"maxItems":3}]}}}""");
-        var newManifest = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["-x"],"required":true,"default":"two","description":"new"},{"name":"items","type":"string","variadic":true,"maxItems":1}]}}}""");
+        var oldManifest = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["v"],"required":false,"default":"one","description":"old"},{"name":"items","type":"string","variadic":true,"maxItems":3}]}}}""");
+        var newManifest = Normalize("""{"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["x"],"required":true,"default":"two","description":"new"},{"name":"items","type":"string","variadic":true,"maxItems":1}]}}}""");
 
         var findings = CompatibilityAnalyzer.Compare(oldManifest, newManifest).Findings;
 
