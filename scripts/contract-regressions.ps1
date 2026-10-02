@@ -546,7 +546,7 @@ commands:
     $help = Invoke-Tool @('--help')
     Assert-Case 'help-exit-codes' $help 0 '4  Unexpected tool failure'
     $helpText = $help.Output -join "`n"
-    if ($helpText -notmatch 'Argument passthrough' -or $helpText -notmatch 'exact numeric value' -or $helpText -notmatch 'trailing-dot exponent mantissas' -or $helpText -notmatch 'YAML \.inf and \.nan') { throw 'Help output does not describe the canonical compatibility semantics.' }
+    if ($helpText -notmatch 'Argument passthrough' -or $helpText -notmatch 'exact numeric value' -or $helpText -notmatch 'trailing-dot exponent mantissas' -or $helpText -notmatch 'YAML \.inf and \.nan' -or $helpText -notmatch 'OPENCLI_OPTION_NAME' -or $helpText -notmatch 'OPENCLI-ALPHA14-OPTION-NAME-ORACLE') { throw 'Help output does not describe the canonical compatibility semantics and pinned option-name oracle.' }
     Write-Output 'CASE=help-canonicalization-contract exit=pass'
 
     Assert-Case 'duplicate-format' (Invoke-Tool @('validate', $source, '--format', 'text', '--format', 'json', '--no-telemetry')) 2 'DUPLICATE_OPTION'

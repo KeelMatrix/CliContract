@@ -96,7 +96,7 @@ try {
     Push-Location $temp
     $pushed = $true
     $help = & $tool --help 2>&1
-    if ($LASTEXITCODE -ne 0 -or -not (($help -join "`n") -match 'snapshot')) { throw 'Installed tool help failed.' }
+    if ($LASTEXITCODE -ne 0 -or -not (($help -join "`n") -match 'snapshot') -or -not (($help -join "`n") -match 'OPENCLI-ALPHA14-OPTION-NAME-ORACLE')) { throw 'Installed tool help failed or omitted the pinned option-name oracle.' }
 
     $officialPetstore = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\fixtures\opencli\petstore-cli.ocs.yaml')).Path
     $officialBaseline = Join-Path $temp 'official-petstore.canonical.json'

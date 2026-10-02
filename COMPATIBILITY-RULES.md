@@ -60,7 +60,7 @@ This is a selected compatibility-diagnostic catalog. The complete role-aware exi
 | `OPENCLI_NUMBER` | `3` | An explicitly numeric scalar is not a supported finite canonical JSON number |
 | `NODE_LIMIT` | `3` | The source or canonical manifest exceeds the node limit |
 | `MATERIALIZED_COMMAND_LIMIT` | `3` | The normalized command tree exceeds the materialized-command limit |
-| `OPENCLI_OPTION_NAME` | `3` | An option name or alias begins with `-` and cannot be represented by the pinned alpha.14 invocation form |
+| `OPENCLI_OPTION_NAME` | `3` | An option name or alias begins with `-` and cannot be represented by the pinned alpha.14 invocation form; see the [pinned option-name oracle](docs/OPENCLI-ALPHA14-OPTION-NAME-ORACLE.md) |
 | `DERIVED_INVOCATION_LIMIT` | `3` | Alias/command invocation expansion would exceed the bounded count or aggregate-character limit |
 | `COMPARISON_WORK_LIMIT` | `3` | Compatibility comparison would exceed the bounded work limit |
 | `CANONICAL_OUTPUT_TOO_LARGE` | `3` | Canonical output exceeds its byte or node admission limit |
@@ -123,7 +123,7 @@ The adapter supports nested commands, root/global flags, aliases, positional arg
 
 ### Source-string presence and whitespace
 
-The alpha.14 adapter treats a source-shaped string as present when it is nonempty. It does not trim or treat whitespace-only text as missing: whitespace is preserved verbatim in canonical metadata, help/example text, install and license names, parameter names, aliases, and alternative-source properties. Empty required strings and empty aliases remain invalid, and duplicate aliases remain invalid. Source normalization and canonical-manifest validation use the shared source-contract rules for these predicates. Option source names and aliases must not begin with `-`: the pinned alpha.14 invocation path passes each source spelling literally to pflag, so `TrimStart('-')` is not a valid identity rule. Accepted primary option names are represented canonically as `--` plus the source name; unrepresentable spellings fail with `OPENCLI_OPTION_NAME` and exit `3`. Global config file paths retain their existing non-whitespace-only constraint.
+The alpha.14 adapter treats a source-shaped string as present when it is nonempty. It does not trim or treat whitespace-only text as missing: whitespace is preserved verbatim in canonical metadata, help/example text, install and license names, parameter names, aliases, and alternative-source properties. Empty required strings and empty aliases remain invalid, and duplicate aliases remain invalid. Source normalization and canonical-manifest validation use the shared source-contract rules for these predicates. The [pinned option-name oracle](docs/OPENCLI-ALPHA14-OPTION-NAME-ORACLE.md) establishes why option source names and aliases must not begin with `-`: stripping a leading dash would change invocation identity, while retaining it produces an invalid long-form name. Accepted primary option names are represented canonically as `--` plus the source name; unrepresentable spellings fail with `OPENCLI_OPTION_NAME` and exit `3`. Global config file paths retain their existing non-whitespace-only constraint.
 
 Finite JSON numbers and recognized YAML integer/float spellings are compared by exact numeric value. Recognized YAML floats include trailing-dot exponent mantissas such as `5.e2` and signed/exponent-sign variants. YAML `.inf` and `.nan` spellings are outside the JSON-number boundary: explicit `!!float` forms fail with `OPENCLI_NUMBER` and exit code `3`, while untagged forms remain strings.
 

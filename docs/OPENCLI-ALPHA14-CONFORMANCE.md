@@ -1,6 +1,6 @@
 # OpenCLI alpha.14 conformance coverage
 
-CliContract accepts only OpenCLI `1.0.0-alpha.14`. The committed fixtures and tests below are checked against the tagged upstream validation and codec behavior. The upstream source is the `spec/v1.0.0-alpha.14` tag.
+CliContract accepts only OpenCLI `1.0.0-alpha.14`. The committed fixtures and tests below are checked against the tagged upstream validation and codec behavior. The upstream source is the `spec/v1.0.0-alpha.14` tag. The exact generator/parser source record for option-name representability is recorded in the [pinned option-name oracle](OPENCLI-ALPHA14-OPTION-NAME-ORACLE.md).
 
 ## Tagged validation-test inventory
 
@@ -61,7 +61,7 @@ The following matrix records the alpha.14 source rule, its canonical enforcement
 | `$ENV`/`$FILE` sources use supported types and nonempty properties; nonempty whitespace properties are preserved; `$FILE` needs global file configuration | `ValidateSources` | `Alpha14WhitespaceStringsRemainSourceProducibleAndRoundTrip`, hostile `invalid-source-type`, `empty-source-property`, and `file-source-without-config` |
 | Arguments cannot carry flag-only defaults or alternative sources | `ValidateParameter` | hostile `argument-default` |
 | Commands and parameters cannot inject alpha.14-unrepresentable status/deprecation state | `ValidateCommand` and `ValidateParameter` | hostile `unrepresentable-status` |
-| Option types are exact alpha.14 values; primary names are canonically `--` plus a non-dash-leading source name, while aliases preserve accepted source spellings and cannot begin with `-` | shared source-contract rules used by normalization and `ValidateOptionCollection` | `Alpha14OptionNamesPreserveAcceptedWhitespaceAndPunctuationAtEveryScope`, `PinnedOptionNameSpellingsThatBeginWithDashFailClosedAtEveryScope`, `AcceptedOptionNamesRoundTripWithoutChangingInvocationIdentity`, `ProjectionTraceMatchesIndependentlyAuthoredSourceFieldContract`, `AllowListedUnregisteredProjectionFieldFailsCoverageGuardWithItsPath`, and hostile `invalid-option-name` / `invalid-option-alias` |
+| Option types are exact alpha.14 values; primary names are canonically `--` plus a non-dash-leading source name, while aliases follow the [pinned option-name oracle](OPENCLI-ALPHA14-OPTION-NAME-ORACLE.md) and cannot begin with `-` | shared source-contract rules used by normalization and `ValidateOptionCollection` | `Alpha14OptionNamesPreserveAcceptedWhitespaceAndPunctuationAtEveryScope`, `PinnedOptionNameSpellingsThatBeginWithDashFailClosedAtEveryScope`, `AcceptedOptionNamesRoundTripWithoutChangingInvocationIdentity`, `ProjectionTraceMatchesIndependentlyAuthoredSourceFieldContract`, `AllowListedUnregisteredProjectionFieldFailsCoverageGuardWithItsPath`, and hostile `invalid-option-name` / `invalid-option-alias` |
 | `AllowedValues` exactly mirrors `Choices[].Value`, choices use scalar sort order, and values match the declared type | `ValidateAllowedValues` and `ValidateChoices` | hostile `contradictory-domain`, `reversed-choice-order`, and `CanonicalManifestReaderRejectsNonIntegralIntegerChoices` |
 | An omitted alternative-source/choice collection serializes as the same canonical empty collection as an absent source property | canonical representation | No restriction: this state is produced by omission and cannot retain source-property presence |
 

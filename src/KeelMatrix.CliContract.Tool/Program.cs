@@ -697,6 +697,8 @@ internal static class CliApplication
       Accepted command names include aliases at every command segment; retained aliases preserve old paths.
       Primary option names are canonicalized as -- plus the source name. Option names and aliases beginning with -
       fail with OPENCLI_OPTION_NAME because the pinned alpha.14 invocation form would not preserve their identity.
+      Exact generator and parser source record is in the pinned alpha.14 option-name oracle:
+      https://github.com/KeelMatrix/CliContract/blob/main/docs/OPENCLI-ALPHA14-OPTION-NAME-ORACLE.md
       Derived command-invocation expansion is bounded by both count and aggregate characters before paths are allocated.
       All supported string, number, integer, and boolean type domains are compared, and exit-code changes warn.
       Choices and defaults must match their declared type; non-integral integer values fail with exit 3.
