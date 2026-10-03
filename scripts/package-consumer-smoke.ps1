@@ -60,6 +60,33 @@ function Write-IsolatedNuGetConfig([string] $Path, [string] $Source) {
     [IO.File]::WriteAllText($Path, $content, [Text.UTF8Encoding]::new($false))
 }
 
+function New-InstalledOptionSourceText {
+    param(
+        [ValidateSet('global', 'root', 'command')] [string] $Scope,
+        [AllowEmptyString()] [string] $Name,
+        [AllowEmptyCollection()] [string[]] $Aliases = @()
+    )
+
+    $flag = [ordered]@{ name = $Name; type = 'string'; aliases = @($Aliases) }
+    $document = [ordered]@{
+        opencliVersion = '1.0.0-alpha.14'
+        info = [ordered]@{ title = 'Tool'; binary = 'tool'; version = '1' }
+    }
+    if ($Scope -eq 'global') {
+        $document['global'] = [ordered]@{ flags = @($flag) }
+        $document['commands'] = [ordered]@{ tool = [ordered]@{} }
+    }
+    else {
+        $command = [ordered]@{ flags = @($flag) }
+        $commandKey = if ($Scope -eq 'root') { 'tool' } else { 'tool run' }
+        $commands = [ordered]@{}
+        $commands[$commandKey] = $command
+        $document['commands'] = $commands
+    }
+
+    return (ConvertTo-Json -InputObject $document -Depth 20 -Compress)
+}
+
 New-Item -ItemType Directory -Path $feed, $toolPath, $freshPackages, $httpCache, $ordinaryCache | Out-Null
 try {
     $feedPackage = Join-Path $feed ([IO.Path]::GetFileName($candidatePath))
@@ -130,6 +157,17 @@ try {
         $output = $result -join "`n"
         if ($exit -ne $ExpectedExit -or $output -notmatch [regex]::Escape($ExpectedCode)) { throw "Installed-tool $Label failed: exit=$exit output=$output" }
         Write-Output "CASE=$Label exit=$exit code=$ExpectedCode"
+    }
+
+    function Assert-InstalledOutcome {
+        param([string] $Label, [int] $ExpectedExit, [string] $ExpectedText, [string[]] $Arguments)
+        $result = @(& $tool @Arguments 2>&1)
+        $exit = $LASTEXITCODE
+        $output = $result -join "`n"
+        if ($exit -ne $ExpectedExit -or ($ExpectedText -and $output -notmatch [regex]::Escape($ExpectedText))) {
+            throw "Installed-tool $Label failed: exit=$exit output=$output"
+        }
+        Write-Output "CASE=$Label exit=$exit"
     }
 
     # Independent pinned alpha.14 oracle. Go's \s is space, tab, LF, form
@@ -261,18 +299,62 @@ commands:
     }
     Write-Output 'CASE=option-name-edge-class-consumer global_root_command_names_and_aliases=PASS'
 
-    $invalidOptionNameCases = @(
-        @{ Name = 'global-option-leading-dash'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"global":{"flags":[{"name":"-value","type":"string"}]},"commands":{"tool":{}}}' },
-        @{ Name = 'root-option-leading-dash-alias'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool":{"flags":[{"name":"value","type":"string","aliases":["--value"]}]}}}' },
-        @{ Name = 'command-option-leading-dash'; Text = '{"opencliVersion":"1.0.0-alpha.14","info":{"title":"Tool","binary":"tool","version":"1"},"commands":{"tool run":{"flags":[{"name":"--value","type":"string"}]}}}' }
-    )
+    $optionAliasRoleCases = foreach ($scope in @('global', 'root', 'command')) {
+        @{
+            Name = "$scope-option-alias-role"
+            Text = New-InstalledOptionSourceText -Scope $scope -Name 'value' -Aliases @('verbose', 'v')
+            ReorderedText = New-InstalledOptionSourceText -Scope $scope -Name 'value' -Aliases @('v', 'verbose')
+            ChangedText = New-InstalledOptionSourceText -Scope $scope -Name 'value' -Aliases @('verbose', 'x')
+        }
+    }
+    foreach ($case in $optionAliasRoleCases) {
+        $sourcePath = Join-Path $temp ($case.Name + '.json')
+        $baselinePath = Join-Path $temp ($case.Name + '.canonical.json')
+        $reorderedPath = Join-Path $temp ($case.Name + '-reordered.json')
+        $changedPath = Join-Path $temp ($case.Name + '-changed-shorthand.json')
+        [IO.File]::WriteAllText($sourcePath, $case.Text, [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($reorderedPath, $case.ReorderedText, [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($changedPath, $case.ChangedText, [Text.UTF8Encoding]::new($false))
+        Assert-InstalledOutcome -Label "$($case.Name) validate" -ExpectedExit 0 -ExpectedText 'VALID' -Arguments @('validate', $sourcePath, '--input', 'opencli', '--no-telemetry')
+        Assert-InstalledOutcome -Label "$($case.Name) snapshot" -ExpectedExit 0 -ExpectedText 'SNAPSHOT' -Arguments @('snapshot', $sourcePath, '--input', 'opencli', '--output', $baselinePath, '--no-telemetry')
+        Assert-InstalledOutcome -Label "$($case.Name) check" -ExpectedExit 0 -ExpectedText 'COMPATIBLE' -Arguments @('check', $sourcePath, '--input', 'opencli', '--baseline', $baselinePath, '--no-telemetry')
+        Assert-InstalledOutcome -Label "$($case.Name) diff" -ExpectedExit 0 -ExpectedText 'COMPATIBLE' -Arguments @('diff', $sourcePath, $sourcePath, '--input', 'opencli', '--no-telemetry')
+        Assert-InstalledOutcome -Label "$($case.Name) reordered validate" -ExpectedExit 0 -ExpectedText 'VALID' -Arguments @('validate', $reorderedPath, '--input', 'opencli', '--no-telemetry')
+        Assert-InstalledOutcome -Label "$($case.Name) reordered snapshot" -ExpectedExit 0 -ExpectedText 'SNAPSHOT' -Arguments @('snapshot', $reorderedPath, '--input', 'opencli', '--output', (Join-Path $temp "$($case.Name)-reordered.canonical.json"), '--no-telemetry')
+        Assert-InstalledOutcome -Label "$($case.Name) reordered check" -ExpectedExit 0 -ExpectedText 'COMPATIBLE' -Arguments @('check', $reorderedPath, '--input', 'opencli', '--baseline', $baselinePath, '--no-telemetry')
+        Assert-InstalledOutcome -Label "$($case.Name) reordered diff" -ExpectedExit 0 -ExpectedText 'COMPATIBLE' -Arguments @('diff', $sourcePath, $reorderedPath, '--input', 'opencli', '--no-telemetry')
+        Assert-InstalledOutcome -Label "$($case.Name) changed shorthand validate" -ExpectedExit 0 -ExpectedText 'VALID' -Arguments @('validate', $changedPath, '--input', 'opencli', '--no-telemetry')
+        Assert-InstalledOutcome -Label "$($case.Name) changed shorthand snapshot" -ExpectedExit 0 -ExpectedText 'SNAPSHOT' -Arguments @('snapshot', $changedPath, '--input', 'opencli', '--output', (Join-Path $temp "$($case.Name)-changed.canonical.json"), '--no-telemetry')
+        Assert-InstalledError -Label "$($case.Name) changed shorthand check" -ExpectedExit 1 -ExpectedCode 'KMCLI104' -Arguments @('check', $changedPath, '--input', 'opencli', '--baseline', $baselinePath, '--no-telemetry')
+        Assert-InstalledError -Label "$($case.Name) changed shorthand diff" -ExpectedExit 1 -ExpectedCode 'KMCLI104' -Arguments @('diff', $sourcePath, $changedPath, '--input', 'opencli', '--no-telemetry')
+    }
+    Write-Output 'CASE=installed-option-alias-role shorthand-order-and-breaking-change global_root_command=PASS'
+
+    $invalidOptionNameCases = @()
+    foreach ($case in @(
+        @{ Scope = 'global'; Name = '=value'; Alias = '' },
+        @{ Scope = 'root'; Name = ''; Alias = '-value' },
+        @{ Scope = 'command'; Name = '--value'; Alias = '=value' }
+    )) {
+        $invalidOptionNameCases += @{ Name = "$($case.Scope)-invalid-name"; Text = (New-InstalledOptionSourceText -Scope $case.Scope -Name $case.Name -Aliases @()) }
+        $invalidOptionNameCases += @{ Name = "$($case.Scope)-invalid-alias"; Text = (New-InstalledOptionSourceText -Scope $case.Scope -Name 'value' -Aliases @($case.Alias)) }
+    }
+    foreach ($case in @(
+        @{ Scope = 'global'; Aliases = [string[]]@('x', 'y'); Label = 'two-shorthand-aliases' },
+        @{ Scope = 'root'; Aliases = [string[]]@('y', 'x'); Label = 'reversed-two-shorthand-aliases' },
+        @{ Scope = 'command'; Aliases = [string[]]@('x', 'y', 'z'); Label = 'three-shorthand-aliases' }
+    )) {
+        $invalidOptionNameCases += @{ Name = "$($case.Scope)-$($case.Label)"; Text = (New-InstalledOptionSourceText -Scope $case.Scope -Name 'value' -Aliases $case.Aliases) }
+    }
     foreach ($case in $invalidOptionNameCases) {
         $sourcePath = Join-Path $temp ($case.Name + '.json')
         [IO.File]::WriteAllText($sourcePath, $case.Text, [Text.UTF8Encoding]::new($false))
         Assert-InstalledError -Label "$($case.Name) validate" -ExpectedExit 3 -ExpectedCode 'OPENCLI_OPTION_NAME' -Arguments @('validate', $sourcePath, '--input', 'opencli', '--no-telemetry')
         Assert-InstalledError -Label "$($case.Name) snapshot" -ExpectedExit 3 -ExpectedCode 'OPENCLI_OPTION_NAME' -Arguments @('snapshot', $sourcePath, '--input', 'opencli', '--output', (Join-Path $temp "$($case.Name).canonical.json"), '--no-telemetry')
+        Assert-InstalledError -Label "$($case.Name) check" -ExpectedExit 3 -ExpectedCode 'OPENCLI_OPTION_NAME' -Arguments @('check', $sourcePath, '--input', 'opencli', '--baseline', $officialBaseline, '--no-telemetry')
+        Assert-InstalledError -Label "$($case.Name) diff" -ExpectedExit 3 -ExpectedCode 'OPENCLI_OPTION_NAME' -Arguments @('diff', $sourcePath, $sourcePath, '--input', 'opencli', '--no-telemetry')
     }
-    Write-Output 'CASE=option-name-leading-dash-consumer global_root_command=PASS'
+    Write-Output 'CASE=installed-option-name-and-alias-boundary validate_snapshot_check_diff global_root_command=PASS'
 
     $longAliasCommands = @()
     $longAliasPath = 'tool'
@@ -403,7 +485,10 @@ commands:
         @{ Name = 'reversed-choice-order'; Code = 'INVALID_BASELINE'; Mutate = { param($document) $document['GlobalOptions'][0]['Choices'] = [System.Text.Json.Nodes.JsonNode]::Parse('[{"Value":"yes"},{"Value":"no"}]'); $document['GlobalOptions'][0]['AllowedValues'] = [System.Text.Json.Nodes.JsonNode]::Parse('["yes","no"]') } },
         @{ Name = 'empty-global-config-wrapper'; Code = 'INVALID_BASELINE'; Mutate = { param($document) $document['GlobalConfig']['FileSources'] = [System.Text.Json.Nodes.JsonArray]::new() } },
         @{ Name = 'required-argument-zero-arity'; Code = 'OPENCLI_ARITY'; Mutate = { param($document) $command = @($document['Root']['Subcommands'].AsArray() | Where-Object { $_['Path'].ToString() -eq 'root / run' })[0]; $command['Arguments'][0]['Required'] = $true; $command['Arguments'][0]['ArityMinimum'] = 0 } },
-        @{ Name = 'reversed-variadic-bounds'; Code = 'OPENCLI_ARITY'; Mutate = { param($document) $document['GlobalOptions'][0]['Variadic'] = $true; $document['GlobalOptions'][0]['ArityMinimum'] = 3; $document['GlobalOptions'][0]['ArityMaximum'] = 2 } }
+        @{ Name = 'reversed-variadic-bounds'; Code = 'OPENCLI_ARITY'; Mutate = { param($document) $document['GlobalOptions'][0]['Variadic'] = $true; $document['GlobalOptions'][0]['ArityMinimum'] = 3; $document['GlobalOptions'][0]['ArityMaximum'] = 2 } },
+        @{ Name = 'option-multiple-shorthand-aliases'; Code = 'OPENCLI_OPTION_NAME'; Mutate = { param($document) $document['GlobalOptions'][0]['Aliases'] = [System.Text.Json.Nodes.JsonNode]::Parse('["x","y"]') } },
+        @{ Name = 'option-equals-primary-name'; Code = 'OPENCLI_OPTION_NAME'; Mutate = { param($document) $document['GlobalOptions'][0]['Name'] = '--=value' } },
+        @{ Name = 'option-equals-alias'; Code = 'OPENCLI_OPTION_NAME'; Mutate = { param($document) $document['GlobalOptions'][0]['Aliases'] = [System.Text.Json.Nodes.JsonNode]::Parse('["=value"]') } }
     )
     foreach ($case in $hostileContractCases) {
         $mutated = [System.Text.Json.Nodes.JsonNode]::Parse([IO.File]::ReadAllText($hostileBaseline))
@@ -413,6 +498,34 @@ commands:
         Assert-ToolError -Label ("$($case.Name) consumer check") -ExpectedExit 3 -ExpectedCode $case.Code -Arguments @('check', $hostileSource, '--baseline', $mutatedPath, '--no-telemetry')
         Assert-ToolError -Label ("$($case.Name) consumer diff") -ExpectedExit 3 -ExpectedCode $case.Code -Arguments @('diff', $mutatedPath, $hostileBaseline, '--no-telemetry')
     }
+    function Write-InstalledScopedCanonicalMutation([string] $Name, [string] $BaselinePath, [string] $Scope, [scriptblock] $Mutation) {
+        $document = [System.Text.Json.Nodes.JsonNode]::Parse([IO.File]::ReadAllText($BaselinePath))
+        if ($Scope -eq 'global') { $option = $document['GlobalOptions'].AsArray()[0].AsObject() }
+        elseif ($Scope -eq 'root') { $option = $document['Root']['Options'].AsArray()[0].AsObject() }
+        else { $option = $document['Root']['Subcommands'].AsArray()[0]['Options'].AsArray()[0].AsObject() }
+        & $Mutation $option
+        $path = Join-Path $temp ($Name + '.canonical.json')
+        [IO.File]::WriteAllText($path, $document.ToJsonString(), [Text.UTF8Encoding]::new($false))
+        return $path
+    }
+
+    $installedScopedCanonicalMutations = @(
+        @{ Name = 'multiple-shorthand-aliases'; Mutate = { param($option) $option['Aliases'] = [System.Text.Json.Nodes.JsonNode]::Parse('["x","y"]') } },
+        @{ Name = 'equals-primary-name'; Mutate = { param($option) $option['Name'] = '--=value' } },
+        @{ Name = 'dash-alias'; Mutate = { param($option) $option['Aliases'] = [System.Text.Json.Nodes.JsonNode]::Parse('["-value"]') } }
+    )
+    foreach ($scope in @('global', 'root', 'command')) {
+        $scopeSourcePath = Join-Path $temp "installed-$scope-option-canonical-source.json"
+        $scopeBaselinePath = Join-Path $temp "installed-$scope-option-canonical-baseline.json"
+        [IO.File]::WriteAllText($scopeSourcePath, (New-InstalledOptionSourceText -Scope $scope -Name 'value' -Aliases @('v')), [Text.UTF8Encoding]::new($false))
+        Assert-InstalledOutcome -Label "$scope option canonical baseline" -ExpectedExit 0 -ExpectedText 'SNAPSHOT' -Arguments @('snapshot', $scopeSourcePath, '--input', 'opencli', '--output', $scopeBaselinePath, '--no-telemetry')
+        foreach ($case in $installedScopedCanonicalMutations) {
+            $casePath = Write-InstalledScopedCanonicalMutation "installed-$scope-$($case.Name)" $scopeBaselinePath $scope $case.Mutate
+            Assert-InstalledError -Label "installed $scope $($case.Name) check" -ExpectedExit 3 -ExpectedCode 'OPENCLI_OPTION_NAME' -Arguments @('check', $scopeSourcePath, '--input', 'opencli', '--baseline', $casePath, '--no-telemetry')
+            Assert-InstalledError -Label "installed $scope $($case.Name) diff" -ExpectedExit 3 -ExpectedCode 'OPENCLI_OPTION_NAME' -Arguments @('diff', $casePath, $scopeBaselinePath, '--no-telemetry')
+        }
+    }
+    Write-Output 'CASE=unrepresentable-canonical-options-consumer global_root_command check_diff=PASS'
     Write-Output 'CASE=family3-canonical-baselines-consumer check_exit=3 diff_exit=3'
 
     $globalScopeOld = Join-Path $temp 'global-scope-old.json'

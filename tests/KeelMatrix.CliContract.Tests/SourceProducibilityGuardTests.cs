@@ -106,6 +106,26 @@ public sealed class SourceProducibilityGuardTests
         }
     }
 
+    [Fact]
+    public void OptionRoleAndNameBoundariesAreEnforcedByProjectionAndCompatibility()
+    {
+        var source = NormalizeAndRead(BaseDocument());
+        foreach (var (name, aliases) in new[]
+        {
+            ("--global-option", new[] { "x", "y" }),
+            ("--=value", new[] { "v" }),
+            ("--global-option", new[] { "=value" })
+        })
+        {
+            var malformed = WithGlobalOption(source, name, aliases);
+            var projectionError = Assert.Throws<NormalizationException>(() => SourceContractProjection.Create(malformed));
+            Assert.Equal("OPENCLI_OPTION_NAME", projectionError.Code);
+
+            var compatibilityError = Assert.Throws<CompatibilityException>(() => CompatibilityAnalyzer.Compare(source, malformed));
+            Assert.Equal("OPENCLI_OPTION_NAME", compatibilityError.Code);
+        }
+    }
+
     private static CanonicalManifest NormalizeAndRead(JsonObject document)
     {
         var manifest = Normalizer.Normalize("opencli", document.ToJsonString());
@@ -115,6 +135,17 @@ public sealed class SourceProducibilityGuardTests
         Assert.Empty(CompatibilityAnalyzer.Compare(roundTrip, roundTrip).Findings);
         return roundTrip;
     }
+
+    private static CanonicalManifest WithGlobalOption(CanonicalManifest source, string name, string[] aliases) => new()
+    {
+        Adapter = source.Adapter,
+        SourceVersion = source.SourceVersion,
+        Info = source.Info,
+        GlobalExitCodes = source.GlobalExitCodes,
+        GlobalConfig = source.GlobalConfig,
+        GlobalOptions = [new CanonicalOption { Name = name, Type = "string", Aliases = aliases }],
+        Root = source.Root
+    };
 
     private static void AssertProjectionCoverage(IReadOnlyCollection<string> expected, IReadOnlyCollection<string> covered)
     {

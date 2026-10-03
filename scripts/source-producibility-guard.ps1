@@ -14,7 +14,7 @@ New-Item -ItemType Directory -Path $temp | Out-Null
 try {
     & dotnet test tests/KeelMatrix.CliContract.Tests/KeelMatrix.CliContract.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~SourceProducibilityGuardTests --nologo --logger "console;verbosity=detailed"
     if ($LASTEXITCODE -ne 0) { throw 'The source-producibility edge matrix failed.' }
-    Write-Output 'CASE=source-field-edge-matrix PASS'
+    Write-Output 'CASE=source-field-edge-matrix-and-option-role-guard PASS'
 
     if (-not $PackagePath) {
         $packageDirectory = Join-Path $temp 'package'

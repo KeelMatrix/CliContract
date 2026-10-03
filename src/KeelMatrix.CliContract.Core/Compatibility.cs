@@ -337,8 +337,13 @@ public static class CompatibilityAnalyzer
 
     private static IEnumerable<string> OptionInvocationNames(CanonicalOption option)
     {
-        yield return option.Name;
-        foreach (var alias in option.Aliases) yield return alias;
+        if (!SourceContractRules.IsNormalizedOptionName(option.Name) ||
+            !SourceContractRules.AreRepresentableOptionAliases(option.Aliases))
+        {
+            throw new CompatibilityException("OPENCLI_OPTION_NAME", "A canonical option name or alias cannot be represented with its pinned alpha.14 invocation role.");
+        }
+
+        return SourceContractRules.OptionInvocationNames(option.Name, option.Aliases);
     }
 
     private static CanonicalOption[] EffectiveOptions(CanonicalCommand command, IReadOnlyList<CanonicalOption> globalOptions) =>
@@ -570,10 +575,16 @@ public static class CompatibilityAnalyzer
             {
                 parentPaths = [parentPath];
             }
-            var names = new[] { segments[^1] }.Concat(command.Aliases).Distinct(StringComparer.Ordinal).ToArray();
+            var names = CommandInvocationNames(segments[^1], command.Aliases);
             expansionBudget.Reserve(parentPaths, names, limits);
 
             return parentPaths.SelectMany(parentInvocation => names.Select(name => parentInvocation + " / " + name)).Distinct(StringComparer.Ordinal).ToArray();
+        }
+
+        private static string[] CommandInvocationNames(string segment, IEnumerable<string> aliases)
+        {
+            // Cobra command aliases are command names; only flag aliases receive shorthand roles.
+            return new[] { segment }.Concat(aliases).Distinct(StringComparer.Ordinal).ToArray();
         }
 
         private sealed class InvocationExpansionBudget

@@ -689,7 +689,7 @@ public static class Normalizer
             ? new[] { "name", "aliases", "type", "variadic", "minItems", "maxItems", "choices", "hint", "summary", "description", "required", "default", "alternativeSources", "hidden" }
             : new[] { "name", "type", "variadic", "minItems", "maxItems", "choices", "summary", "description", "required", "passthrough" };
         EnsureOpenCliProperties(parameter, option ? "flag" : "argument", allowed);
-        _ = RequiredStringValue(parameter["name"], "OPENCLI_PARAMETER");
+        _ = RequiredStringValue(parameter["name"], option ? "OPENCLI_OPTION_NAME" : "OPENCLI_PARAMETER");
         ValidateType(parameter, limits, option);
         ValidateOptionalBoolean(parameter, "variadic", "OPENCLI_PARAMETER");
         ValidateOptionalBoolean(parameter, "required", "OPENCLI_PARAMETER");
@@ -698,7 +698,7 @@ public static class Normalizer
         ValidateOptionalString(parameter, "hint", limits, "OPENCLI_PARAMETER");
         ValidateOptionalString(parameter, "summary", limits, "OPENCLI_PARAMETER");
         ValidateOptionalString(parameter, "description", limits, "OPENCLI_PARAMETER");
-        ValidateStringArray(parameter["aliases"], "OPENCLI_ALIASES", limits);
+        ValidateStringArray(parameter["aliases"], option ? "OPENCLI_OPTION_NAME" : "OPENCLI_ALIASES", limits);
         ValidateArity(parameter, limits);
         var type = OptionalString(parameter, "type", limits);
         ValidateChoices(parameter["choices"], type, limits);
@@ -1298,7 +1298,7 @@ public static class Normalizer
         foreach (var item in array)
         {
             var parameter = RequireObject(item, "OPENCLI_PARAMETER");
-            var name = RequiredString(parameter, "name", "OPENCLI_PARAMETER");
+            var name = RequiredString(parameter, "name", option ? "OPENCLI_OPTION_NAME" : "OPENCLI_PARAMETER");
             if (!option && (parameter.ContainsKey("default") || parameter.ContainsKey("alternativeSources")))
             {
                 throw new NormalizationException("OPENCLI_ARGUMENT_FIELD", "OpenCLI arguments do not support default or alternativeSources fields.");
@@ -1316,15 +1316,17 @@ public static class Normalizer
             var alternativeSources = option
                 ? ReadAlternativeSources(OptionalProperty(parameter, "alternativeSources", "OPENCLI_DEFAULT_SOURCES"), limits)
                 : [];
-            var aliases = option ? Strings(parameter["aliases"], limits).OrderBy(x => x, StringComparer.Ordinal).ToArray() : [];
-            if (option && (!SourceContractRules.IsRepresentableOptionName(name) || aliases.Any(alias => !SourceContractRules.IsRepresentableOptionName(alias))))
+            var aliases = option ? Strings(parameter["aliases"], limits, "OPENCLI_OPTION_NAME").OrderBy(x => x, StringComparer.Ordinal).ToArray() : [];
+            if (option && (!SourceContractRules.IsRepresentableOptionName(name) || !SourceContractRules.AreRepresentableOptionAliases(aliases)))
             {
-                throw new NormalizationException("OPENCLI_OPTION_NAME", "An OpenCLI option name or alias cannot begin with '-' because the pinned alpha.14 invocation form would be invalid.");
+                throw new NormalizationException("OPENCLI_OPTION_NAME", "An OpenCLI option name must be nonempty and cannot begin with '-' or '='; aliases must be representable and contain at most one single-byte shorthand.");
             }
 
             var normalizedName = option ? SourceContractRules.NormalizeOptionName(name) : name;
-            var nameIdentity = option ? SourceContractRules.OptionIdentity(normalizedName) : normalizedName;
-            if (!names.Add(nameIdentity) || aliases.Any(alias => !names.Add(SourceContractRules.OptionIdentity(alias))))
+            var invocationNames = option
+                ? SourceContractRules.OptionInvocationNames(normalizedName, aliases)
+                : [normalizedName];
+            if (invocationNames.Any(invocation => !names.Add(invocation)))
             {
                 throw new NormalizationException("OPENCLI_DUPLICATE_PARAMETER", "An OpenCLI parameter collection contains duplicate normalized names.");
             }
@@ -1567,7 +1569,7 @@ public static class Normalizer
         return node;
     }
 
-    private static string[] Strings(JsonNode? node, NormalizationLimits limits)
+    private static string[] Strings(JsonNode? node, NormalizationLimits limits, string emptyValueCode = "INVALID_STRING")
     {
         if (node is null) return [];
         var array = node as JsonArray ?? throw new NormalizationException("COLLECTION_TYPE", "The aliases field must be an array.");
@@ -1582,7 +1584,7 @@ public static class Normalizer
             var value = BoundedString(item.GetValue<string>(), limits);
             if (!SourceContractRules.IsNonEmpty(value))
             {
-                throw new NormalizationException("INVALID_STRING", "The aliases field must contain non-empty strings.");
+                throw new NormalizationException(emptyValueCode, "The aliases field must contain non-empty strings.");
             }
 
             return value;

@@ -171,9 +171,10 @@ internal static class SourceContractProjection
 
     private static string SourceOptionName(CanonicalOption option)
     {
-        if (!SourceContractRules.IsNormalizedOptionName(option.Name))
+        if (!SourceContractRules.IsNormalizedOptionName(option.Name) ||
+            !SourceContractRules.AreRepresentableOptionAliases(option.Aliases))
         {
-            throw new NormalizationException("INVALID_BASELINE", "A canonical option name is not produced by the source normalizer.");
+            throw new NormalizationException("OPENCLI_OPTION_NAME", "A canonical option name or alias is not representable with its pinned alpha.14 invocation role.");
         }
 
         return option.Name[2..];

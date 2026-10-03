@@ -21,7 +21,41 @@ internal static class SourceContractRules
     public static string NormalizeOptionName(string sourceName) => "--" + sourceName;
 
     public static bool IsRepresentableOptionName(string sourceName) =>
-        IsNonEmpty(sourceName) && sourceName[0] != '-';
+        IsNonEmpty(sourceName) && sourceName[0] is not ('-' or '=');
+
+    public static bool IsSingleByteAlias(string alias) =>
+        alias.Length == 1 && alias[0] <= '\u007f';
+
+    public static bool AreRepresentableOptionAliases(IEnumerable<string> aliases)
+    {
+        var shorthandCount = 0;
+        foreach (var alias in aliases)
+        {
+            if (!IsRepresentableOptionName(alias))
+            {
+                return false;
+            }
+
+            if (IsSingleByteAlias(alias) && ++shorthandCount > 1)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static string OptionAliasInvocationName(string alias) =>
+        IsSingleByteAlias(alias) ? "-" + alias : NormalizeOptionName(alias);
+
+    public static IEnumerable<string> OptionInvocationNames(string canonicalName, IEnumerable<string> aliases)
+    {
+        yield return canonicalName;
+        foreach (var alias in aliases)
+        {
+            yield return OptionAliasInvocationName(alias);
+        }
+    }
 
     public static bool IsNormalizedOptionName(string canonicalName)
     {
@@ -34,9 +68,6 @@ internal static class SourceContractRules
             IsRepresentableOptionName(canonicalName[2..]) &&
             string.Equals(canonicalName, NormalizeOptionName(canonicalName[2..]), StringComparison.Ordinal);
     }
-
-    public static string OptionIdentity(string name) =>
-        name.StartsWith("--", StringComparison.Ordinal) ? name[2..] : name;
 
     public static bool IsSupportedType(string? type) => SupportedTypes.Contains(type, StringComparer.Ordinal);
 

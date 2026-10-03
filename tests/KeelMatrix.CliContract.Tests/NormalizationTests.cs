@@ -222,6 +222,95 @@ public sealed class NormalizationTests
         Assert.Empty(CompatibilityAnalyzer.Compare(manifest, roundTrip).Findings);
     }
 
+    [Theory]
+    [InlineData("global")]
+    [InlineData("root")]
+    [InlineData("command")]
+    public void SortedAliasesPreserveAtMostOneSingleByteShorthand(string scope)
+    {
+        var zeroShorthand = Normalizer.Normalize("opencli", OptionSourceForScope(scope, "value", ["verbose", "é"]));
+        Assert.Equal(["verbose", "é"], GetOptionAliases(zeroShorthand, scope));
+        Assert.Equal(Normalizer.Serialize(zeroShorthand), Normalizer.Serialize(CanonicalManifestReader.Read(Normalizer.Serialize(zeroShorthand))));
+        var multibyteAlias = Normalizer.Normalize("opencli", OptionSourceForScope(scope, "value", ["é"]));
+        var singleByteAlias = Normalizer.Normalize("opencli", OptionSourceForScope(scope, "value", ["e"]));
+        var byteLengthFindings = CompatibilityAnalyzer.Compare(multibyteAlias, singleByteAlias).Findings;
+        Assert.Contains(byteLengthFindings, finding => finding.Code == "KMCLI104" && finding.Message == "Removed alias '--é'.");
+        Assert.Contains(byteLengthFindings, finding => finding.Code == "KMCLI004" && finding.Message == "Added alias '-e'.");
+
+        var longThenShort = Normalizer.Normalize("opencli", OptionSourceForScope(scope, "value", ["verbose", "v"]));
+        var shortThenLong = Normalizer.Normalize("opencli", OptionSourceForScope(scope, "value", ["v", "verbose"]));
+        Assert.Equal(Normalizer.Serialize(longThenShort), Normalizer.Serialize(shortThenLong));
+        Assert.Empty(CompatibilityAnalyzer.Compare(longThenShort, shortThenLong).Findings);
+
+        var changedShorthand = Normalizer.Normalize("opencli", OptionSourceForScope(scope, "value", ["verbose", "x"]));
+        var shorthandFindings = CompatibilityAnalyzer.Compare(longThenShort, changedShorthand).Findings;
+        Assert.Contains(shorthandFindings, finding => finding.Code == "KMCLI104" && finding.Category == "breaking" && finding.Message == "Removed alias '-v'.");
+        Assert.Contains(shorthandFindings, finding => finding.Code == "KMCLI004" && finding.Category == "info" && finding.Message == "Added alias '-x'.");
+
+        foreach (var aliases in new[] { new[] { "x", "y" }, new[] { "y", "x" }, new[] { "x", "y", "z" } })
+        {
+            var error = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", OptionSourceForScope(scope, "value", aliases)));
+            Assert.Equal("OPENCLI_OPTION_NAME", error.Code);
+        }
+    }
+
+    [Theory]
+    [InlineData("global")]
+    [InlineData("root")]
+    [InlineData("command")]
+    public void OptionNamesAndAliasesRejectEmptyDashAndEqualsBoundariesAtEveryScope(string scope)
+    {
+        foreach (var invalidName in new[] { "", "=value", "-value", "--value", "=", "-", "---" })
+        {
+            var nameError = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", OptionSourceForScope(scope, invalidName, [])));
+            Assert.Equal("OPENCLI_OPTION_NAME", nameError.Code);
+        }
+
+        foreach (var invalidAlias in new[] { "", "=value", "-value", "--value", "=", "-", "---" })
+        {
+            var aliasError = Assert.Throws<NormalizationException>(() => Normalizer.Normalize("opencli", OptionSourceForScope(scope, "value", [invalidAlias])));
+            Assert.Equal("OPENCLI_OPTION_NAME", aliasError.Code);
+        }
+
+        var oneCharacterName = Normalizer.Normalize("opencli", OptionSourceForScope(scope, "x", []));
+        var oneCharacterAlias = Normalizer.Normalize("opencli", OptionSourceForScope(scope, "value", ["x"]));
+        Assert.Equal("--x", GetOptionName(oneCharacterName, scope));
+        Assert.Equal(["x"], GetOptionAliases(oneCharacterAlias, scope));
+    }
+
+    [Theory]
+    [InlineData("global")]
+    [InlineData("root")]
+    [InlineData("command")]
+    public void CanonicalBaselineRejectsUnrepresentableOptionAliasesAndNamesAtEveryScope(string scope)
+    {
+        var valid = Normalizer.Normalize("opencli", OptionSourceForScope(scope, "value", ["v"]));
+        var invalidAliases = JsonNode.Parse(Normalizer.Serialize(valid))!.AsObject();
+        CanonicalOptionsForScope(invalidAliases, scope)[0]!["Aliases"] = new JsonArray("x", "y");
+        var aliasesError = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(invalidAliases.ToJsonString()));
+        Assert.Equal("OPENCLI_OPTION_NAME", aliasesError.Code);
+
+        var invalidPrimaryName = JsonNode.Parse(Normalizer.Serialize(valid))!.AsObject();
+        CanonicalOptionsForScope(invalidPrimaryName, scope)[0]!["Name"] = "--=value";
+        var primaryError = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(invalidPrimaryName.ToJsonString()));
+        Assert.Equal("OPENCLI_OPTION_NAME", primaryError.Code);
+
+        var invalidDashPrimaryName = JsonNode.Parse(Normalizer.Serialize(valid))!.AsObject();
+        CanonicalOptionsForScope(invalidDashPrimaryName, scope)[0]!["Name"] = "---value";
+        var dashPrimaryError = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(invalidDashPrimaryName.ToJsonString()));
+        Assert.Equal("OPENCLI_OPTION_NAME", dashPrimaryError.Code);
+
+        var invalidAliasName = JsonNode.Parse(Normalizer.Serialize(valid))!.AsObject();
+        CanonicalOptionsForScope(invalidAliasName, scope)[0]!["Aliases"] = new JsonArray("=value");
+        var aliasError = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(invalidAliasName.ToJsonString()));
+        Assert.Equal("OPENCLI_OPTION_NAME", aliasError.Code);
+
+        var invalidDashAliasName = JsonNode.Parse(Normalizer.Serialize(valid))!.AsObject();
+        CanonicalOptionsForScope(invalidDashAliasName, scope)[0]!["Aliases"] = new JsonArray("-value");
+        var dashAliasError = Assert.Throws<NormalizationException>(() => CanonicalManifestReader.Read(invalidDashAliasName.ToJsonString()));
+        Assert.Equal("OPENCLI_OPTION_NAME", dashAliasError.Code);
+    }
+
     [Fact]
     public void PinnedAlpha14ConformanceCorpusMatchesItsOracle()
     {
@@ -1608,6 +1697,47 @@ public sealed class NormalizationTests
         };
         return document.ToJsonString();
     }
+
+    private static string OptionSourceForScope(string scope, string name, string[] aliases)
+    {
+        var option = new JsonObject
+        {
+            ["name"] = name,
+            ["type"] = "string",
+            ["aliases"] = new JsonArray(aliases.Select(alias => (JsonNode)alias).ToArray())
+        };
+        var document = new JsonObject();
+        if (scope == "global")
+        {
+            document["global"] = new JsonObject { ["flags"] = new JsonArray(option) };
+            document["commands"] = new JsonObject { ["tool"] = new JsonObject() };
+        }
+        else
+        {
+            var key = scope == "root" ? "tool" : "tool run";
+            document["commands"] = new JsonObject { [key] = new JsonObject { ["flags"] = new JsonArray(option) } };
+        }
+
+        return OpenCliDocument(document.ToJsonString());
+    }
+
+    private static string[] GetOptionAliases(CanonicalManifest manifest, string scope) => GetOption(manifest, scope).Aliases;
+
+    private static JsonArray CanonicalOptionsForScope(JsonObject document, string scope) => scope switch
+    {
+        "global" => document["GlobalOptions"]!.AsArray(),
+        "root" => document["Root"]!["Options"]!.AsArray(),
+        _ => document["Root"]!["Subcommands"]!.AsArray()[0]!["Options"]!.AsArray()
+    };
+
+    private static string GetOptionName(CanonicalManifest manifest, string scope) => GetOption(manifest, scope).Name;
+
+    private static CanonicalOption GetOption(CanonicalManifest manifest, string scope) => scope switch
+    {
+        "global" => manifest.GlobalOptions.Single(),
+        "root" => manifest.Root.Options.Single(),
+        _ => manifest.Root.Subcommands.Single().Options.Single()
+    };
 
     private static string HostileCanonicalSeed() => OpenCliDocument("""
         {

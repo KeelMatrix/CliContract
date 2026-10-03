@@ -28,7 +28,7 @@ The shipping command surface is OpenCLI-only: `--input auto|opencli`. The tool p
 - Input is untrusted: size, node, depth, collection, and string limits are enforced.
 - Normalization is offline and never starts a process, loads a described executable, or fetches a URL.
 - Canonical paths are logical command paths such as `root / deploy / --region`.
-- Canonical output is invariant to source ordering and line endings.
+- Canonical output is invariant to source ordering and line endings for representable contracts. Flag aliases may include at most one single-byte alias because OpenCLI alpha.14 chooses the first one as shorthand; command aliases are ordinary command names.
 - Unknown source and canonical manifest versions fail closed.
 - The packed tool must contain all required internal assemblies and pass the isolated consumer smoke test.
 - Do not create, copy, modify, or delete icon bytes; the required icon is resolved by the pack configuration and must remain at its committed path.

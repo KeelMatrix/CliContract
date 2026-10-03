@@ -319,6 +319,19 @@ public sealed class CompatibilityTests
         Assert.DoesNotContain(duplicateFindings, finding => finding.Code == "KMCLI104" && finding.Category == "breaking");
     }
 
+    [Fact]
+    public void OneCharacterCommandAliasesRemainWholeCommandNamesAndIgnoreSourceOrder()
+    {
+        var baseline = Normalize("""{"commands":{"tool run":{"aliases":["x","y"]}}}""");
+        var reordered = Normalize("""{"commands":{"tool run":{"aliases":["y","x"]}}}""");
+        var changed = Normalize("""{"commands":{"tool run":{"aliases":["y"]}}}""");
+
+        Assert.Empty(CompatibilityAnalyzer.Compare(baseline, reordered).Findings);
+        Assert.Contains(
+            CompatibilityAnalyzer.Compare(baseline, changed).Findings,
+            finding => finding.Code == "KMCLI104" && finding.Message.Contains("root / x", StringComparison.Ordinal) && !finding.Message.Contains("-x", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("string", "number", true)]
     [InlineData("string", "integer", true)]

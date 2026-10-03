@@ -695,8 +695,11 @@ internal static class CliApplication
       canonical schema version 2 cannot represent them, those keys fail before canonical path
       parsing with OPENCLI_COMMAND_KEY (exit 3) and a stable whitespace-edge diagnostic.
       Accepted command names include aliases at every command segment; retained aliases preserve old paths.
-      Primary option names are canonicalized as -- plus the source name. Option names and aliases beginning with -
-      fail with OPENCLI_OPTION_NAME because the pinned alpha.14 invocation form would not preserve their identity.
+      Primary option names are canonicalized as -- plus the source name. Empty option names or aliases and names
+      beginning with - or = fail with OPENCLI_OPTION_NAME (exit 3). Alpha.14 assigns the first single-byte flag alias
+      as shorthand by source order, so a flag may have at most one such alias before canonical sorting. Comparisons
+      distinguish its -x shorthand from --long aliases; a multi-byte alias such as é stays long-form.
+      Command aliases are whole command names and have no shorthand role.
       Exact generator and parser source record is in the pinned alpha.14 option-name oracle:
       https://github.com/KeelMatrix/CliContract/blob/main/docs/OPENCLI-ALPHA14-OPTION-NAME-ORACLE.md
       Derived command-invocation expansion is bounded by both count and aggregate characters before paths are allocated.

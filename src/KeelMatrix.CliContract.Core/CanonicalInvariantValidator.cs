@@ -222,12 +222,12 @@ internal static class CanonicalInvariantValidator
         foreach (var option in options)
         {
             if (!SourceContractRules.IsNormalizedOptionName(option.Name) ||
-                option.Aliases.Any(alias => !SourceContractRules.IsRepresentableOptionName(alias)))
+                !SourceContractRules.AreRepresentableOptionAliases(option.Aliases))
             {
-                throw new NormalizationException("OPENCLI_OPTION_NAME", "A canonical option name or alias is not representable by the pinned alpha.14 invocation form.");
+                throw new NormalizationException("OPENCLI_OPTION_NAME", "A canonical option name or alias is not representable by the pinned alpha.14 invocation form, including its shorthand role.");
             }
 
-            if (!names.Add(SourceContractRules.OptionIdentity(option.Name)) || option.Aliases.Any(alias => !names.Add(SourceContractRules.OptionIdentity(alias))))
+            if (SourceContractRules.OptionInvocationNames(option.Name, option.Aliases).Any(name => !names.Add(name)))
             {
                 throw new NormalizationException("OPENCLI_DUPLICATE_PARAMETER", $"The canonical option collection at {commandPath} contains duplicate accepted invocation names.");
             }
@@ -336,7 +336,7 @@ internal static class CanonicalInvariantValidator
     }
 
     private static HashSet<string> OptionNames(IEnumerable<CanonicalOption> options) =>
-        options.SelectMany(option => new[] { option.Name }.Concat(option.Aliases)).Select(SourceContractRules.OptionIdentity).ToHashSet(StringComparer.Ordinal);
+        options.SelectMany(option => SourceContractRules.OptionInvocationNames(option.Name, option.Aliases)).ToHashSet(StringComparer.Ordinal);
 
     private static void ValidateStringCollection(IEnumerable<string> values, string subject, bool requireSorted)
     {
