@@ -403,16 +403,9 @@ internal static class CliApplication
             return;
         }
 
-        try
-        {
-            // The published telemetry contract accepts only shared bounded activation data.
-            // No schema-derived value is passed to the telemetry package.
-            ActivationTelemetry.TrackActivation();
-        }
-        catch
-        {
-            // Telemetry is optional and must never affect comparison behavior.
-        }
+        // The published telemetry client owns its environment opt-out and failure isolation.
+        // This tool decides when a successful comparison is meaningful and suppresses its own CI/development runs.
+        ActivationTelemetry.TrackActivation();
     }
 
     private static bool HasNonEmptyCommandSurface(CanonicalManifest manifest)
@@ -427,8 +420,7 @@ internal static class CliApplication
 
     private static bool IsTelemetrySuppressedForDevelopmentOrCi()
     {
-        return IsTrue(Environment.GetEnvironmentVariable("KEELMATRIX_NO_TELEMETRY")) ||
-            IsTrue(Environment.GetEnvironmentVariable("KEELMATRIX_DEVELOPMENT")) ||
+        return IsTrue(Environment.GetEnvironmentVariable("KEELMATRIX_DEVELOPMENT")) ||
             IsTrue(Environment.GetEnvironmentVariable("CI"));
     }
 

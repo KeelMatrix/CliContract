@@ -147,7 +147,7 @@ public sealed class TelemetryActivationTests
     }
 
     [Fact]
-    public void TelemetryOptOutAndSuppressionRemainEffective()
+    public void ExplicitOptOutAndProductCiDevelopmentSuppressionRemainEffective()
     {
         using var temp = new TestFiles();
         var source = temp.Write("root.json", RootActionJson());
@@ -167,22 +167,6 @@ public sealed class TelemetryActivationTests
         }
 
         Assert.Equal(0, sink.Attempts);
-    }
-
-    [Fact]
-    public void TelemetryFailureDoesNotChangeComparisonResult()
-    {
-        using var temp = new TestFiles();
-        var source = temp.Write("root.json", RootActionJson());
-        var sink = new ActivationSpy { ThrowOnActivation = true };
-
-        using (ActivationTelemetry.UseTestSink(sink))
-        {
-            using var environment = ClearTelemetryEnvironment();
-            Assert.Equal(0, Run("diff", source, source, "--input", "opencli"));
-        }
-
-        Assert.Equal(1, sink.Attempts);
     }
 
     private static int Run(params string[] args) => CliApplication.Run(args);
@@ -218,12 +202,10 @@ public sealed class TelemetryActivationTests
     private sealed class ActivationSpy : IActivationSink
     {
         public int Attempts { get; private set; }
-        public bool ThrowOnActivation { get; init; }
 
         public void TrackActivation()
         {
             Attempts++;
-            if (ThrowOnActivation) throw new InvalidOperationException("synthetic activation failure");
         }
     }
 
