@@ -30,3 +30,13 @@ This file records user-visible changes to KeelMatrix.CliContract.
 - Canonical manifests enforce accepted-invocation uniqueness after both source normalization and manifest parsing; exact numeric domains no longer use a decimal-range boundary.
 - Typed constrained choices and defaults now fail closed when they are not representable by their declared type, and exact numeric domain logic is shared across validation, canonicalization, and compatibility comparison to preserve self-reflexivity.
 - Public error documentation now distinguishes missing source/baseline paths (exit `2`) from present invalid or unreadable source/baseline files (exit `3`), with a shared taxonomy table.
+
+## [0.1.0] - 2026-10-04
+
+### Added
+
+- Provides `snapshot`, `validate`, `check`, and `diff` commands for OpenCLI `1.0.0-alpha.14` JSON and YAML contracts, with deterministic, versioned canonical manifests.
+- Reports incompatible command and option changes across invocation names, aliases, requiredness, arity, and represented type and value domains; supports warning thresholds and explicit suppressions.
+- Emits stable JSON and text diagnostics with documented exit codes for CI use.
+- Bounds parsing and comparison, rejects unsupported or invalid contracts, and never starts described executables or fetches remote references.
+- Makes one bounded best-effort activation request only after a successful comparison of a baseline containing a runnable action; CI and development runs and explicit settings suppress requests, and no schema-derived values are sent.
