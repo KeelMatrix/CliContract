@@ -147,7 +147,7 @@ public sealed class TelemetryActivationTests
     }
 
     [Fact]
-    public void ExplicitOptOutAndProductCiDevelopmentSuppressionRemainEffective()
+    public void ExplicitOptOutRemainsEffectiveAndCustomerCiCanActivate()
     {
         using var temp = new TestFiles();
         var source = temp.Write("root.json", RootActionJson());
@@ -161,12 +161,9 @@ public sealed class TelemetryActivationTests
             Assert.Equal(0, Run("check", source, "--input", "opencli", "--baseline", baseline, "--no-telemetry"));
             EnvironmentScope.Set("CI", "true");
             Assert.Equal(0, Run("diff", source, source, "--input", "opencli"));
-            EnvironmentScope.Set("CI", null);
-            EnvironmentScope.Set("KEELMATRIX_DEVELOPMENT", "true");
-            Assert.Equal(0, Run("diff", source, source, "--input", "opencli"));
         }
 
-        Assert.Equal(0, sink.Attempts);
+        Assert.Equal(1, sink.Attempts);
     }
 
     private static int Run(params string[] args) => CliApplication.Run(args);
@@ -197,7 +194,7 @@ public sealed class TelemetryActivationTests
 
     private static string EmptyYaml() => "opencliVersion: 1.0.0-alpha.14\ninfo:\n  title: Tool\n  binary: tool\n  version: '1'\n";
 
-    private static EnvironmentScope ClearTelemetryEnvironment() => new("CI", "KEELMATRIX_NO_TELEMETRY", "KEELMATRIX_DEVELOPMENT");
+    private static EnvironmentScope ClearTelemetryEnvironment() => new("CI", "KEELMATRIX_NO_TELEMETRY");
 
     private sealed class ActivationSpy : IActivationSink
     {

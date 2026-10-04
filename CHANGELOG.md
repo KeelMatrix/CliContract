@@ -39,4 +39,4 @@ This file records user-visible changes to KeelMatrix.CliContract.
 - Reports incompatible command and option changes across invocation names, aliases, requiredness, arity, and represented type and value domains; supports warning thresholds and explicit suppressions.
 - Emits stable JSON and text diagnostics with documented exit codes for CI use.
 - Bounds parsing and comparison, rejects unsupported or invalid contracts, and never starts described executables or fetches remote references.
-- Makes one bounded best-effort activation request only after a successful comparison of a baseline containing a runnable action; CI and development runs and explicit settings suppress requests, and no schema-derived values are sent.
+- Makes one bounded best-effort activation request only after a successful comparison of a baseline containing a runnable action; the shared client owns process/repository opt-outs, KeelMatrix-owned CI opts out, customer CI may count, and no schema-derived values are sent.

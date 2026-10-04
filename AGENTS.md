@@ -11,6 +11,8 @@
 
 ## Commands
 
+For direct KeelMatrix-owned tool runs, set the shared process opt-out `KEELMATRIX_NO_TELEMETRY=1`. The checked-in CI workflows and `scripts/local-gate.ps1` already set it.
+
 ```text
 dotnet restore KeelMatrix.CliContract.sln
 dotnet test tests/KeelMatrix.CliContract.Tests/KeelMatrix.CliContract.Tests.csproj -c Release --no-restore

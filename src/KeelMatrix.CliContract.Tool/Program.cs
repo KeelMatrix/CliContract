@@ -398,13 +398,12 @@ internal static class CliApplication
 
     private static void TrackSuccessfulComparison(Invocation invocation, CanonicalManifest baseline)
     {
-        if (invocation.NoTelemetry || !HasNonEmptyCommandSurface(baseline) || IsTelemetrySuppressedForDevelopmentOrCi())
+        if (invocation.NoTelemetry || !HasNonEmptyCommandSurface(baseline))
         {
             return;
         }
 
-        // The published telemetry client owns its environment opt-out and failure isolation.
-        // This tool decides when a successful comparison is meaningful and suppresses its own CI/development runs.
+        // This tool owns only product eligibility; the shared client owns opt-out and delivery behavior.
         ActivationTelemetry.TrackActivation();
     }
 
@@ -417,14 +416,6 @@ internal static class CliApplication
     {
         return CanonicalCommandContract.ContainsRunnableAction(command);
     }
-
-    private static bool IsTelemetrySuppressedForDevelopmentOrCi()
-    {
-        return IsTrue(Environment.GetEnvironmentVariable("KEELMATRIX_DEVELOPMENT")) ||
-            IsTrue(Environment.GetEnvironmentVariable("CI"));
-    }
-
-    private static bool IsTrue(string? value) => value is "1" or "true" or "TRUE" or "True";
 
     private static void WriteFindings(OutputFormat format, IReadOnlyList<CompatibilityFinding> findings, IReadOnlyList<ToolError> errors, int commandCount)
     {
@@ -670,7 +661,8 @@ internal static class CliApplication
       --format text|json         Output format (default: text)
       --fail-on breaking|warning Failure threshold (default: breaking)
       --ignore <file>            Explicit JSON suppression file
-      --no-telemetry             Disable optional telemetry; CI/development suppress automatically
+      --no-telemetry             Disable optional telemetry for this invocation
+      The shared KEELMATRIX_NO_TELEMETRY=1 process opt-out also applies.
       Telemetry activates only after comparison with a runnable action at the root or below a group;
       aliases, parameters, help metadata, and group-only trees do not qualify.
 
