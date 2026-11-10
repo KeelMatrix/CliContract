@@ -28,6 +28,15 @@ vulnerability, package-inspection, and packed-tool smoke checks:
 pwsh -NoProfile -File ./scripts/local-gate.ps1
 ```
 
+`keelmatrix.website.json` records the package's website classification. Keep its schema version `1` entry
+and the evaluated `PackageTags` sentinels aligned: `KeelMatrix.CliContract` is `public-product` / `primary`.
+The gate checks every packable project, source repository URLs, and packed nuspec classification. Run the
+focused check and its negative controls with:
+
+```powershell
+pwsh -NoProfile -File ./scripts/verify-website-metadata.ps1 -SelfTest
+```
+
 Package identity depends on the repository's pinned SDK and Git metadata. Run packaging from the canonical repository
 root; the pack target fails closed when invoked from another working directory. To pack and inspect the tool separately:
 

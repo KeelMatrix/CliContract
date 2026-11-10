@@ -14,6 +14,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Nested PowerShell launch guard self-test faile
 if ($LASTEXITCODE -ne 0) { throw 'Nested PowerShell launch guard failed.' }
 Set-Location $root
 Invoke-NestedPwsh -NoProfile -File ./scripts/verify-option-name-oracle.ps1
+if ($LASTEXITCODE -ne 0) { throw 'Pinned option-name oracle failed.' }
+Invoke-NestedPwsh -NoProfile -File ./scripts/verify-website-metadata.ps1 -SelfTest
+if ($LASTEXITCODE -ne 0) { throw 'Website metadata validation failed.' }
 if ([string]::IsNullOrWhiteSpace($ExpectedCommit)) {
     $ExpectedCommit = (& git rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0) { throw 'Could not determine the frozen candidate SHA.' }
@@ -28,8 +31,6 @@ $started = Get-Date
 function Assert-NativeSuccess([string] $step) {
     if ($LASTEXITCODE -ne 0) { throw "$step failed with exit code $LASTEXITCODE." }
 }
-Assert-NativeSuccess 'Pinned option-name oracle'
-
 dotnet restore KeelMatrix.CliContract.sln --configfile NuGet.config --nologo
 Assert-NativeSuccess 'Restore'
 dotnet format KeelMatrix.CliContract.sln --verify-no-changes --no-restore

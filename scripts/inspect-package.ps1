@@ -11,6 +11,8 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../build/Invoke-NestedPwsh.ps1')
 $root = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $packagePath = (Resolve-Path -LiteralPath $PackagePath).Path
+Invoke-NestedPwsh -NoProfile -File (Join-Path $PSScriptRoot 'verify-website-metadata.ps1') -RepositoryRoot $root -PackagePath $packagePath
+if ($LASTEXITCODE -ne 0) { throw 'Packed website metadata validation failed.' }
 $ExpectedCommit = if ([string]::IsNullOrWhiteSpace($ExpectedCommit)) { (& git -C $root rev-parse HEAD).Trim() } else { $ExpectedCommit.Trim().ToLowerInvariant() }
 if ($LASTEXITCODE -ne 0 -and [string]::IsNullOrWhiteSpace($ExpectedCommit)) { throw 'Could not determine the expected candidate commit.' }
 if ($ExpectedCommit -notmatch '^[0-9a-f]{40}$') { throw "Expected commit must be a 40-character hexadecimal SHA: $ExpectedCommit" }
@@ -628,7 +630,7 @@ try {
     if ($metadata.version -ne '0.1.0') { throw "Unexpected package version: $($metadata.version)" }
     if ($metadata.authors -ne 'KeelMatrix') { throw 'Package authors metadata is incorrect.' }
     if ($metadata.description -ne 'Detects breaking command-line interface changes from deterministic OpenCLI contracts.') { throw 'Package description metadata is incorrect.' }
-    if ($metadata.tags -ne 'dotnet-tool cli command-line compatibility contract opencli schema breaking-change ci semver') { throw 'Package tags metadata is incorrect.' }
+    if ($metadata.tags -ne 'dotnet-tool cli command-line compatibility contract opencli schema breaking-change ci semver keelmatrix-public-product keelmatrix-primary') { throw 'Package tags metadata is incorrect.' }
     if ($metadata.license.GetAttribute('type') -ne 'expression' -or $metadata.license.InnerText -ne 'MIT') { throw 'Package license metadata is not MIT.' }
     if ($metadata.readme -ne 'README.md') { throw 'Package README metadata is not README.md.' }
     $iconPath = Join-Path $root 'icon.png'

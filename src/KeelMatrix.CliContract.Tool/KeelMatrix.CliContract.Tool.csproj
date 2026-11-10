@@ -10,7 +10,7 @@
     <Version>0.1.0</Version>
     <Authors>KeelMatrix</Authors>
     <Description>Detects breaking command-line interface changes from deterministic OpenCLI contracts.</Description>
-    <PackageTags>dotnet-tool;cli;command-line;compatibility;contract;opencli;schema;breaking-change;ci;semver</PackageTags>
+    <PackageTags>dotnet-tool;cli;command-line;compatibility;contract;opencli;schema;breaking-change;ci;semver;keelmatrix-public-product;keelmatrix-primary</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon Condition="Exists('..\..\icon.png')">icon.png</PackageIcon>
