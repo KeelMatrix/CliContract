@@ -34,6 +34,7 @@ function Get-ForbiddenPatterns {
     $patterns.Add([pscustomobject]@{ Name = 'internal-error'; Pattern = '(?i)(?<![\p{L}\p{N}_])' + (New-WrappedLiteral -Value 'INTERNAL') + '[\s\p{Z}\p{Pd}_]*' + (New-WrappedLiteral -Value 'ERROR') + '(?![\p{L}\p{N}_])' })
     $patterns.Add([pscustomobject]@{ Name = 'internal analysis error'; Pattern = '(?i)(?<![\p{L}\p{N}_])' + (New-WrappedLiteral -Value 'INTERNAL') + '[\s\p{Z}]+analysis[\s\p{Z}]+' + (New-WrappedLiteral -Value 'error') + '(?![\p{L}\p{N}_])' })
     $patterns.Add([pscustomobject]@{ Name = 'issue identifier'; Pattern = '(?i)(?<![\p{L}\p{N}_])K' + (New-WrappedLiteral -Value 'E') + (New-WrappedLiteral -Value 'E') + '[\s\p{Z}\p{Pd}_]*-?[\s\p{Z}]*\d(?:[\s\p{Z}]*\d)*(?![\p{L}\p{N}_])' })
+    $patterns.Add([pscustomobject]@{ Name = 'runtime identifier'; Pattern = '(?i)(?<![\p{L}\p{N}_])' + (New-WrappedLiteral -Value 'Paperclip_') })
     return $patterns.ToArray()
 }
 
@@ -539,6 +540,7 @@ if ($SelfTest) {
         $utf32be = [Text.UTF32Encoding]::new($true, $false, $true)
         $cleanText = 'safe text α世界😀'
         $cleanDecoderCases = @(
+            @{ Name = 'standard-temp'; Bytes = $utf8.GetBytes('[IO.Path]::GetTempPath()') },
             @{ Name = 'utf8-no-bom'; Bytes = $utf8.GetBytes($cleanText) },
             @{ Name = 'utf8-bom'; Bytes = [byte[]]($utf8Bom.GetPreamble() + $utf8Bom.GetBytes($cleanText)) },
             @{ Name = 'utf16le-no-bom'; Bytes = $utf16le.GetBytes($cleanText) },
@@ -571,6 +573,11 @@ if ($SelfTest) {
             }
         }
         $decoderCases = @(
+            @{ Name = 'runtime-env-upper'; Bytes = $utf8.GetBytes('$env:PAPERCLIP_RUN_SCRATCH_DIR') },
+            @{ Name = 'runtime-bare-upper'; Bytes = $utf8.GetBytes('PAPERCLIP_RUN_SCRATCH_DIR') },
+            @{ Name = 'runtime-env-lower'; Bytes = $utf8.GetBytes('$env:paperclip_tmpdir') },
+            @{ Name = 'runtime-bare-mixed'; Bytes = $utf8.GetBytes('PaperClip_TmpDir') },
+            @{ Name = 'runtime-sibling'; Bytes = $utf8.GetBytes('PAPERCLIP_WORKSPACE_CWD') },
             @{ Name = 'utf8-no-bom'; Bytes = $utf8.GetBytes('Paperclip') },
             @{ Name = 'utf8-bom'; Bytes = [byte[]]($utf8Bom.GetPreamble() + $utf8Bom.GetBytes('Paperclip')) },
             @{ Name = 'utf16le-no-bom'; Bytes = $utf16le.GetBytes('Paperclip') },
@@ -600,6 +607,9 @@ if ($SelfTest) {
                 $caseOutput = @(Invoke-NestedPwsh -NoProfile -File $PSCommandPath -PackagePath $casePackage -SymbolPackagePath $caseSymbols -RepositoryRoot $root 2>&1)
                 $caseExit = $LASTEXITCODE
                 if ($caseExit -eq 0) { throw "Package strict-decoder self-test accepted $archiveCase fixture $($case.Name)." }
+                if ($case.Name -like 'runtime-*' -and ($caseOutput -join "`n") -notmatch 'Forbidden user-facing wording found in package entry') {
+                    throw "Package wording self-test did not detect the identifier in $archiveCase fixture $($case.Name)."
+                }
                 Write-Output "PACKAGE_TEXT_FIXTURE=$archiveCase-$($case.Name) EXPECTED=REJECT exit=$caseExit"
             }
         }

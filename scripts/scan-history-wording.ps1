@@ -231,6 +231,7 @@ function Get-ForbiddenPatterns {
     foreach ($label in @('Claude', 'ChatGPT', 'OpenAI', 'Copilot', 'Cursor', 'Cline', 'DeepSeek', 'Gemini', 'GPT')) {
         $patterns.Add([pscustomobject]@{ Name = 'prohibited label: ' + $label; Pattern = '(?i)' + (New-WrappedTokenPattern -Value $label) })
     }
+    $patterns.Add([pscustomobject]@{ Name = 'runtime identifier'; Pattern = '(?i)(?<![\p{L}\p{N}_])' + (New-WrappedLiteral -Value 'Paperclip_') })
     return $patterns.ToArray()
 }
 
@@ -335,6 +336,9 @@ function Assert-HistoryChildReject {
     if ($RequireCompleteAccounting -and ($Result.Text -notmatch 'REACHABLE_COMMIT_COUNT=1' -or $Result.Text -notmatch 'REACHABLE_IDENTITY_COUNT=1')) {
         throw "History wording self-test was vacuous for fixture $Name."
     }
+    if ($Name -like 'runtime-*' -and $Result.Text -notmatch 'HISTORY_WORDING_HIT=.*pattern=runtime identifier') {
+        throw "History wording self-test did not detect the identifier in fixture $Name."
+    }
     Write-Output "HISTORY_WORDING_FIXTURE=$Name EXPECTED=REJECT exit=$($Result.ExitCode) accounting=$($RequireCompleteAccounting)"
 }
 
@@ -344,7 +348,7 @@ if ($SelfTest) {
         New-SelfTestRepository -Path $selfTestRoot
         $env:GIT_COMMITTER_NAME = 'GitHub'
         $env:GIT_COMMITTER_EMAIL = 'noreply@github.com'
-        & git -C $selfTestRoot commit --quiet -m 'Initial history'
+        & git -C $selfTestRoot commit --quiet -m 'Use [IO.Path]::GetTempPath()'
         Remove-Item Env:GIT_COMMITTER_NAME
         Remove-Item Env:GIT_COMMITTER_EMAIL
 
@@ -371,6 +375,11 @@ if ($SelfTest) {
         }
 
         $messageCases = @(
+            @{ Name = 'runtime-env-upper'; Message = '$env:PAPERCLIP_RUN_SCRATCH_DIR' },
+            @{ Name = 'runtime-bare-upper'; Message = 'PAPERCLIP_RUN_SCRATCH_DIR' },
+            @{ Name = 'runtime-env-lower'; Message = '$env:paperclip_tmpdir' },
+            @{ Name = 'runtime-bare-mixed'; Message = 'PaperClip_TmpDir' },
+            @{ Name = 'runtime-sibling'; Message = 'PAPERCLIP_WORKSPACE_CWD' },
             @{ Name = 'record-separator'; Message = "clean$([char] 0x1e)Paperclip hidden" },
             @{ Name = 'field-separator'; Message = "clean$([char] 0x1f)Paperclip hidden" },
             @{ Name = 'repeated-separators'; Message = "clean$([char] 0x1e)$([char] 0x1e)Paperclip hidden" },

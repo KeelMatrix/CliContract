@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$scratchRoot = [IO.Path]::GetFullPath($(if ($env:PAPERCLIP_RUN_SCRATCH_DIR) { $env:PAPERCLIP_RUN_SCRATCH_DIR } else { [IO.Path]::GetTempPath() }))
+$scratchRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $temp = Join-Path $scratchRoot ('clicontract-website-' + [Guid]::NewGuid().ToString('N'))
 $validJson = '{"schemaVersion":1,"packages":{"KeelMatrix.CliContract":{"visibility":"public-product","role":"primary"}}}'
 
