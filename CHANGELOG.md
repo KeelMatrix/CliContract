@@ -31,7 +31,7 @@ This file records user-visible changes to KeelMatrix.CliContract.
 - Typed constrained choices and defaults now fail closed when they are not representable by their declared type, and exact numeric domain logic is shared across validation, canonicalization, and compatibility comparison to preserve self-reflexivity.
 - Public error documentation now distinguishes missing source/baseline paths (exit `2`) from present invalid or unreadable source/baseline files (exit `3`), with a shared taxonomy table.
 
-## [0.1.0] - 2026-10-04
+## [0.1.0] - 2026-11-10
 
 ### Added
 
