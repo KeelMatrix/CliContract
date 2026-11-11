@@ -220,9 +220,9 @@ function dotnet {
     foreach ($name in @('contract-regressions', 'verify-determinism', 'check-no-execution', 'test-no-execution', 'scan-user-facing-surface', 'verify-error-taxonomy', 'validate-sensitive-paths', 'scan-history-wording', 'verify-release-tag', 'verify-release-contract', 'verify-workflow-safety')) {
         Write-Fixture "scripts/$name.ps1" ''
     }
-    Write-Fixture 'scripts/test-release-orchestration.ps1' "throw 'ISOLATED_RELEASE_REGRESSION_FAILURE'"
+    Write-Fixture 'scripts/test-release-callers.ps1' "throw 'ISOLATED_RELEASE_REGRESSION_FAILURE'"
     Invoke-Case 'ci-release-regression-failure' ($setup + "`n" + $nativeSetup + "`n" + $ciRun) 'unset' $false $calls 'Release caller regression tests failed'
-    Write-Output "RELEASE_ORCHESTRATION_TESTS=PASS cases=$caseCount"
+    Write-Output "RELEASE_CALLER_TESTS=PASS cases=$caseCount"
 }
 finally {
     $resolved = [IO.Path]::GetFullPath($temp)

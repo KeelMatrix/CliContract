@@ -63,7 +63,7 @@ Invoke-NestedPwsh -NoProfile -File ./scripts/verify-workflow-safety.ps1 -SelfTes
 Assert-NativeSuccess 'Workflow safety self-test'
 Invoke-NestedPwsh -NoProfile -File ./scripts/verify-workflow-safety.ps1
 Assert-NativeSuccess 'Workflow safety validation'
-Invoke-NestedPwsh -NoProfile -File ./scripts/test-release-orchestration.ps1
+Invoke-NestedPwsh -NoProfile -File ./scripts/test-release-callers.ps1
 Assert-NativeSuccess 'Release caller regression tests'
 if ($RequireFinalizedChangelog) {
     Invoke-NestedPwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -Version $Version -Tag "v$Version"
