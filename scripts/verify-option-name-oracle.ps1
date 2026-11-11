@@ -111,12 +111,12 @@ if ($flagNameAssignments -ne 2) {
     throw "Expected exactly two literal generator FlagName assignments, found $flagNameAssignments."
 }
 
+# Reference documentation and help retain the detailed oracle link; release summaries need not repeat it.
 $linkedSurfaces = @(
     'README.md',
     'COMPATIBILITY-RULES.md',
     'MANIFEST.md',
     'SECURITY.md',
-    'CHANGELOG.md',
     'docs/OPENCLI-ALPHA14-CONFORMANCE.md',
     'docs/ERROR-TAXONOMY.md',
     'src/KeelMatrix.CliContract.Tool/README.md',
