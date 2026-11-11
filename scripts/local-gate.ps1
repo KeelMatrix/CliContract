@@ -8,9 +8,9 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../build/Invoke-NestedPwsh.ps1')
 $root = Split-Path -Parent $PSScriptRoot
 $launchGuard = Join-Path $root 'build/Test-NestedPwshLaunch.ps1'
-& $launchGuard -SelfTest
+Invoke-NestedPwsh -NoProfile -File $launchGuard -SelfTest
 if ($LASTEXITCODE -ne 0) { throw 'Nested PowerShell launch guard self-test failed.' }
-& $launchGuard
+Invoke-NestedPwsh -NoProfile -File $launchGuard
 if ($LASTEXITCODE -ne 0) { throw 'Nested PowerShell launch guard failed.' }
 Set-Location $root
 Invoke-NestedPwsh -NoProfile -File ./scripts/verify-option-name-oracle.ps1
@@ -63,6 +63,8 @@ Invoke-NestedPwsh -NoProfile -File ./scripts/verify-workflow-safety.ps1 -SelfTes
 Assert-NativeSuccess 'Workflow safety self-test'
 Invoke-NestedPwsh -NoProfile -File ./scripts/verify-workflow-safety.ps1
 Assert-NativeSuccess 'Workflow safety validation'
+Invoke-NestedPwsh -NoProfile -File ./scripts/test-release-orchestration.ps1
+Assert-NativeSuccess 'Release caller regression tests'
 if ($RequireFinalizedChangelog) {
     Invoke-NestedPwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -Version $Version -Tag "v$Version"
     Assert-NativeSuccess 'Finalized release contract'

@@ -53,6 +53,15 @@ function Assert-ReleaseWorkflow {
     if ($text -match '(?im)^\s*(?:if:\s*always\(\)|continue-on-error:\s*true|.*\|\|\s*true)') { throw 'Release workflow contains a fail-open or failure-ordering bypass.' }
     if ($text -notmatch '(?m)^\s+id-token:\s+write\s*$') { throw 'Publishing job must request id-token: write.' }
     if ($text -notmatch '(?m)^\s+needs:\s+prepare\s*$') { throw 'Publishing job must depend on the validated prepare job.' }
+    $prepare = [regex]::Match($text, '(?ms)^  prepare:\r?\n(?<job>.*?)(?=^  publish:)').Groups['job'].Value
+    $publish = [regex]::Match($text, '(?ms)^  publish:\r?\n(?<job>.*)\z').Groups['job'].Value
+    if ($prepare -notmatch '(?m)^    outputs:\r?\n      version: \$\{\{ steps\.release-tag\.outputs\.version \}\}\s*$' -or
+        $prepare -notmatch '(?m)^        id: release-tag\s*$' -or
+        $prepare -notmatch '(?m)^          RELEASE_VERSION: \$\{\{ steps\.release-tag\.outputs\.version \}\}\s*$' -or
+        $publish -notmatch '(?m)^      RELEASE_VERSION: \$\{\{ needs\.prepare\.outputs\.version \}\}\s*$') {
+        throw 'Release version must pass from the tag step through preparation and the job output to publication.'
+    }
+    if ($prepare -notmatch '(?m)^          if-no-files-found: error\s*$') { throw 'Missing release artifacts must fail the upload step.' }
     $publishIndex = $text.IndexOf('name: Publish validated package pair', [StringComparison]::Ordinal)
     $releaseIndex = $text.IndexOf('name: Create GitHub Release', [StringComparison]::Ordinal)
     $publishAfterRelease = if ($releaseIndex -ge 0) { $text.IndexOf('name: Publish validated package pair', $releaseIndex, [StringComparison]::Ordinal) } else { -1 }
@@ -96,6 +105,11 @@ if ($SelfTest) {
             @{ Name = 'long-lived-key'; Old = 'RELEASE_NUGET_CREDENTIAL: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}'; New = 'RELEASE_NUGET_CREDENTIAL: ${{ secrets.NUGET_API_KEY }}' },
             @{ Name = 'missing-login'; Old = 'uses: NuGet/login@v1'; New = 'uses: actions/checkout@v4.2.2' },
             @{ Name = 'skipped-dependency'; Old = 'needs: prepare'; New = 'needs: other-job' },
+            @{ Name = 'missing-version-output'; Old = 'version: ${{ steps.release-tag.outputs.version }}'; New = 'version: ' },
+            @{ Name = 'wrong-output-step'; Old = 'id: release-tag'; New = 'id: other-step' },
+            @{ Name = 'missing-prepare-version'; Old = 'RELEASE_VERSION: ${{ steps.release-tag.outputs.version }}'; New = 'RELEASE_VERSION: ' },
+            @{ Name = 'wrong-publish-version'; Old = 'RELEASE_VERSION: ${{ needs.prepare.outputs.version }}'; New = 'RELEASE_VERSION: ${{ needs.prepare.outputs.other }}' },
+            @{ Name = 'missing-artifact-upload'; Old = 'if-no-files-found: error'; New = 'if-no-files-found: warn' },
             @{ Name = 'release-before-publish'; Old = 'name: Create GitHub Release'; New = "name: Create GitHub Release`n      - name: Publish validated package pair" }
         )) {
             $casePath = Join-Path $selfTestRoot ".github/workflows/$($case.Name).yml"

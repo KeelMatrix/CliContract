@@ -1,6 +1,7 @@
 param(
     [string] $Tag,
     [string] $OutputEnvironmentFile,
+    [ValidateNotNullOrEmpty()] [string] $GitHubOutputFile,
     [switch] $SelfTest
 )
 
@@ -28,6 +29,10 @@ if ($SelfTest) {
 
 if ([string]::IsNullOrWhiteSpace($Tag)) { throw 'Tag is required unless -SelfTest is used.' }
 $version = Get-ReleaseVersion $Tag
+if ($PSBoundParameters.ContainsKey('GitHubOutputFile')) {
+    if ([string]::IsNullOrWhiteSpace($GitHubOutputFile)) { throw 'GitHub output file must be nonempty.' }
+    "version=$version" | Out-File -LiteralPath $GitHubOutputFile -Encoding utf8 -Append
+}
 if (-not [string]::IsNullOrWhiteSpace($OutputEnvironmentFile)) {
     "RELEASE_VERSION=$version" | Out-File -LiteralPath $OutputEnvironmentFile -Encoding utf8 -Append
 }
