@@ -16,14 +16,15 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
+using System.Threading;
 
 // A local-only NuGet endpoint. HttpListener decodes chunked request bodies.
 public sealed class LoopbackNuGetFeed : IDisposable
 {
     public sealed record Request(string Method, string Path, byte[] Body, string ContentType, string ApiKey);
     private readonly HttpListener listener = new();
-    private readonly Task worker;
+    private readonly Thread worker;
+    private Exception workerError;
     public readonly ConcurrentQueue<Request> Requests = new();
     public string Source { get; }
 
@@ -37,52 +38,57 @@ public sealed class LoopbackNuGetFeed : IDisposable
         Source = origin + "/v3/index.json";
         listener.Prefixes.Add(origin + "/");
         listener.Start();
-        worker = Task.Run(async () =>
+        worker = new Thread(() =>
         {
-            while (listener.IsListening)
+            try
             {
-                HttpListenerContext context;
-                try { context = await listener.GetContextAsync(); }
-                catch (HttpListenerException) { break; }
-                catch (ObjectDisposedException) { break; }
-                var request = context.Request;
-                using var body = new MemoryStream();
-                await request.InputStream.CopyToAsync(body);
-                var path = request.Url.AbsolutePath.TrimEnd('/');
-                Requests.Enqueue(new Request(request.HttpMethod, path, body.ToArray(),
-                    request.ContentType ?? "", request.Headers["X-NuGet-ApiKey"] ?? ""));
-                var response = context.Response;
-                byte[] content = Array.Empty<byte>();
-                if (request.HttpMethod == "GET" && path == "/v3/index.json")
+                while (listener.IsListening)
                 {
-                    response.StatusCode = indexStatus;
-                    var entries = new System.Collections.Generic.List<System.Collections.Generic.Dictionary<string, string>>();
-                    if (resources != "missing-main")
-                        entries.Add(new() { ["@id"] = origin + "/package", ["@type"] = "PackagePublish/2.0.0" });
-                    if (resources != "missing-symbol")
-                        entries.Add(new() { ["@id"] = origin + "/symbols", ["@type"] = resources == "wrong-symbol" ? "SymbolPackagePublish/99.0.0" : "SymbolPackagePublish/4.9.0" });
-                    content = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { version = "3.0.0", resources = entries }));
-                    response.ContentType = "application/json";
+                    HttpListenerContext context;
+                    try { context = listener.GetContext(); }
+                    catch (HttpListenerException) { break; }
+                    catch (ObjectDisposedException) { break; }
+                    var request = context.Request;
+                    using var body = new MemoryStream();
+                    request.InputStream.CopyTo(body);
+                    var path = request.Url.AbsolutePath.TrimEnd('/');
+                    Requests.Enqueue(new Request(request.HttpMethod, path, body.ToArray(),
+                        request.ContentType ?? "", request.Headers["X-NuGet-ApiKey"] ?? ""));
+                    var response = context.Response;
+                    byte[] content = Array.Empty<byte>();
+                    if (request.HttpMethod == "GET" && path == "/v3/index.json")
+                    {
+                        response.StatusCode = indexStatus;
+                        var entries = new System.Collections.Generic.List<System.Collections.Generic.Dictionary<string, string>>();
+                        if (resources != "missing-main")
+                            entries.Add(new() { ["@id"] = origin + "/package", ["@type"] = "PackagePublish/2.0.0" });
+                        if (resources != "missing-symbol")
+                            entries.Add(new() { ["@id"] = origin + "/symbols", ["@type"] = resources == "wrong-symbol" ? "SymbolPackagePublish/99.0.0" : "SymbolPackagePublish/4.9.0" });
+                        content = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { version = "3.0.0", resources = entries }));
+                        response.ContentType = "application/json";
+                    }
+                    else if (request.HttpMethod == "PUT" && (path == "/package" || path == "/symbols"))
+                    {
+                        var status = path == "/package" ? mainStatus : symbolStatus;
+                        if (status == -1) { response.Abort(); continue; }
+                        response.StatusCode = status;
+                    }
+                    else { response.StatusCode = 404; }
+                    response.ContentLength64 = content.Length;
+                    response.OutputStream.Write(content, 0, content.Length);
+                    response.Close();
                 }
-                else if (request.HttpMethod == "PUT" && (path == "/package" || path == "/symbols"))
-                {
-                    var status = path == "/package" ? mainStatus : symbolStatus;
-                    if (status == -1) { response.Abort(); continue; }
-                    response.StatusCode = status;
-                }
-                else { response.StatusCode = 404; }
-                response.ContentLength64 = content.Length;
-                await response.OutputStream.WriteAsync(content);
-                response.Close();
             }
-        });
+            catch (Exception error) { workerError = error; }
+        }) { IsBackground = true };
+        worker.Start();
     }
 
     public void Dispose()
     {
         listener.Close();
-        if (!worker.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException("Local NuGet fixture did not stop.");
-        worker.GetAwaiter().GetResult();
+        if (!worker.Join(TimeSpan.FromSeconds(5))) throw new TimeoutException("Local NuGet fixture did not stop.");
+        if (workerError != null) throw new InvalidOperationException("Local NuGet fixture failed.", workerError);
     }
 }
 

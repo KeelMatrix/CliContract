@@ -29,7 +29,7 @@ function Push-ReleaseArtifact([string] $Path, [string] $Kind) {
     if ($code -ne 0) { throw "NuGet $Kind publication failed with exit code $code." }
 
     # With the pinned SDK, the English receipt follows a successful PUT.
-    # Require the documented acceptance response, too: an empty/no-op command
+    # Require the documented upload response, too: an empty/no-op command
     # or an unrelated 2xx response must not become a release success claim.
     $text = $output -join "`n"
     $put = [regex]::Match($text, '(?m)^\s+PUT (?<uri>\S+)\s*$')

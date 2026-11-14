@@ -32,10 +32,10 @@ The release upload contract is implemented in `scripts/publish-release.ps1`. Bot
 the [NuGet v3 service index](https://learn.microsoft.com/en-us/nuget/create-packages/symbol-packages-snupkg#publishing-a-symbol-package)
 so the client discovers the package and symbol publishing resources. The main push disables automatic symbols;
 the separate symbol push must also succeed. With the SDK selected by `global.json`, each push must return zero,
-report a PUT and its matching acceptance response (201 for symbols; 201 or 202 for the main package), and emit
+report a PUT and its matching upload response (201 for symbols; 201 or 202 for the main package), and emit
 the English upload receipt. Missing receipts, unsupported sources and provider errors stop publication before
 the workflow can create a GitHub Release. A client output change fails closed and requires investigation.
-Upload acceptance is separate from NuGet validation, indexing and public availability. After a partial upload
+A successful upload is separate from NuGet validation, indexing and public availability. After a partial upload
 or an uncertain result, reconcile provider state before any further attempt; do not rebuild published artifacts
 as replacement recovery bytes or automatically replay the release.
 
