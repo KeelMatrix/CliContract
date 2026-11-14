@@ -4,7 +4,7 @@ This file records user-visible changes to KeelMatrix.CliContract.
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-11-11
+## [0.1.0] - 2026-11-14
 
 ### Added
 
