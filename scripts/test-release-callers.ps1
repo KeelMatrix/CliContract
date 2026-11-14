@@ -40,7 +40,13 @@ $ErrorActionPreference = 'Stop'
 . ./build/Invoke-NestedPwsh.ps1
 function dotnet {
     [IO.File]::AppendAllText((Join-Path $PWD 'calls.txt'), "push:$([IO.Path]::GetExtension($args[2]))`n")
+    if ($args -cnotcontains '--force-english-output' -or $args -cnotcontains 'https://api.nuget.org/v3/index.json') { throw 'Missing explicit v3 source or invariant receipts.' }
     $global:LASTEXITCODE = if ($env:FAIL_PUSH -eq [IO.Path]::GetExtension($args[2])) { 23 } else { 0 }
+    if ($env:NO_RECEIPT -ne [IO.Path]::GetExtension($args[2])) {
+        '  PUT https://local.invalid/upload/'
+        '  Created https://local.invalid/upload/ 1ms'
+        'Your package was pushed.'
+    }
 }
 '@ + "`n$initial`n$Body`n" + @'
 Write-Output 'ISOLATED_CASE_COMPLETE'
@@ -54,7 +60,8 @@ if (Test-Path -LiteralPath variable:\LASTEXITCODE) { exit $LASTEXITCODE }
     }
     finally { Pop-Location }
     $calls = [IO.File]::ReadAllText($logPath).Replace("`r", '').TrimEnd()
-    if (($Success -and ($code -ne 0 -or $output -cnotcontains 'ISOLATED_CASE_COMPLETE')) -or (-not $Success -and $code -eq 0) -or $calls -cne $ExpectedLog -or
+    if (($Success -and ($code -ne 0 -or $output -cnotcontains 'ISOLATED_CASE_COMPLETE')) -or
+        (-not $Success -and ($code -eq 0 -or ($output -join "`n") -match 'RELEASE_PUBLICATION=PASS|ISOLATED_CASE_COMPLETE')) -or $calls -cne $ExpectedLog -or
         ($ExpectedError -and ($output -join "`n") -notlike "*$ExpectedError*")) {
         throw "Release case $Name failed: exit=$code calls=[$calls] output=$($output -join "`n")"
     }
@@ -77,6 +84,7 @@ $env:RELEASE_VERSION = '0.1.0'
 $env:RELEASE_COMMIT = '0123456789012345678901234567890123456789'
 $env:RELEASE_NUGET_CREDENTIAL = 'isolated-test-value'
 $env:FAIL_PUSH = ''
+$env:NO_RECEIPT = ''
 $env:FAIL_STAGE = ''
 $env:FAIL_MODE = ''
 '@
@@ -157,6 +165,8 @@ if ($stage -eq 'local-gate') {
         Invoke-Case "missing-credential-$state" ($setup + "`n" + '$env:RELEASE_NUGET_CREDENTIAL = ''''' + "`n" + $publishRun) $state $false "verify-release-contract`nverify-release-artifacts" 'OIDC login output'
         Invoke-Case "package-push-failure-$state" ($setup + "`n" + '$env:FAIL_PUSH = ''.nupkg''' + "`n" + $publishRun) $state $false "verify-release-contract`nverify-release-artifacts`npush:.nupkg" 'NuGet package publication failed'
         Invoke-Case "symbol-push-failure-$state" ($setup + "`n" + '$env:FAIL_PUSH = ''.snupkg''' + "`n" + $publishRun) $state $false "verify-release-contract`nverify-release-artifacts`npush:.nupkg`npush:.snupkg" 'NuGet symbol publication failed'
+        Invoke-Case "package-push-no-op-$state" ($setup + "`n" + '$env:NO_RECEIPT = ''.nupkg''' + "`n" + $publishRun) $state $false "verify-release-contract`nverify-release-artifacts`npush:.nupkg" 'no accepted upload receipt'
+        Invoke-Case "symbol-push-no-op-$state" ($setup + "`n" + '$env:NO_RECEIPT = ''.snupkg''' + "`n" + $publishRun) $state $false "verify-release-contract`nverify-release-artifacts`npush:.nupkg`npush:.snupkg" 'no accepted upload receipt'
     }
 
     Write-Fixture 'scripts/verify-release-tag.ps1' @'
@@ -222,6 +232,9 @@ function dotnet {
     }
     Write-Fixture 'scripts/test-release-callers.ps1' "throw 'ISOLATED_RELEASE_REGRESSION_FAILURE'"
     Invoke-Case 'ci-release-regression-failure' ($setup + "`n" + $nativeSetup + "`n" + $ciRun) 'unset' $false $calls 'Release caller regression tests failed'
+    Write-Fixture 'scripts/test-release-callers.ps1' ''
+    Write-Fixture 'scripts/test-release-upload.ps1' "throw 'ISOLATED_UPLOAD_REGRESSION_FAILURE'"
+    Invoke-Case 'ci-upload-regression-failure' ($setup + "`n" + $nativeSetup + "`n" + $ciRun) 'unset' $false $calls 'Release upload regression tests failed'
     Write-Output "RELEASE_CALLER_TESTS=PASS cases=$caseCount"
 }
 finally {

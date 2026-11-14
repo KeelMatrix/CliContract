@@ -17,6 +17,31 @@ function Assert-NativeSuccess([string] $Step) {
     if ($LASTEXITCODE -ne 0) { throw "$Step failed with exit code $LASTEXITCODE." }
 }
 
+function Push-ReleaseArtifact([string] $Path, [string] $Kind) {
+    # Explicit snupkg pushes need SymbolPackagePublish discovery from the v3
+    # index. A direct upload URL can exit zero without sending anything.
+    $pushArguments = @('nuget', 'push', $Path, '--source', 'https://api.nuget.org/v3/index.json',
+        '--api-key', $env:RELEASE_NUGET_CREDENTIAL, '--force-english-output')
+    if ($Kind -eq 'package') { $pushArguments += '--no-symbols' }
+    $output = @(dotnet @pushArguments 2>&1 | ForEach-Object { $_.ToString() })
+    $code = $LASTEXITCODE
+    $output | Write-Output
+    if ($code -ne 0) { throw "NuGet $Kind publication failed with exit code $code." }
+
+    # With the pinned SDK, the English receipt follows a successful PUT.
+    # Require the documented acceptance response, too: an empty/no-op command
+    # or an unrelated 2xx response must not become a release success claim.
+    $text = $output -join "`n"
+    $put = [regex]::Match($text, '(?m)^\s+PUT (?<uri>\S+)\s*$')
+    $status = if ($Kind -eq 'symbol') { 'Created' } else { '(?:Created|Accepted)' }
+    $accepted = [regex]::Match($text, "(?m)^\s+$status (?<uri>\S+) \d+ms\s*$")
+    if (-not $put.Success -or -not $accepted.Success -or
+        $put.Groups['uri'].Value -cne $accepted.Groups['uri'].Value -or
+        $output -cnotcontains 'Your package was pushed.') {
+        throw "NuGet $Kind publication returned no accepted upload receipt. Stop and reconcile provider state before another attempt."
+    }
+}
+
 if (-not $SkipPreparation) {
     Invoke-NestedPwsh -NoProfile -File (Join-Path $root 'scripts/verify-release-tag.ps1') -Tag $Tag
     Assert-NativeSuccess 'Release tag validation'
@@ -41,8 +66,6 @@ if (-not $Publish) {
 if ([string]::IsNullOrWhiteSpace($env:RELEASE_NUGET_CREDENTIAL)) {
     throw 'The OIDC login output is required in RELEASE_NUGET_CREDENTIAL before publication.'
 }
-dotnet nuget push $package --source https://api.nuget.org/v3/index.json --api-key $env:RELEASE_NUGET_CREDENTIAL --no-symbols
-Assert-NativeSuccess 'NuGet package publication'
-dotnet nuget push $symbols --source https://symbols.nuget.org/upload --api-key $env:RELEASE_NUGET_CREDENTIAL
-Assert-NativeSuccess 'NuGet symbol publication'
+Push-ReleaseArtifact -Path $package -Kind 'package'
+Push-ReleaseArtifact -Path $symbols -Kind 'symbol'
 Write-Output "RELEASE_PUBLICATION=PASS version=$Version commit=$ExpectedCommit"

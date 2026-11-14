@@ -22,11 +22,33 @@ dotnet build KeelMatrix.CliContract.sln -c Release --no-restore --nologo
 ```
 
 The repository gate runs the complete local validation sequence, including fixture, determinism, no-execution,
-vulnerability, package-inspection, and packed-tool smoke checks:
+release-upload, vulnerability, package-inspection, and packed-tool smoke checks:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/local-gate.ps1
 ```
+
+The release upload contract is implemented in `scripts/publish-release.ps1`. Both explicit artifacts use
+the [NuGet v3 service index](https://learn.microsoft.com/en-us/nuget/create-packages/symbol-packages-snupkg#publishing-a-symbol-package)
+so the client discovers the package and symbol publishing resources. The main push disables automatic symbols;
+the separate symbol push must also succeed. With the SDK selected by `global.json`, each push must return zero,
+report a PUT and its matching acceptance response (201 for symbols; 201 or 202 for the main package), and emit
+the English upload receipt. Missing receipts, unsupported sources and provider errors stop publication before
+the workflow can create a GitHub Release. A client output change fails closed and requires investigation.
+Upload acceptance is separate from NuGet validation, indexing and public availability. After a partial upload
+or an uncertain result, reconcile provider state before any further attempt; do not rebuild published artifacts
+as replacement recovery bytes or automatically replay the release.
+
+Run the focused caller and real-client upload regressions with:
+
+```powershell
+pwsh -NoProfile -File ./scripts/test-release-callers.ps1
+pwsh -NoProfile -File ./scripts/test-release-upload.ps1
+```
+
+The upload tests use synthetic archives and test keys against a loopback HTTP server. They verify discovery,
+exact multipart payload bytes, missing or incompatible publishing resources, silent no-ops, provider rejection
+and transport failures. They perform no production upload. Both suites run in the local gate and CI.
 
 `keelmatrix.website.json` records the package's website classification. Keep its schema version `1` entry
 and the evaluated `PackageTags` sentinels aligned: `KeelMatrix.CliContract` is `public-product` / `primary`.

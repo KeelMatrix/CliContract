@@ -65,6 +65,8 @@ Invoke-NestedPwsh -NoProfile -File ./scripts/verify-workflow-safety.ps1
 Assert-NativeSuccess 'Workflow safety validation'
 Invoke-NestedPwsh -NoProfile -File ./scripts/test-release-callers.ps1
 Assert-NativeSuccess 'Release caller regression tests'
+Invoke-NestedPwsh -NoProfile -File ./scripts/test-release-upload.ps1
+Assert-NativeSuccess 'Release upload regression tests'
 if ($RequireFinalizedChangelog) {
     Invoke-NestedPwsh -NoProfile -File ./scripts/verify-release-contract.ps1 -Version $Version -Tag "v$Version"
     Assert-NativeSuccess 'Finalized release contract'

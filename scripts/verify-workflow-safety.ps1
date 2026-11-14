@@ -110,6 +110,8 @@ if ($SelfTest) {
             @{ Name = 'missing-prepare-version'; Old = 'RELEASE_VERSION: ${{ steps.release-tag.outputs.version }}'; New = 'RELEASE_VERSION: ' },
             @{ Name = 'wrong-publish-version'; Old = 'RELEASE_VERSION: ${{ needs.prepare.outputs.version }}'; New = 'RELEASE_VERSION: ${{ needs.prepare.outputs.other }}' },
             @{ Name = 'missing-artifact-upload'; Old = 'if-no-files-found: error'; New = 'if-no-files-found: warn' },
+            @{ Name = 'ignored-publish-failure'; Old = 'name: Publish validated package pair'; New = "name: Publish validated package pair`n        continue-on-error: true" },
+            @{ Name = 'release-after-failed-publish'; Old = 'name: Create GitHub Release'; New = "name: Create GitHub Release`n        if: always()" },
             @{ Name = 'release-before-publish'; Old = 'name: Create GitHub Release'; New = "name: Create GitHub Release`n      - name: Publish validated package pair" }
         )) {
             $casePath = Join-Path $selfTestRoot ".github/workflows/$($case.Name).yml"
